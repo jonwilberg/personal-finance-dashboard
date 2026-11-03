@@ -202,7 +202,8 @@ def _signed_amount(transaction: dict[str, Any]) -> Decimal:
 def _description(transaction: dict[str, Any]) -> str:
     counterparty = transaction.get("creditor") if transaction.get("credit_debit_indicator") == "DBIT" else transaction.get("debtor")
     parts = [(counterparty or {}).get("name"), *(transaction.get("remittance_information") or [])]
-    return " | ".join(p for p in parts if p)
+    # Banks often repeat the counterparty name in the remittance text; show each part once.
+    return " | ".join(dict.fromkeys(p.strip() for p in parts if p and p.strip()))
 
 
 def _is_local_http(url: str) -> bool:
