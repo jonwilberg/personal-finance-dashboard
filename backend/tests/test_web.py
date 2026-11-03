@@ -130,7 +130,7 @@ def test_refresh_and_inspect(api, bank):
 
 
 def test_unknown_account_is_rejected(api):
-    assert api.post("/api/accounts/../../secrets/refresh").status_code == 404
+    assert api.post("/api/accounts/%2E%2E/refresh").status_code == 404  # ".." must never reach a file path
     assert api.post("/api/accounts/not-mine/refresh").status_code == 404
 
 

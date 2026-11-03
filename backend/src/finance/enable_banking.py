@@ -5,19 +5,27 @@ Reference: https://enablebanking.com/docs/api/reference/
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from collections.abc import Iterator
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx
 import jwt
 
+from finance.transactions import transaction_date
+
 API_URL = "https://api.enablebanking.com"
 # The API rejects tokens with a lifetime above 24 hours; one hour matches the official samples.
 TOKEN_TTL_SECONDS = 3600
+# Some banks (e.g. SAS EuroBonus Mastercard) return at most this many transactions per request and no
+# continuation_key. A final page this full means older transactions may be missing.
+CAPPED_PAGE_SIZE = 100
+# How far back to ask when splitting a capped request that had no date_from.
+CAPPED_LOOKBACK_DAYS = 730
 
 
 class EnableBankingError(Exception):
@@ -132,9 +140,13 @@ class EnableBankingClient:
         date_to: date | None = None,
         strategy: str | None = None,
     ) -> Iterator[dict[str, Any]]:
-        """Yield every transaction in the range, following `continuation_key` pagination.
+        """Yield every transaction in the range once, following `continuation_key` pagination.
 
         `strategy="longest"` asks the bank for as much history as it allows (recommended for a first fetch).
+
+        When the last page is full (CAPPED_PAGE_SIZE) the bank may have cut the response off, so the range is
+        requested again up to the oldest date received, until a page comes back short. That costs one extra
+        request per capped page, and only at banks that cap.
         """
         params: dict[str, str] = {}
         if date_from:
@@ -143,10 +155,35 @@ class EnableBankingClient:
             params["date_to"] = date_to.isoformat()
         if strategy:
             params["strategy"] = strategy
+
+        seen: set[str] = set()
         while True:
-            page = self._request("GET", f"/accounts/{account_uid}/transactions", params=params)
-            yield from page.get("transactions", [])
-            continuation_key = page.get("continuation_key")
-            if not continuation_key:
+            last_page: list[dict[str, Any]] = []
+            while True:
+                page = self._request("GET", f"/accounts/{account_uid}/transactions", params=params)
+                last_page = page.get("transactions", [])
+                for transaction in last_page:
+                    key = _transaction_key(transaction)
+                    if key not in seen:
+                        seen.add(key)
+                        yield transaction
+                continuation_key = page.get("continuation_key")
+                if not continuation_key:
+                    break
+                params["continuation_key"] = continuation_key
+
+            if len(last_page) < CAPPED_PAGE_SIZE:
                 return
-            params["continuation_key"] = continuation_key
+            oldest = min((d for t in last_page if (d := transaction_date(t))), default=None)
+            if oldest is None or oldest == params.get("date_to"):
+                return  # no dates to split on, or a full page within a single day: no way to go further back
+            # The oldest day is requested again because it may be only partly included; duplicates are skipped.
+            lookback = date.fromisoformat(oldest) - timedelta(days=CAPPED_LOOKBACK_DAYS)
+            params = {"date_from": params.get("date_from", lookback.isoformat()), "date_to": oldest}
+
+
+def _transaction_key(transaction: dict[str, Any]) -> str:
+    """Stable identity for de-duplicating transactions returned by overlapping requests."""
+    return transaction.get("transaction_id") or transaction.get("entry_reference") or json.dumps(
+        transaction, sort_keys=True
+    )

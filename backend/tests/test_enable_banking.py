@@ -2,7 +2,7 @@ import json
 import threading
 import time
 import urllib.request
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 import jwt
@@ -116,6 +116,54 @@ def test_transactions_pass_strategy(key_pair):
     client = make_client(private_pem, handler)
     list(client.iter_transactions("acc-1", strategy="longest"))
     assert seen == [{"strategy": "longest"}]
+
+
+def capped_bank(transactions, requests):
+    """Mimics a bank that returns at most 100 transactions, newest first, and never a continuation_key."""
+
+    def handler(request):
+        params = dict(request.url.params)
+        requests.append(params)
+        selected = [
+            t
+            for t in transactions
+            if params.get("date_from", "0000") <= t["booking_date"] <= params.get("date_to", "9999")
+        ]
+        selected.sort(key=lambda t: t["booking_date"], reverse=True)
+        return httpx.Response(200, json={"transactions": selected[:100]})
+
+    return handler
+
+
+def test_capped_responses_are_split_by_date(key_pair):
+    private_pem, _ = key_pair
+    # 130 transactions, two per day, the newest on 2026-10-30.
+    transactions = [
+        {"transaction_id": f"t{i}", "booking_date": (date(2026, 10, 30) - timedelta(days=i // 2)).isoformat()}
+        for i in range(130)
+    ]
+    requests = []
+    client = make_client(private_pem, capped_bank(transactions, requests))
+
+    fetched = list(client.iter_transactions("acc-1", strategy="longest"))
+
+    assert sorted(t["transaction_id"] for t in fetched) == sorted(t["transaction_id"] for t in transactions)
+    assert requests == [
+        {"strategy": "longest"},
+        {"date_from": "2024-09-11", "date_to": "2026-09-11"},
+    ]
+
+
+def test_full_page_on_a_single_day_stops(key_pair):
+    private_pem, _ = key_pair
+    transactions = [{"transaction_id": f"t{i}", "booking_date": "2026-10-30"} for i in range(150)]
+    requests = []
+    client = make_client(private_pem, capped_bank(transactions, requests))
+
+    fetched = list(client.iter_transactions("acc-1", date_from=date(2026, 1, 1)))
+
+    assert len(fetched) == 100
+    assert len(requests) == 2
 
 
 def test_field_coverage_counts_nested_non_empty_fields():
