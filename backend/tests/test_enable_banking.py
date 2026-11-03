@@ -10,8 +10,9 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from finance.cli import _signed_amount, _wait_for_callback, field_coverage
+from finance.cli import _wait_for_callback
 from finance.enable_banking import API_URL, EnableBankingClient, EnableBankingError
+from finance.transactions import field_coverage, signed_amount
 
 APP_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
@@ -100,8 +101,8 @@ def test_api_errors_raise(key_pair):
 def test_signed_amount():
     debit = {"transaction_amount": {"amount": "12.50", "currency": "EUR"}, "credit_debit_indicator": "DBIT"}
     credit = {"transaction_amount": {"amount": "100", "currency": "EUR"}, "credit_debit_indicator": "CRDT"}
-    assert str(_signed_amount(debit)) == "-12.50"
-    assert str(_signed_amount(credit)) == "100"
+    assert str(signed_amount(debit)) == "-12.50"
+    assert str(signed_amount(credit)) == "100"
 
 
 def test_transactions_pass_strategy(key_pair):

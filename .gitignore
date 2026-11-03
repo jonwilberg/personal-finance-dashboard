@@ -4,6 +4,10 @@ __pycache__/
 .venv/
 .pytest_cache/
 
+# Frontend
+node_modules/
+frontend/dist/
+
 # Secrets: never commit Enable Banking keys or local config
 .env
 .env.*

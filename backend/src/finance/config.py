@@ -20,6 +20,9 @@ class Settings:
     # None means "use the first redirect URL registered on the application".
     redirect_url: str | None
     data_dir: Path
+    # Where the web app sends the browser after a bank login: "/" when the backend serves the built
+    # frontend, or the Vite dev server (e.g. http://localhost:5173/) during frontend development.
+    frontend_url: str = "/"
 
 
 def load_settings(env_name: str | None = None) -> Settings:
@@ -54,4 +57,5 @@ def load_settings(env_name: str | None = None) -> Settings:
         private_key_path=private_key_path,
         redirect_url=os.getenv("ENABLE_BANKING_REDIRECT_URL", "").strip() or None,
         data_dir=data_dir,
+        frontend_url=os.getenv("FINANCE_FRONTEND_URL", "").strip() or "/",
     )
