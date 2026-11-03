@@ -130,13 +130,19 @@ class EnableBankingClient:
         account_uid: str,
         date_from: date | None = None,
         date_to: date | None = None,
+        strategy: str | None = None,
     ) -> Iterator[dict[str, Any]]:
-        """Yield every transaction in the range, following `continuation_key` pagination."""
+        """Yield every transaction in the range, following `continuation_key` pagination.
+
+        `strategy="longest"` asks the bank for as much history as it allows (recommended for a first fetch).
+        """
         params: dict[str, str] = {}
         if date_from:
             params["date_from"] = date_from.isoformat()
         if date_to:
             params["date_to"] = date_to.isoformat()
+        if strategy:
+            params["strategy"] = strategy
         while True:
             page = self._request("GET", f"/accounts/{account_uid}/transactions", params=params)
             yield from page.get("transactions", [])

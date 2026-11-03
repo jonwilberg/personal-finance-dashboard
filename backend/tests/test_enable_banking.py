@@ -10,7 +10,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from finance.cli import _signed_amount, _wait_for_callback
+from finance.cli import _signed_amount, _wait_for_callback, field_coverage
 from finance.enable_banking import API_URL, EnableBankingClient, EnableBankingError
 
 APP_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -102,6 +102,31 @@ def test_signed_amount():
     credit = {"transaction_amount": {"amount": "100", "currency": "EUR"}, "credit_debit_indicator": "CRDT"}
     assert str(_signed_amount(debit)) == "-12.50"
     assert str(_signed_amount(credit)) == "100"
+
+
+def test_transactions_pass_strategy(key_pair):
+    private_pem, _ = key_pair
+    seen = []
+
+    def handler(request):
+        seen.append(dict(request.url.params))
+        return httpx.Response(200, json={"transactions": []})
+
+    client = make_client(private_pem, handler)
+    list(client.iter_transactions("acc-1", strategy="longest"))
+    assert seen == [{"strategy": "longest"}]
+
+
+def test_field_coverage_counts_nested_non_empty_fields():
+    transactions = [
+        {"creditor": {"name": "Rema 1000"}, "remittance_information": ["Kortkjøp"], "merchant_category_code": None},
+        {"creditor": {"name": ""}, "remittance_information": [], "merchant_category_code": "5411"},
+    ]
+    assert dict(field_coverage(transactions)) == {
+        "creditor.name": 0.5,
+        "merchant_category_code": 0.5,
+        "remittance_information": 0.5,
+    }
 
 
 def test_local_callback_captures_code():

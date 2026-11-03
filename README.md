@@ -36,6 +36,23 @@ uv run finance disconnect <session-id>               # revoke a consent
 In the sandbox, **Mock ASPSP** needs no credentials. See the
 [sandbox docs](https://enablebanking.com/docs/api/sandbox/) for test logins to other banks.
 
+## Production (your own accounts)
+
+1. Register a **Production** application with the same redirect URL. Production asks for privacy and terms URLs.
+2. Click **"Activate by linking accounts"** and link every account you want to use. This is restricted mode for
+   non-commercial use, and only linked accounts return data.
+3. Create `backend/.env.production` from `.env.example` with the production app ID and key, then add
+   `--env production` to every command. Its data is kept apart from the sandbox in `backend/data/production/`.
+
+```bash
+uv run finance --env production banks --country NO
+uv run finance --env production connect --bank "<bank name>" --country NO --days 180
+uv run finance --env production transactions <account-uid> --longest
+uv run finance --env production inspect <account-uid>   # field coverage only, no amounts or names
+```
+
+Many banks allow only about 4 background transaction fetches per account per day, so don't loop `transactions`.
+
 ## Development
 
 ```bash

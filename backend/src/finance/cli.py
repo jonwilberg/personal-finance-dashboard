@@ -26,6 +26,10 @@ DEFAULT_CONSENT_DAYS = 90
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="finance", description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--env",
+        help='Use backend/.env.<ENV> and data/<ENV> instead of backend/.env, e.g. "--env production"',
+    )
     commands = parser.add_subparsers(dest="command", required=True)
 
     commands.add_parser("app", help="Show the registered Enable Banking application")
@@ -46,13 +50,26 @@ def main(argv: list[str] | None = None) -> int:
     transactions = commands.add_parser("transactions", help="Fetch transactions for an account")
     transactions.add_argument("account", help='Account uid as shown by "accounts"')
     transactions.add_argument("--days", type=int, default=90, help="How many days back to fetch")
+    transactions.add_argument(
+        "--longest",
+        action="store_true",
+        help="Ask the bank for as much history as it allows (ignores --days)",
+    )
+
+    inspect = commands.add_parser(
+        "inspect", help="Summarize which fields saved transactions contain, without printing their values"
+    )
+    inspect.add_argument("account", help="Account uid with saved transactions")
 
     disconnect = commands.add_parser("disconnect", help="Revoke a saved session")
     disconnect.add_argument("session_id")
 
     args = parser.parse_args(argv)
     try:
-        settings = load_settings()
+        settings = load_settings(args.env)
+        if args.command == "inspect":
+            cmd_inspect(settings, args)
+            return 0
         with EnableBankingClient.from_key_file(settings.application_id, settings.private_key_path) as client:
             handler = {
                 "app": cmd_app,
@@ -160,8 +177,12 @@ def cmd_accounts(client: EnableBankingClient, settings: Settings, args: argparse
 
 
 def cmd_transactions(client: EnableBankingClient, settings: Settings, args: argparse.Namespace) -> None:
-    date_from = date.today() - timedelta(days=args.days)
-    transactions = list(client.iter_transactions(args.account, date_from=date_from))
+    if args.longest:
+        date_from = None
+        transactions = list(client.iter_transactions(args.account, strategy="longest"))
+    else:
+        date_from = date.today() - timedelta(days=args.days)
+        transactions = list(client.iter_transactions(args.account, date_from=date_from))
 
     out_path = settings.data_dir / "transactions" / f"{args.account}.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -169,13 +190,67 @@ def cmd_transactions(client: EnableBankingClient, settings: Settings, args: argp
 
     money_in = sum((_signed_amount(t) for t in transactions if _signed_amount(t) > 0), Decimal())
     money_out = sum((_signed_amount(t) for t in transactions if _signed_amount(t) < 0), Decimal())
-    print(f"{len(transactions)} transactions since {date_from}  in {money_in}  out {money_out}")
+    since = date_from or min((_transaction_date(t) for t in transactions if _transaction_date(t)), default="-")
+    print(f"{len(transactions)} transactions since {since}  in {money_in}  out {money_out}")
     for transaction in transactions[:15]:
-        when = transaction.get("booking_date") or transaction.get("transaction_date") or ""
-        print(f"  {when:<10}  {_signed_amount(transaction):>12}  {_description(transaction)}")
+        print(f"  {_transaction_date(transaction):<10}  {_signed_amount(transaction):>12}  {_description(transaction)}")
     if len(transactions) > 15:
         print(f"  ... and {len(transactions) - 15} more")
     print(f"\nSaved raw transactions to {out_path}")
+
+
+def cmd_inspect(settings: Settings, args: argparse.Namespace) -> None:
+    path = settings.data_dir / "transactions" / f"{args.account}.json"
+    if not path.exists():
+        raise ConfigError(f'No saved transactions at {path}. Run "finance transactions {args.account}" first.')
+    transactions = json.loads(path.read_text(encoding="utf-8"))
+    if not transactions:
+        print("No transactions saved for this account.")
+        return
+
+    dates = sorted(d for t in transactions if (d := _transaction_date(t)))
+    print(f"{len(transactions)} transactions, {dates[0] if dates else '?'} to {dates[-1] if dates else '?'}")
+    for label, key in [
+        ("Status", "status"),
+        ("Direction", "credit_debit_indicator"),
+        ("Currency", "transaction_amount.currency"),
+    ]:
+        counts: dict[str, int] = {}
+        for transaction in transactions:
+            value = str(_field(transaction, key) or "(missing)")
+            counts[value] = counts.get(value, 0) + 1
+        print(f"{label + ':':<11}" + ", ".join(f"{v} {n}" for v, n in sorted(counts.items(), key=lambda i: -i[1])))
+
+    print("\nField coverage (share of transactions where the field has a value):")
+    for field_path, share in field_coverage(transactions):
+        print(f"  {share:>4.0%}  {field_path}")
+
+
+def field_coverage(transactions: list[dict[str, Any]]) -> list[tuple[str, float]]:
+    """Share of transactions with a non-empty value for every (nested) field path, most common first."""
+    counts: dict[str, int] = {}
+    for transaction in transactions:
+        for path in _filled_paths(transaction):
+            counts[path] = counts.get(path, 0) + 1
+    return sorted(((p, n / len(transactions)) for p, n in counts.items()), key=lambda i: (-i[1], i[0]))
+
+
+def _filled_paths(value: Any, prefix: str = "") -> set[str]:
+    if isinstance(value, dict):
+        return {p for key, child in value.items() for p in _filled_paths(child, f"{prefix}.{key}" if prefix else key)}
+    if value in (None, "", [], {}):
+        return set()
+    return {prefix}
+
+
+def _field(transaction: dict[str, Any], path: str) -> Any:
+    for key in path.split("."):
+        transaction = (transaction or {}).get(key)
+    return transaction
+
+
+def _transaction_date(transaction: dict[str, Any]) -> str:
+    return transaction.get("booking_date") or transaction.get("transaction_date") or transaction.get("value_date") or ""
 
 
 def cmd_disconnect(client: EnableBankingClient, settings: Settings, args: argparse.Namespace) -> None:
