@@ -1,0 +1,1 @@
+"""Personal finance dashboard backend."""

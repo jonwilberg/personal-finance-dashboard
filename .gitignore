@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Secrets: never commit Enable Banking keys or local config
+.env
+*.pem
+*.key
+
+# Local bank data (sessions and downloaded transactions)
+backend/data/
