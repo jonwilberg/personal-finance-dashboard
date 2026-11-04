@@ -35,13 +35,12 @@ export function SpendingChart(props: {
   }, []);
 
   const totals = series.map((m) => m.fixed + m.adjustable + m.uncategorized);
-  const max = niceMax(Math.max(usual ?? 0, ...totals, 1));
+  const { max, ticks } = niceScale(Math.max(usual ?? 0, ...totals, 1));
   const plotW = WIDTH - PAD.left - PAD.right;
   const plotH = HEIGHT - PAD.top - PAD.bottom;
   const band = plotW / Math.max(series.length, 1);
   const barW = Math.min(36, band * 0.62);
   const y = (value: number) => PAD.top + plotH - (value / max) * plotH;
-  const ticks = [0, max / 2, max];
 
   const hovered = hover !== null ? series[hover] : null;
 
@@ -211,13 +210,21 @@ function roundedTop(x: number, y: number, w: number, h: number, r: number) {
   ].join(" ");
 }
 
-function niceMax(value: number) {
-  const magnitude = 10 ** Math.floor(Math.log10(value));
-  const step = [1, 2, 2.5, 5, 10].find((s) => s * magnitude >= value) ?? 10;
-  return step * magnitude;
+/**
+ * Axis top just above the tallest bar: about five round steps (1, 2, 2.5 or 5 × 10ⁿ), rounded up to the next
+ * step, so headroom is at most one step instead of up to doubling the value.
+ */
+function niceScale(value: number) {
+  const rough = value / 5;
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  const step = ([1, 2, 2.5, 5, 10].find((s) => s * magnitude >= rough) ?? 10) * magnitude;
+  const max = Math.ceil(value / step) * step;
+  const ticks = Array.from({ length: Math.round(max / step) + 1 }, (_, i) => i * step);
+  return { max, ticks };
 }
 
 function compactKr(value: number) {
   if (value === 0) return "0";
-  return value >= 1000 ? `${Math.round(value / 1000)}k` : String(Math.round(value));
+  if (value < 1000) return String(Math.round(value));
+  return `${(value / 1000).toLocaleString("nb-NO", { maximumFractionDigits: 1 })}k`;
 }
