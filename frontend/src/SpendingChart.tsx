@@ -10,7 +10,7 @@ const SEGMENTS = [
 ] as const;
 
 const HEIGHT = 240;
-const PAD = { top: 16, right: 8, bottom: 28, left: 52 };
+const PAD = { top: 28, right: 8, bottom: 28, left: 52 }; // top leaves room for the selected month's total
 const GAP = 2; // surface gap between stacked segments
 const RADIUS = 4; // rounded data-end on the top of each bar
 
@@ -107,8 +107,16 @@ export function SpendingChart(props: {
                 onMouseLeave={() => setHover(null)}
                 onClick={() => props.onSelect(month.month)}
               >
-                {/* Hit target wider and taller than the bar. */}
-                <rect x={PAD.left + band * i} y={PAD.top} width={band} height={plotH} fill="transparent" />
+                {/* The month's column: highlights the selected month (and the hovered one, lightly) and doubles as
+                    a hit target wider and taller than the bar. */}
+                <rect
+                  className={`chart-column ${isSelected ? "is-selected" : hover === i ? "is-hovered" : ""}`}
+                  x={PAD.left + band * i + 2}
+                  y={4}
+                  width={band - 4}
+                  height={HEIGHT - 4}
+                  rx={4}
+                />
                 {segments.map((s, j) => {
                   const top = y(s.to);
                   const bottom = y(s.from) - (j > 0 ? GAP : 0);
@@ -120,6 +128,11 @@ export function SpendingChart(props: {
                     <rect key={s.key} x={x} y={top} width={barW} height={h} fill={fill} />
                   );
                 })}
+                {isSelected && (
+                  <text x={x + barW / 2} y={y(totals[i]) - 8} textAnchor="middle" className="chart-value">
+                    {formatKr(totals[i])}
+                  </text>
+                )}
                 <text
                   x={x + barW / 2}
                   y={HEIGHT - 8}
