@@ -204,6 +204,17 @@ export interface OverviewChange {
   delta: number;
 }
 
+export interface ScoreboardRow {
+  category: string;
+  name: string;
+  fixed: boolean;
+  amount: number;
+  share: number | null;
+  usual: number | null;
+  delta: number | null;
+  history: number[];
+}
+
 export interface Overview {
   month: string | null;
   month_label?: string;
@@ -214,6 +225,7 @@ export interface Overview {
   usual_months?: number;
   series: OverviewMonth[];
   changes?: OverviewChange[];
+  scoreboard?: ScoreboardRow[];
 }
 
 export const overviewApi = {

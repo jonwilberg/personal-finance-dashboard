@@ -60,7 +60,7 @@ export function SpendingChart(props: {
         {usual !== null && (
           <span className="legend-item">
             <span className="legend-line" />
-            Usual month
+            Median month
           </span>
         )}
       </div>

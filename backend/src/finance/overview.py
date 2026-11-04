@@ -1,4 +1,4 @@
-"""The front page: one month's key figures, its spending against your usual month, and what changed.
+"""The front page: one month's key figures, its spending against the median month, and what changed.
 
 Money is counted by the kind of category a transaction has:
 - spending:      expense categories (refunds count as negative spending), plus uncategorized money going out
@@ -7,7 +7,7 @@ Money is counted by the kind of category a transaction has:
 - loan payments: loan categories
 Transfers between your own accounts are left out.
 
-"Usual" is the median of the previous 12 months that have data, so a single holiday or one-off month doesn't
+The median month is the median of the previous 12 months that have data, so a single holiday or one-off month doesn't
 move it much.
 """
 
@@ -60,6 +60,7 @@ def build_overview(
 
     spent = this["fixed"] + this["adjustable"] + this["uncategorized"]
     changes = _changes(this, usual, by_id) if usual else []
+    shown = [m for m in [*reversed(_months_before(month, HISTORY_MONTHS - 1)), month] if m >= first]
     return {
         "month": month,
         "month_label": _month_label(month),
@@ -87,10 +88,10 @@ def build_overview(
                 "uncategorized": _money(totals.get(m, _empty())["uncategorized"]),
                 "income": _money(totals.get(m, _empty())["income"]),
             }
-            for m in [*reversed(_months_before(month, HISTORY_MONTHS - 1)), month]
-            if m >= first
+            for m in shown
         ],
         "changes": changes,
+        "scoreboard": _scoreboard(totals, shown, this, usual, spent, categories),
     }
 
 
@@ -142,6 +143,39 @@ def _usual(totals: dict[str, dict[str, Any]], months: list[str]) -> dict[str, An
     }
 
 
+def _scoreboard(
+    totals: dict[str, dict[str, Any]],
+    months: list[str],
+    this: dict[str, Any],
+    usual: dict[str, Any] | None,
+    spent: Decimal,
+    categories: list[Category],
+) -> list[dict[str, Any]]:
+    """Every spending category with this month, the median month, the difference and its monthly history."""
+    rows = []
+    entries = [(c.id, c.name, c.fixed) for c in categories if c.kind == "expense"]
+    for key, name, fixed in [*entries, (UNCATEGORIZED, "Not categorized", False)]:
+        history = [totals.get(m, _empty())["by_category"].get(key, Decimal()) for m in months]
+        amount = this["by_category"].get(key, Decimal())
+        median_month = usual["by_category"].get(key, Decimal()) if usual else None
+        if not any(history) and not median_month:
+            continue  # never used in the period shown
+        rows.append(
+            {
+                "category": key,
+                "name": name,
+                "fixed": fixed,
+                "amount": _money(amount),
+                "share": float(amount / spent) if spent > 0 else None,
+                "usual": _money(median_month) if median_month is not None else None,
+                "delta": _money(amount - median_month) if median_month is not None else None,
+                "history": [_money(v) for v in history],
+            }
+        )
+    rows.sort(key=lambda r: r["amount"], reverse=True)
+    return rows
+
+
 def _changes(this: dict[str, Any], usual: dict[str, Any], by_id: dict[str, Category]) -> list[dict[str, Any]]:
     keys = set(this["by_category"]) | set(usual["by_category"])
     rows = []
@@ -173,7 +207,7 @@ def _headline(month: str, spent: Decimal, usual: dict[str, Any] | None, changes:
         return f"You spent {_kr(spent)} in {name}"
     share = float((spent - usual["spent"]) / usual["spent"])
     if abs(share) < AS_USUAL_SHARE:
-        return f"Spending in {name} was about as usual"
+        return "Spending was about the same as in a median month"
     direction = "less" if share < 0 else "more"
     # Name a reason only when one change explains a good part of the difference.
     difference = float(spent - usual["spent"])
@@ -184,7 +218,7 @@ def _headline(month: str, spent: Decimal, usual: dict[str, Any] | None, changes:
             reason = ", mostly in payments that aren't categorized yet"
         else:
             reason = f", mostly on {driver['name'].lower()}"
-    return f"You spent {abs(share):.0%} {direction} than usual in {name}{reason}"
+    return f"You spent {abs(share):.0%} {direction} than in a median month{reason}"
 
 
 def _months_before(month: str, count: int) -> list[str]:
