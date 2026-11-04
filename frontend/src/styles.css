@@ -529,11 +529,28 @@ label {
 }
 
 .payee {
-  padding: 0;
-  color: var(--ink);
   font-weight: 500;
-  text-align: left;
-  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+button.disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--space-1);
+  padding: 2px 0;
+  font-weight: 500;
+}
+
+.disclosure-arrow {
+  display: inline-block;
+  font-size: 1em;
+  line-height: 1;
+  transition: transform 120ms ease-out;
+}
+
+button.disclosure[aria-expanded="true"] .disclosure-arrow {
+  transform: rotate(90deg);
 }
 
 .rule-editor {
@@ -569,20 +586,40 @@ label {
 }
 
 .group-transactions {
-  list-style: none;
-  margin: var(--space-3) 0 0;
-  padding: var(--space-2) var(--space-3);
+  width: 100%;
+  margin-top: var(--space-3);
+  border-collapse: collapse;
   background: var(--paper-sunken);
+  font-variant-numeric: tabular-nums;
 }
 
-.group-transactions li {
-  display: flex;
-  gap: var(--space-4);
-  padding: 3px 0;
+.group-transactions th {
+  text-align: left;
+  font-size: var(--text-label);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  border-bottom: var(--rule-hair);
 }
 
-.group-transactions .grow {
-  flex: 1;
+.group-transactions th.num {
+  text-align: right;
+}
+
+.group-transactions td {
+  padding: 4px var(--space-3);
+  border-bottom: 1px dotted var(--rule);
+  vertical-align: top;
+}
+
+.group-transactions tr:last-child td {
+  border-bottom: none;
+}
+
+.group-transactions td:nth-child(2) {
+  width: 1%;
 }
 
 .block {

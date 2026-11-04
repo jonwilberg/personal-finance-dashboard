@@ -158,12 +158,19 @@ function ReviewGroup(props: {
     <div className="ledger-row">
       <div className="review-grid">
         <div>
-          <button className="text payee" onClick={() => setOpen(!open)} aria-expanded={open}>
-            {group.label}
+          <div className="payee">{group.label}</div>
+          <div className="meta small">{group.accounts.join(", ")}</div>
+          <button
+            className="text disclosure small"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            aria-controls={`group-${group.key}`}
+          >
+            <span className="disclosure-arrow" aria-hidden="true">
+              ▸
+            </span>
+            {open ? "Hide" : "Show"} {group.transactions.length} transaction{group.transactions.length === 1 ? "" : "s"}
           </button>
-          <div className="meta small">
-            {group.transactions.length} transaction{group.transactions.length === 1 ? "" : "s"} · {group.accounts.join(", ")}
-          </div>
         </div>
         <div className="num amount-cell">{formatMoney(group.total, group.transactions[0].currency ?? "NOK")}</div>
         <div className="rule-editor">
@@ -182,15 +189,29 @@ function ReviewGroup(props: {
         </div>
       </div>
       {open && (
-        <ul className="group-transactions small">
-          {group.transactions.map((t) => (
-            <li key={t.id}>
-              <span>{formatDate(t.date)}</span>
-              <span className="grow">{t.description || "No description"}</span>
-              <span className="num">{formatMoney(t.amount, t.currency ?? "NOK")}</span>
-            </li>
-          ))}
-        </ul>
+        <table className="group-transactions small" id={`group-${group.key}`}>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th className="num">Amount</th>
+              <th>Text</th>
+              {group.accounts.length > 1 && <th>Account</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {group.transactions.map((t) => (
+              <tr key={t.id}>
+                <td className="nowrap">
+                  {formatDate(t.date)}
+                  {t.status === "PDNG" && <span className="meta"> · pending</span>}
+                </td>
+                <td className="num amount-cell">{formatMoney(t.amount, t.currency ?? "NOK")}</td>
+                <td>{t.description || "No description"}</td>
+                {group.accounts.length > 1 && <td className="meta nowrap">{t.account}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );
