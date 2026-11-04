@@ -130,3 +130,24 @@ def test_summary_reports_shares_without_texts():
 def test_settings_round_trip():
     settings = CategorizationSettings(overrides={"x": "groceries"}, rules=[Rule("KIWI", "groceries")])
     assert CategorizationSettings.from_json(settings.to_json()) == settings
+
+
+def test_transfers_to_unknown_accounts_are_grouped_by_account_number():
+    raw = {
+        "checking": [
+            tx("a", "5000", "DBIT", text="Til: 1234.56.78901 Betalt: 01.10.26", counterparty_account="12345678901"),
+            tx("b", "200", "DBIT", text="Til: 9876.54.32109 Betalt: 02.10.26", counterparty_account="98765432109"),
+        ]
+    }
+    result = categorized_transactions(SESSIONS, raw, CategorizationSettings(rules=[Rule("KONTO 12345678901", "housing")]))
+    by_id = {t["id"].split(":", 1)[1]: t for t in result}
+    assert by_id["a"]["merchant"] == "KONTO 12345678901"
+    assert (by_id["a"]["category"], by_id["a"]["category_source"]) == ("housing", "rule")
+    assert by_id["b"]["merchant"] == "KONTO 98765432109"
+    assert by_id["b"]["category"] is None
+
+
+def test_named_payees_keep_their_name_as_merchant():
+    raw = {"checking": [tx("a", "300", "DBIT", creditor="Rema 1000 Majorstuen", counterparty_account="12345678901")]}
+    [t] = categorized_transactions(SESSIONS, raw, CategorizationSettings())
+    assert t["merchant"] == "REMA 1000 MAJORSTUEN"

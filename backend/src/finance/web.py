@@ -21,6 +21,7 @@ from finance.categorize import Rule, categorized_transactions, summarize_categor
 from finance.config import BACKEND_DIR, Settings
 from finance.connections import (
     BankNotFound,
+    account_identifiers,
     consent_valid_until,
     find_aspsp,
     session_record,
@@ -118,6 +119,9 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
     def refresh_account(account_uid: str, longest: bool = False, days: int = 90) -> dict[str, Any]:
         """Fetch balances and transactions from the bank. Many banks allow ~4 of these per day per account."""
         _require_account(store, account_uid)
+        if store.account_needs_numbers(account_uid):
+            # Needed to recognise transfers to this account; fetched once.
+            store.set_account_identifiers(account_uid, account_identifiers(client.get_account_details(account_uid)))
         store.save_balances(account_uid, client.get_balances(account_uid))
         if longest:
             transactions = client.iter_transactions(account_uid, strategy="longest")

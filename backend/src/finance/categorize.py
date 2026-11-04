@@ -129,6 +129,14 @@ def normalize(account: Account, raw: dict[str, Any], key: str) -> dict[str, Any]
     remittance = [line for line in raw.get("remittance_information") or [] if line]
     name = counterparty.get("name") or ""
     code = raw.get("bank_transaction_code") or {}
+    number = _digits(counterparty_account.get("iban") or (counterparty_account.get("other") or {}).get("identification") or "")
+    merchant = clean_text(name) if name else clean_text(remittance[0]) if remittance else ""
+    text = clean_text(" ".join([name, *remittance]))
+    if number:
+        # Account numbers are stripped from the text as noise; keep the other party's number in a form rules can match.
+        text = f"{text} KONTO {number}".strip()
+        if _is_generic(merchant):
+            merchant = f"KONTO {number}"
     return {
         "id": f"{account.uid}:{key}",
         "account_uid": account.uid,
@@ -140,9 +148,9 @@ def normalize(account: Account, raw: dict[str, Any], key: str) -> dict[str, Any]
         "direction": raw.get("credit_debit_indicator"),
         "status": raw.get("status"),
         "description": description(raw),
-        "merchant": clean_text(name) if name else clean_text(remittance[0]) if remittance else "",
-        "text": clean_text(" ".join([name, *remittance])),
-        "counterparty_account": _digits(counterparty_account.get("iban") or (counterparty_account.get("other") or {}).get("identification") or ""),
+        "merchant": merchant,
+        "text": text,
+        "counterparty_account": number,
         "bank_code": str(code.get("code") or "").upper(),
         "bank_category": str(code.get("description") or "").upper(),
         "category": None,
@@ -277,6 +285,14 @@ def summarize_categorization(transactions: list[dict[str, Any]]) -> dict[str, An
         "by_source": by_source,
         "by_category": by_category,
     }
+
+
+_GENERIC_WORDS_RE = re.compile(r"\b(?:TIL|FRA|BETALT|OVERFØRING|OVERFORING|DATO|KONTO|AVTALEGIRO|EFAKTURA|GIRO)\b")
+
+
+def _is_generic(merchant: str) -> bool:
+    """True when the text says nothing about the payee, e.g. "TIL: . BETALT" once numbers are removed."""
+    return len(re.sub(r"[^A-ZÆØÅÄÖÜ]", "", _GENERIC_WORDS_RE.sub("", merchant))) < 3
 
 
 def _digits(value: str) -> str:

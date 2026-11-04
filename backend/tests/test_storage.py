@@ -132,3 +132,17 @@ def test_transactions_with_shared_entry_reference_are_all_kept(tmp_path):
 
     assert storage.load_transactions("acc-1") == shared
     assert storage.has_transaction("acc-1:0|2026-10-02|10|DBIT#2")
+
+
+def test_account_numbers_are_fetched_only_where_missing(tmp_path):
+    storage = Storage(tmp_path)
+    session = {**SESSION, "accounts": [*SESSION["accounts"], {"uid": "acc-3", "cash_account_type": "SVGS"}]}
+    storage.add_session(session)
+
+    assert not storage.account_needs_numbers("acc-1")  # has an IBAN
+    assert not storage.account_needs_numbers("acc-2")  # card
+    assert storage.account_needs_numbers("acc-3")
+
+    storage.set_account_identifiers("acc-3", ["11223344556"])
+    assert not storage.account_needs_numbers("acc-3")
+    assert storage.sessions()[0]["accounts"][2]["identifiers"] == ["11223344556"]

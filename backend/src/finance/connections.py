@@ -45,14 +45,14 @@ def session_record(session: dict[str, Any]) -> dict[str, Any]:
                 "iban": (account.get("account_id") or {}).get("iban"),
                 "currency": account.get("currency"),
                 "cash_account_type": account.get("cash_account_type"),
-                "identifiers": _account_identifiers(account),
+                "identifiers": account_identifiers(account),
             }
             for account in session["accounts"]
         ],
     }
 
 
-def _account_identifiers(account: dict[str, Any]) -> list[str]:
+def account_identifiers(account: dict[str, Any]) -> list[str]:
     """All account numbers the bank reports for an account (used to recognise transfers between your accounts)."""
     account_id = account.get("account_id") or {}
     candidates = [account_id.get("iban"), (account_id.get("other") or {}).get("identification")]

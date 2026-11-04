@@ -177,6 +177,20 @@ class Storage:
         with self._connect() as db:
             return db.execute("SELECT 1 FROM accounts WHERE uid = ?", (account_uid,)).fetchone() is not None
 
+    def account_needs_numbers(self, account_uid: str) -> bool:
+        """True for a bank account (not a card) whose account numbers we don't know yet."""
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT iban, identifiers, cash_account_type FROM accounts WHERE uid = ?", (account_uid,)
+            ).fetchone()
+        return bool(row) and row["cash_account_type"] != "CARD" and not row["iban"] and row["identifiers"] == "[]"
+
+    def set_account_identifiers(self, account_uid: str, identifiers: list[str]) -> None:
+        with self._connect() as db:
+            db.execute(
+                "UPDATE accounts SET identifiers = ? WHERE uid = ?", (json.dumps(sorted(set(identifiers))), account_uid)
+            )
+
     # Balances
 
     def save_balances(self, account_uid: str, balances: list[dict[str, Any]]) -> None:
