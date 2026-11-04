@@ -144,3 +144,53 @@ def test_disconnect(api, bank):
 def test_unknown_bank_is_404(api):
     response = api.post("/api/connections", json={"bank": "Nope"})
     assert response.status_code == 404
+
+
+def test_transactions_categories_and_rules(api, bank):
+    connect(api, bank)
+    api.post("/api/accounts/acc-1/refresh", params={"longest": True})
+
+    assert {c["id"] for c in api.get("/api/categories").json()} >= {"groceries", "salary", "transfer"}
+    listing = api.get("/api/transactions").json()
+    assert listing["total"] == 2
+    by_text = {t["description"]: t for t in listing["items"]}
+    assert by_text["Rema 1000"]["category"] == "groceries"
+    assert by_text["Rema 1000"]["amount"] == -120.5
+    assert by_text["Lønn"]["category"] == "salary"
+    assert "text" not in by_text["Rema 1000"]
+
+    rema_id = by_text["Rema 1000"]["id"]
+    changed = api.put(f"/api/transactions/{rema_id}/category", json={"category": "eating_out"}).json()
+    assert (changed["category"], changed["category_source"]) == ("eating_out", "manual")
+    assert api.put(f"/api/transactions/{rema_id}/category", json={"category": "nope"}).status_code == 422
+    reset = api.put(f"/api/transactions/{rema_id}/category", json={"category": None}).json()
+    assert reset["category_source"] == "keyword"
+
+    rule = api.post("/api/rules", json={"pattern": "rema", "category": "shopping"}).json()
+    assert rule == {"pattern": "REMA", "category": "shopping", "matched": 1}
+    assert api.get("/api/transactions", params={"category": "shopping"}).json()["total"] == 1
+    assert api.delete("/api/rules", params={"pattern": "REMA"}).json() == {"ok": True}
+
+    summary = api.get("/api/categorization/summary").json()
+    assert summary["count"] == 2 and summary["uncategorized"] == 0
+
+
+def test_categories_can_be_managed(api, bank):
+    connect(api, bank)
+    api.post("/api/accounts/acc-1/refresh", params={"longest": True})
+
+    groceries = next(c for c in api.get("/api/categories").json() if c["id"] == "groceries")
+    assert groceries | {"transactions": 1} == groceries and groceries["fixed"] is False
+
+    added = api.post("/api/categories", json={"name": "Memberships", "kind": "expense", "fixed": True}).json()
+    assert added["id"] == "memberships"
+    assert api.patch("/api/categories/memberships", json={"name": "Clubs"}).json()["name"] == "Clubs"
+    assert api.post("/api/categories", json={"name": "", "kind": "expense"}).status_code == 422
+
+    assert api.delete("/api/categories/groceries", params={"move_to": "memberships"}).json() == {"ok": True}
+    ids = [c["id"] for c in api.get("/api/categories").json()]
+    assert "groceries" not in ids
+    # Rema was a built-in groceries keyword; with groceries gone it needs review.
+    rema = next(t for t in api.get("/api/transactions").json()["items"] if t["description"] == "Rema 1000")
+    assert rema["category"] is None
+    assert api.delete("/api/categories/transfer").status_code == 422

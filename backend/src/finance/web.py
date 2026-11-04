@@ -6,25 +6,30 @@ Start it with `uv run finance serve` (add `--env production` for real banks).
 from __future__ import annotations
 
 import time
+from collections import Counter
+from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode, urlparse
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from finance.categories import KINDS
+from finance.categorize import Rule, categorized_transactions, summarize_categorization
 from finance.config import BACKEND_DIR, Settings
 from finance.connections import (
     BankNotFound,
-    ConnectionStore,
+    account_identifiers,
     consent_valid_until,
     find_aspsp,
     session_record,
 )
 from finance.enable_banking import EnableBankingClient, EnableBankingError
+from finance.storage import CategoryError, Storage
 from finance.transactions import inspect, summarize
 
 FRONTEND_DIST = BACKEND_DIR.parent / "frontend" / "dist"
@@ -38,9 +43,31 @@ class ConnectRequest(BaseModel):
     days: int = Field(default=180, ge=1, le=365)
 
 
+class CategoryChoice(BaseModel):
+    # None removes your manual choice, so the automatic category applies again.
+    category: str | None
+
+
+class RuleRequest(BaseModel):
+    pattern: str = Field(min_length=2)
+    category: str
+
+
+class NewCategory(BaseModel):
+    name: str
+    kind: str = "expense"
+    fixed: bool = False
+
+
+class CategoryChanges(BaseModel):
+    name: str | None = None
+    kind: str | None = None
+    fixed: bool | None = None
+
+
 def create_app(settings: Settings, client: EnableBankingClient | None = None) -> FastAPI:
     client = client or EnableBankingClient.from_key_file(settings.application_id, settings.private_key_path)
-    store = ConnectionStore(settings.data_dir)
+    store = Storage(settings.data_dir)
     redirect_url = settings.redirect_url or client.get_application()["redirect_urls"][0]
     # state -> bank login started by this server; checked when the bank redirects back.
     pending_logins: dict[str, dict[str, Any]] = {}
@@ -106,6 +133,9 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
     def refresh_account(account_uid: str, longest: bool = False, days: int = 90) -> dict[str, Any]:
         """Fetch balances and transactions from the bank. Many banks allow ~4 of these per day per account."""
         _require_account(store, account_uid)
+        if store.account_needs_numbers(account_uid):
+            # Needed to recognise transfers to this account; fetched once.
+            store.set_account_identifiers(account_uid, account_identifiers(client.get_account_details(account_uid)))
         store.save_balances(account_uid, client.get_balances(account_uid))
         if longest:
             transactions = client.iter_transactions(account_uid, strategy="longest")
@@ -121,6 +151,99 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
         if transactions is None:
             raise HTTPException(404, "No transactions fetched for this account yet")
         return inspect(transactions)
+
+    def all_transactions() -> list[dict[str, Any]]:
+        return categorized_transactions(store.sessions(), store.raw_transactions_by_account(), store.categorization())
+
+    def require_category(category: str) -> None:
+        if store.category(category) is None:
+            raise HTTPException(422, f"Unknown category {category!r}")
+
+    @app.exception_handler(CategoryError)
+    async def category_error(request: Request, error: CategoryError) -> JSONResponse:
+        return JSONResponse({"detail": str(error)}, status_code=422)
+
+    @app.get("/api/categories")
+    def categories() -> list[dict[str, Any]]:
+        """Your categories, with how many transactions and rules use each."""
+        used = Counter(t["category"] for t in all_transactions())
+        rules = store.rule_counts()
+        return [
+            asdict(c) | {"transactions": used.get(c.id, 0), "rules": rules.get(c.id, 0)} for c in store.categories()
+        ]
+
+    @app.get("/api/category-kinds")
+    def category_kinds() -> list[str]:
+        return list(KINDS)
+
+    @app.post("/api/categories")
+    def add_category(request: NewCategory) -> dict[str, Any]:
+        return asdict(store.add_category(request.name, request.kind, request.fixed))
+
+    @app.patch("/api/categories/{category_id}")
+    def update_category(category_id: str, changes: CategoryChanges) -> dict[str, Any]:
+        return asdict(store.update_category(category_id, name=changes.name, kind=changes.kind, fixed=changes.fixed))
+
+    @app.delete("/api/categories/{category_id}")
+    def delete_category(category_id: str, move_to: str | None = None) -> dict[str, bool]:
+        """Delete a category; its rules and choices move to `move_to`, or are removed so they show up for review."""
+        store.delete_category(category_id, move_to or None)
+        return {"ok": True}
+
+    @app.get("/api/transactions")
+    def transactions(
+        view: str = "all",
+        category: str | None = None,
+        account: str | None = None,
+        q: str | None = None,
+        limit: int = Query(default=200, ge=1, le=5000),
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """Categorized transactions, newest first. view=review shows only uncategorized ones."""
+        items = all_transactions()
+        if view == "review":
+            items = [t for t in items if t["category"] is None]
+        if category:
+            items = [t for t in items if t["category"] == category]
+        if account:
+            items = [t for t in items if t["account_uid"] == account]
+        if q:
+            needle = q.upper()
+            items = [t for t in items if needle in t["text"] or needle in t["description"].upper()]
+        return {"total": len(items), "items": [_public(t) for t in items[offset : offset + limit]]}
+
+    @app.put("/api/transactions/{transaction_id:path}/category")
+    def set_category(transaction_id: str, choice: CategoryChoice) -> dict[str, Any]:
+        if not store.has_transaction(transaction_id):
+            raise HTTPException(404, "Unknown transaction")
+        if choice.category is not None:
+            require_category(choice.category)
+        store.set_override(transaction_id, choice.category)
+        return _public(next(t for t in all_transactions() if t["id"] == transaction_id))
+
+    @app.get("/api/rules")
+    def rules() -> list[dict[str, str]]:
+        return store.categorization().to_json()["rules"]
+
+    @app.post("/api/rules")
+    def add_rule(request: RuleRequest) -> dict[str, Any]:
+        """Save a rule: transactions whose text contains the pattern get the category (unless set by hand)."""
+        require_category(request.category)
+        pattern = request.pattern.strip().upper()
+        store.add_rule(pattern, request.category)
+        rule = Rule(pattern, request.category)
+        matched = sum(1 for t in all_transactions() if t["category_source"] == "rule" and rule.matches(t["text"]))
+        return {"pattern": pattern, "category": request.category, "matched": matched}
+
+    @app.delete("/api/rules")
+    def delete_rule(pattern: str) -> dict[str, bool]:
+        if not store.delete_rule(pattern):
+            raise HTTPException(404, "Unknown rule")
+        return {"ok": True}
+
+    @app.get("/api/categorization/summary")
+    def categorization_summary() -> dict[str, Any]:
+        return summarize_categorization(all_transactions())
 
     def bank_callback(request: Request) -> RedirectResponse:
         params = request.query_params
@@ -155,7 +278,7 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
     return app
 
 
-def _account_state(store: ConnectionStore, account_uid: str) -> dict[str, Any]:
+def _account_state(store: Storage, account_uid: str) -> dict[str, Any]:
     transactions = store.load_transactions(account_uid)
     return {
         "balances": store.load_balances(account_uid),
@@ -167,7 +290,13 @@ def _account_state(store: ConnectionStore, account_uid: str) -> dict[str, Any]:
     }
 
 
-def _require_account(store: ConnectionStore, account_uid: str) -> None:
+def _public(transaction: dict[str, Any]) -> dict[str, Any]:
+    """A transaction as the frontend sees it: amounts as numbers, matching internals left out."""
+    hidden = {"text", "counterparty_account"}
+    return {k: v for k, v in transaction.items() if k not in hidden} | {"amount": float(transaction["amount"])}
+
+
+def _require_account(store: Storage, account_uid: str) -> None:
     # Also keeps arbitrary path segments out of the file names built from account_uid.
     if not store.has_account(account_uid):
         raise HTTPException(404, "Unknown account")

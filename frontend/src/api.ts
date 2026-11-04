@@ -34,6 +34,7 @@ export interface Account {
   iban: string | null;
   currency: string | null;
   cash_account_type: string | null;
+  identifiers?: string[];
   balances: { fetched_at: string; balances: Balance[] } | null;
   transactions: TransactionsSummary | null;
 }
@@ -55,6 +56,63 @@ export interface InspectReport {
   directions: Record<string, number>;
   currencies: Record<string, number>;
   coverage: { field: string; share: number }[];
+}
+
+export type CategoryKind = "expense" | "income" | "saving" | "loan" | "transfer";
+
+export interface Category {
+  id: string;
+  name: string;
+  kind: CategoryKind;
+  fixed: boolean;
+  system: boolean;
+  transactions?: number;
+  rules?: number;
+}
+
+export const KIND_LABELS: Record<CategoryKind, string> = {
+  expense: "Spending",
+  income: "Income",
+  saving: "Saving",
+  loan: "Loans",
+  transfer: "Transfers",
+};
+
+export type CategorySource = "manual" | "transfer" | "rule" | "keyword" | "bank" | null;
+
+export interface Transaction {
+  id: string;
+  account_uid: string;
+  account: string;
+  bank: string;
+  date: string;
+  amount: number;
+  currency: string | null;
+  direction: "DBIT" | "CRDT";
+  status: string | null;
+  description: string;
+  merchant: string;
+  bank_code: string;
+  bank_category: string;
+  category: string | null;
+  category_source: CategorySource;
+}
+
+export interface CategorizationSummary {
+  count: number;
+  categorized_share: number;
+  uncategorized: number;
+  uncategorized_spend_share: number;
+  by_source: Record<string, number>;
+  by_category: Record<string, number>;
+}
+
+export interface TransactionQuery {
+  view?: "all" | "review";
+  category?: string;
+  account?: string;
+  q?: string;
+  limit?: number;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -86,4 +144,32 @@ export const api = {
       { method: "POST" },
     ),
   inspect: (uid: string) => request<InspectReport>(`/api/accounts/${encodeURIComponent(uid)}/inspect`),
+  categories: () => request<Category[]>("/api/categories"),
+  addCategory: (name: string, kind: CategoryKind, fixed: boolean) =>
+    request<Category>("/api/categories", { method: "POST", body: JSON.stringify({ name, kind, fixed }) }),
+  updateCategory: (id: string, changes: Partial<Pick<Category, "name" | "kind" | "fixed">>) =>
+    request<Category>(`/api/categories/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(changes) }),
+  deleteCategory: (id: string, moveTo: string | null) =>
+    request<{ ok: boolean }>(
+      `/api/categories/${encodeURIComponent(id)}${moveTo ? `?move_to=${encodeURIComponent(moveTo)}` : ""}`,
+      { method: "DELETE" },
+    ),
+  transactions: (query: TransactionQuery) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== "") params.set(key, String(value));
+    }
+    return request<{ total: number; items: Transaction[] }>(`/api/transactions?${params}`);
+  },
+  setCategory: (id: string, category: string | null) =>
+    request<Transaction>(`/api/transactions/${encodeURIComponent(id)}/category`, {
+      method: "PUT",
+      body: JSON.stringify({ category }),
+    }),
+  addRule: (pattern: string, category: string) =>
+    request<{ pattern: string; category: string; matched: number }>("/api/rules", {
+      method: "POST",
+      body: JSON.stringify({ pattern, category }),
+    }),
+  categorizationSummary: () => request<CategorizationSummary>("/api/categorization/summary"),
 };

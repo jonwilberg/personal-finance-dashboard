@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { type Account, type AppInfo, type Connection, type InspectReport, api } from "./api";
+import { CategoriesPage } from "./CategoriesPage";
 import { ConnectBank } from "./ConnectBank";
+import { formatDate, formatMoney } from "./format";
+import { TransactionsPage } from "./TransactionsPage";
 
 type Notice = { kind: "success" | "error"; text: string };
 
@@ -15,29 +18,58 @@ function takeRedirectNotice(): Notice | null {
   return null;
 }
 
+const PAGES = {
+  "#/transactions": {
+    nav: "Transactions",
+    title: "Transactions",
+    dek: "Every transaction gets a category so the statistics add up. Review the ones the rules can't place.",
+  },
+  "#/categories": {
+    nav: "Categories",
+    title: "Categories",
+    dek: "Rename, add and remove categories, and mark which costs are fixed.",
+  },
+  "#/accounts": {
+    nav: "Accounts",
+    title: "Accounts",
+    dek: "Your banks, connected through Enable Banking.",
+  },
+} as const;
+type Route = keyof typeof PAGES;
+
+function currentRoute(): Route {
+  return window.location.hash in PAGES ? (window.location.hash as Route) : "#/accounts";
+}
+
 export function App() {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
-  const [connections, setConnections] = useState<Connection[] | null>(null);
+  const [route, setRoute] = useState<Route>(currentRoute);
   const [notice, setNotice] = useState<Notice | null>(takeRedirectNotice);
 
   const showError = useCallback((error: unknown) => {
     setNotice({ kind: "error", text: error instanceof Error ? error.message : String(error) });
   }, []);
 
-  const loadConnections = useCallback(() => {
-    api.connections().then(setConnections).catch(showError);
-  }, [showError]);
-
   useEffect(() => {
     api.app().then(setAppInfo).catch(showError);
-    loadConnections();
-  }, [loadConnections, showError]);
+    const onHashChange = () => setRoute(currentRoute());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [showError]);
 
+  const page = PAGES[route];
   return (
     <div className="page">
       <header className="masthead">
         <div className="masthead-top">
           <span className="wordmark">Personal Finance</span>
+          <nav className="nav">
+            {(Object.keys(PAGES) as Route[]).map((key) => (
+              <a key={key} href={key} aria-current={key === route ? "page" : undefined}>
+                {PAGES[key].nav}
+              </a>
+            ))}
+          </nav>
           {appInfo && (
             <span className={`badge ${appInfo.environment === "PRODUCTION" ? "badge-live" : "badge-test"}`}>
               {appInfo.environment === "PRODUCTION" ? "Production" : "Sandbox"}
@@ -45,8 +77,8 @@ export function App() {
             </span>
           )}
         </div>
-        <h1>Accounts</h1>
-        <p className="dek">Banks connected through Enable Banking, with read-only access to balances and transactions.</p>
+        <h1>{page.title}</h1>
+        <p className="dek">{page.dek}</p>
       </header>
 
       {notice && (
@@ -58,6 +90,24 @@ export function App() {
         </div>
       )}
 
+      {route === "#/transactions" && <TransactionsPage onError={showError} />}
+      {route === "#/categories" && <CategoriesPage onError={showError} />}
+      {route === "#/accounts" && <AccountsPage onError={showError} />}
+    </div>
+  );
+}
+
+function AccountsPage({ onError }: { onError: (e: unknown) => void }) {
+  const [connections, setConnections] = useState<Connection[] | null>(null);
+  const loadConnections = useCallback(() => {
+    api.connections().then(setConnections).catch(onError);
+  }, [onError]);
+  useEffect(loadConnections, [loadConnections]);
+
+  return (
+    <>
+      <ConnectBank onError={onError} />
+
       <section className="section">
         <p className="label">Connections</p>
         <h2>{connectionsHeadline(connections)}</h2>
@@ -66,13 +116,11 @@ export function App() {
             key={connection.session_id}
             connection={connection}
             onChanged={loadConnections}
-            onError={showError}
+            onError={onError}
           />
         ))}
       </section>
-
-      <ConnectBank onError={showError} />
-    </div>
+    </>
   );
 }
 
@@ -107,29 +155,73 @@ function ConnectionCard(props: { connection: Connection; onChanged: () => void; 
   };
 
   return (
-    <article className="connection">
-      <div className="connection-header">
-        <div>
+    <article className="bank">
+      <header className="bank-header">
+        <span className="bank-mark" aria-hidden="true">
+          {initials(connection.aspsp.name)}
+        </span>
+        <div className="bank-title">
           <h3>{connection.aspsp.name}</h3>
-          <p className="meta">
+          <p className="meta small">
+            {plural(connection.accounts.length, "account")} ·{" "}
             {connection.expired ? (
               <span className="badge badge-warn">Consent expired, reconnect</span>
             ) : (
-              <>Access until {formatDate(connection.valid_until)}</>
+              <>access until {formatDate(connection.valid_until)}</>
             )}
           </p>
         </div>
         <button className="text" onClick={disconnect} disabled={busy}>
           Disconnect
         </button>
-      </div>
-      <div className="accounts">
+      </header>
+      <div className="account-list">
+        <div className="account-head account-grid" aria-hidden="true">
+          <span>Account</span>
+          <span className="num">Balance</span>
+          <span>Transactions</span>
+          <span />
+        </div>
         {connection.accounts.map((account) => (
           <AccountRow key={account.uid} account={account} onError={onError} />
         ))}
       </div>
     </article>
   );
+}
+
+function initials(bankName: string) {
+  const words = bankName.split(/\s+/).filter((w) => /^[A-Za-zÆØÅæøå]/.test(w));
+  return words
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+}
+
+const ACCOUNT_TYPES: Record<string, string> = {
+  CACC: "Current account",
+  SVGS: "Savings",
+  CARD: "Credit card",
+  LOAN: "Loan",
+};
+
+/** Bank product names arrive as "BRUKSKONTO PLUSS" or "SavingsAccountPlus"; make them readable. */
+function accountName(account: Account) {
+  const raw = account.product || account.name || ACCOUNT_TYPES[account.cash_account_type ?? ""] || "Account";
+  const spaced = raw.replace(/([a-z])([A-Z])/g, "$1 $2");
+  if (spaced !== spaced.toUpperCase()) return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  return spaced.toLowerCase().replace(/(^|\s)(\p{L})/gu, (_, space, letter) => space + letter.toUpperCase());
+}
+
+function accountNumber(account: Account) {
+  const number = account.iban ?? account.identifiers?.[0];
+  return number ? `••${number.replace(/\D/g, "").slice(-4)}` : null;
+}
+
+function monthRange(first: string | null, last: string | null) {
+  if (!first || !last) return null;
+  const month = (iso: string) => new Date(iso).toLocaleDateString("nb-NO", { month: "short", year: "numeric" });
+  return `${month(first)} – ${month(last)}`;
 }
 
 function AccountRow(props: { account: Account; onError: (e: unknown) => void }) {
@@ -162,11 +254,14 @@ function AccountRow(props: { account: Account; onError: (e: unknown) => void }) 
 
   return (
     <div className="account">
-      <div className="account-main">
+      <div className="account-grid">
         <div>
-          <div className="account-name">{account.product || account.name || "Account"}</div>
-          <div className="muted small">
-            {[maskIban(account.iban), account.currency, account.cash_account_type].filter(Boolean).join(" · ")}
+          <div className="account-name">{accountName(account)}</div>
+          <div className="account-meta small">
+            {ACCOUNT_TYPES[account.cash_account_type ?? ""] && (
+              <span className="account-type">{ACCOUNT_TYPES[account.cash_account_type ?? ""]}</span>
+            )}
+            <span className="muted">{[accountNumber(account), account.currency].filter(Boolean).join(" · ")}</span>
           </div>
         </div>
         <div className="account-balance">
@@ -186,7 +281,7 @@ function AccountRow(props: { account: Account; onError: (e: unknown) => void }) 
               {account.transactions.first_date && (
                 <>
                   <br />
-                  {account.transactions.first_date} → {account.transactions.last_date}
+                  {monthRange(account.transactions.first_date, account.transactions.last_date)}
                 </>
               )}
             </>
@@ -251,16 +346,4 @@ function describeCounts(counts: Record<string, number>) {
   return Object.entries(counts)
     .map(([value, count]) => `${value} ${count}`)
     .join(", ");
-}
-
-function maskIban(iban: string | null) {
-  return iban ? `•••• ${iban.slice(-4)}` : null;
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("nb-NO", { day: "numeric", month: "short", year: "numeric" });
-}
-
-function formatMoney(amount: string, currency: string) {
-  return new Intl.NumberFormat("nb-NO", { style: "currency", currency }).format(Number(amount));
 }

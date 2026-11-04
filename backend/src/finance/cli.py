@@ -15,15 +15,16 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from finance.categorize import categorized_transactions, summarize_categorization
 from finance.config import ConfigError, Settings, load_settings
 from finance.connections import (
     BankNotFound,
-    ConnectionStore,
     consent_valid_until,
     find_aspsp,
     session_record,
 )
 from finance.enable_banking import EnableBankingClient, EnableBankingError
+from finance.storage import Storage
 from finance.transactions import description, inspect, signed_amount, transaction_date
 
 CALLBACK_TIMEOUT_SECONDS = 300
@@ -70,13 +71,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     inspect_parser.add_argument("account", help="Account uid with saved transactions")
 
+    commands.add_parser(
+        "categorize", help="Report how many transactions get a category, without printing transaction details"
+    )
+
     disconnect = commands.add_parser("disconnect", help="Revoke a saved session")
     disconnect.add_argument("session_id")
 
     args = parser.parse_args(argv)
     try:
         settings = load_settings(args.env)
-        store = ConnectionStore(settings.data_dir)
+        store = Storage(settings.data_dir)
         if args.command == "serve":
             from finance.web import serve_app
 
@@ -84,6 +89,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "inspect":
             cmd_inspect(store, args)
+            return 0
+        if args.command == "categorize":
+            cmd_categorize(store)
             return 0
         with EnableBankingClient.from_key_file(settings.application_id, settings.private_key_path) as client:
             handler = {
@@ -101,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def cmd_app(client: EnableBankingClient, settings: Settings, store: ConnectionStore, args: argparse.Namespace) -> None:
+def cmd_app(client: EnableBankingClient, settings: Settings, store: Storage, args: argparse.Namespace) -> None:
     app = client.get_application()
     print(f"Name:          {app.get('name')}")
     print(f"Environment:   {app.get('environment')}")
@@ -109,7 +117,7 @@ def cmd_app(client: EnableBankingClient, settings: Settings, store: ConnectionSt
     print(f"Redirect URLs: {', '.join(app.get('redirect_urls', []))}")
 
 
-def cmd_banks(client: EnableBankingClient, settings: Settings, store: ConnectionStore, args: argparse.Namespace) -> None:
+def cmd_banks(client: EnableBankingClient, settings: Settings, store: Storage, args: argparse.Namespace) -> None:
     aspsps = client.list_aspsps(country=args.country)
     if args.search:
         aspsps = [a for a in aspsps if args.search.lower() in a["name"].lower()]
@@ -119,7 +127,7 @@ def cmd_banks(client: EnableBankingClient, settings: Settings, store: Connection
     print(f"\n{len(aspsps)} bank(s)")
 
 
-def cmd_connect(client: EnableBankingClient, settings: Settings, store: ConnectionStore, args: argparse.Namespace) -> None:
+def cmd_connect(client: EnableBankingClient, settings: Settings, store: Storage, args: argparse.Namespace) -> None:
     aspsp = find_aspsp(client, args.bank, args.country)
     redirect_url = settings.redirect_url or client.get_application()["redirect_urls"][0]
     valid_until = consent_valid_until(aspsp, args.days)
@@ -152,7 +160,7 @@ def cmd_connect(client: EnableBankingClient, settings: Settings, store: Connecti
         print(f"  {account['uid']}  {account['name'] or ''}  {account['iban'] or ''}  {account['currency'] or ''}")
 
 
-def cmd_accounts(client: EnableBankingClient, settings: Settings, store: ConnectionStore, args: argparse.Namespace) -> None:
+def cmd_accounts(client: EnableBankingClient, settings: Settings, store: Storage, args: argparse.Namespace) -> None:
     sessions = store.sessions()
     if not sessions:
         print('No saved sessions. Connect a bank with "finance connect" or "finance serve".')
@@ -173,13 +181,13 @@ def cmd_accounts(client: EnableBankingClient, settings: Settings, store: Connect
             print(f"  {account['uid']}  {account['name'] or ''}  {account['iban'] or ''}  {balance}")
 
 
-def cmd_transactions(client: EnableBankingClient, settings: Settings, store: ConnectionStore, args: argparse.Namespace) -> None:
+def cmd_transactions(client: EnableBankingClient, settings: Settings, store: Storage, args: argparse.Namespace) -> None:
     if args.longest:
         transactions = list(client.iter_transactions(args.account, strategy="longest"))
     else:
         date_from = date.today() - timedelta(days=args.days)
         transactions = list(client.iter_transactions(args.account, date_from=date_from))
-    out_path = store.save_transactions(args.account, transactions)
+    store.save_transactions(args.account, transactions)
 
     amounts = [signed_amount(t) for t in transactions]
     money_in = sum((a for a in amounts if a > 0), Decimal())
@@ -190,10 +198,10 @@ def cmd_transactions(client: EnableBankingClient, settings: Settings, store: Con
         print(f"  {transaction_date(transaction):<10}  {signed_amount(transaction):>12}  {description(transaction)}")
     if len(transactions) > 15:
         print(f"  ... and {len(transactions) - 15} more")
-    print(f"\nSaved raw transactions to {out_path}")
+    print(f"\nSaved {len(transactions)} transactions to {store.path}")
 
 
-def cmd_inspect(store: ConnectionStore, args: argparse.Namespace) -> None:
+def cmd_inspect(store: Storage, args: argparse.Namespace) -> None:
     transactions = store.load_transactions(args.account)
     if transactions is None:
         raise ConfigError(f'No saved transactions for {args.account}. Run "finance transactions" first.')
@@ -210,7 +218,17 @@ def cmd_inspect(store: ConnectionStore, args: argparse.Namespace) -> None:
         print(f"  {item['share']:>4.0%}  {item['field']}")
 
 
-def cmd_disconnect(client: EnableBankingClient, settings: Settings, store: ConnectionStore, args: argparse.Namespace) -> None:
+def cmd_categorize(store: Storage) -> None:
+    report = summarize_categorization(
+        categorized_transactions(store.sessions(), store.raw_transactions_by_account(), store.categorization())
+    )
+    print(f"{report['count']} transactions, {report['categorized_share']:.0%} categorized")
+    print(f"Uncategorized: {report['uncategorized']} ({report['uncategorized_spend_share']:.0%} of spending)")
+    print("By source:   " + ", ".join(f"{k} {v}" for k, v in sorted(report["by_source"].items(), key=lambda i: -i[1])))
+    print("By category: " + ", ".join(f"{k} {v}" for k, v in sorted(report["by_category"].items(), key=lambda i: -i[1])))
+
+
+def cmd_disconnect(client: EnableBankingClient, settings: Settings, store: Storage, args: argparse.Namespace) -> None:
     client.delete_session(args.session_id)
     store.remove_session(args.session_id)
     print(f"Revoked session {args.session_id}.")

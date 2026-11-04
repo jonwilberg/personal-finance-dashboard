@@ -5,7 +5,6 @@ Reference: https://enablebanking.com/docs/api/reference/
 
 from __future__ import annotations
 
-import json
 import time
 import uuid
 from collections.abc import Iterator
@@ -16,7 +15,7 @@ from typing import Any
 import httpx
 import jwt
 
-from finance.transactions import transaction_date
+from finance.transactions import transaction_date, transaction_key
 
 API_URL = "https://api.enablebanking.com"
 # The API rejects tokens with a lifetime above 24 hours; one hour matches the official samples.
@@ -156,21 +155,25 @@ class EnableBankingClient:
         if strategy:
             params["strategy"] = strategy
 
+        # Keys from earlier (overlapping) date windows. Within one window every transaction is kept, even if two
+        # look the same, since they can be separate purchases.
         seen: set[str] = set()
         while True:
             last_page: list[dict[str, Any]] = []
+            window_keys: set[str] = set()
             while True:
                 page = self._request("GET", f"/accounts/{account_uid}/transactions", params=params)
                 last_page = page.get("transactions", [])
                 for transaction in last_page:
-                    key = _transaction_key(transaction)
+                    key = transaction_key(transaction)
+                    window_keys.add(key)
                     if key not in seen:
-                        seen.add(key)
                         yield transaction
                 continuation_key = page.get("continuation_key")
                 if not continuation_key:
                     break
                 params["continuation_key"] = continuation_key
+            seen |= window_keys
 
             if len(last_page) < CAPPED_PAGE_SIZE:
                 return
@@ -181,9 +184,3 @@ class EnableBankingClient:
             lookback = date.fromisoformat(oldest) - timedelta(days=CAPPED_LOOKBACK_DAYS)
             params = {"date_from": params.get("date_from", lookback.isoformat()), "date_to": oldest}
 
-
-def _transaction_key(transaction: dict[str, Any]) -> str:
-    """Stable identity for de-duplicating transactions returned by overlapping requests."""
-    return transaction.get("transaction_id") or transaction.get("entry_reference") or json.dumps(
-        transaction, sort_keys=True
-    )

@@ -231,22 +231,61 @@ label {
   width: 110px;
 }
 
-/* Connections and accounts */
+/* Banks (one block per connection) and their accounts */
 
-.connection {
+.bank {
   margin-top: var(--space-5);
+  background: var(--paper-raised);
+  border: var(--rule-hair);
+  border-top: var(--rule-heavy);
+  border-radius: 0;
 }
 
-.connection-header {
+.bank-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--paper-sunken);
+  border-bottom: var(--rule-hair);
 }
 
-.accounts {
-  margin-top: var(--space-3);
-  border-top: var(--rule-hair);
+.bank-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-display);
+  font-size: var(--text-body);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.bank-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.bank-title h3 {
+  font-size: var(--text-headline);
+}
+
+.account-list {
+  padding: 0 var(--space-4);
+}
+
+.account-head {
+  padding: var(--space-2) 0;
+  font-size: var(--text-label);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  border-bottom: var(--rule-hair);
 }
 
 .account {
@@ -254,15 +293,38 @@ label {
   padding: var(--space-3) 0;
 }
 
-.account-main {
+.account:last-child {
+  border-bottom: none;
+}
+
+.account-grid {
   display: grid;
-  grid-template-columns: minmax(160px, 1.4fr) minmax(120px, 1fr) minmax(150px, 1fr) auto;
+  grid-template-columns: minmax(180px, 1.4fr) minmax(120px, 1fr) minmax(150px, 1fr) 230px;
   gap: var(--space-3);
   align-items: center;
 }
 
 .account-name {
   font-weight: 500;
+}
+
+.account-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 2px;
+}
+
+.account-type {
+  font-size: var(--text-label);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+  border: var(--rule-hair);
+  border-radius: var(--radius);
+  padding: 0 5px;
 }
 
 .account-balance {
@@ -345,8 +407,12 @@ label {
 }
 
 @media (max-width: 640px) {
-  .account-main {
+  .account-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .account-head {
+    display: none;
   }
 
   .account-balance {
@@ -356,5 +422,448 @@ label {
   .account-actions {
     grid-column: 1 / -1;
     justify-content: flex-start;
+  }
+}
+
+/* Navigation */
+
+.nav {
+  display: flex;
+  gap: var(--space-5);
+  margin-left: auto;
+  margin-right: var(--space-4);
+}
+
+.nav a {
+  color: var(--ink-secondary);
+  text-decoration: none;
+  font-size: var(--text-small);
+  font-weight: 500;
+  padding-bottom: 2px;
+  border-bottom: 2px solid transparent;
+}
+
+.nav a[aria-current="page"] {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
+/* Transactions and review */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin: var(--space-5) 0 var(--space-3);
+}
+
+.toolbar select {
+  width: auto;
+}
+
+.search {
+  flex: 1 1 220px;
+  max-width: 360px;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+}
+
+.segmented button {
+  background: transparent;
+  color: var(--ink);
+  border: none;
+  border-radius: 0;
+}
+
+.segmented button[aria-selected="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.ledger {
+  border-top: 1px solid var(--ink);
+}
+
+.ledger-head {
+  font-size: var(--text-label);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+  padding: var(--space-2) 0;
+  border-bottom: var(--rule-hair);
+}
+
+.ledger-row {
+  padding: var(--space-3) 0;
+  border-bottom: var(--rule-hair);
+}
+
+.review-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(110px, 0.6fr) minmax(0, 2fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.table-grid {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 2fr) minmax(110px, 0.6fr) minmax(0, 1.2fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.amount-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.payee {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+button.disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--space-1);
+  padding: 2px 0;
+  font-weight: 500;
+}
+
+.disclosure-arrow {
+  display: inline-block;
+  font-size: 1em;
+  line-height: 1;
+  transition: transform 120ms ease-out;
+}
+
+button.disclosure[aria-expanded="true"] .disclosure-arrow {
+  transform: rotate(90deg);
+}
+
+.rule-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: flex-end;
+}
+
+.rule-editor select {
+  width: auto;
+  min-width: 180px;
+}
+
+.inline-label {
+  flex: 1 1 180px;
+}
+
+.category-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.source {
+  font-size: var(--text-caption);
+  color: var(--ink-muted);
+}
+
+.source-manual,
+.source-rule {
+  color: var(--compare);
+}
+
+.group-transactions {
+  width: 100%;
+  margin-top: var(--space-3);
+  border-collapse: collapse;
+  background: var(--paper-sunken);
+  font-variant-numeric: tabular-nums;
+}
+
+.group-transactions th {
+  text-align: left;
+  font-size: var(--text-label);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  border-bottom: var(--rule-hair);
+}
+
+.group-transactions th.num {
+  text-align: right;
+}
+
+.group-transactions td {
+  padding: 4px var(--space-3);
+  border-bottom: 1px dotted var(--rule);
+  vertical-align: top;
+}
+
+.group-transactions tr:last-child td {
+  border-bottom: none;
+}
+
+.group-transactions td:nth-child(2) {
+  width: 1%;
+}
+
+.block {
+  display: block;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.empty {
+  margin: var(--space-5) 0;
+  font-family: var(--font-display);
+  font-size: var(--text-subhead);
+  color: var(--ink-secondary);
+}
+
+@media (max-width: 720px) {
+  .review-grid,
+  .table-grid {
+    grid-template-columns: 1fr auto;
+  }
+
+  .rule-editor,
+  .category-cell {
+    grid-column: 1 / -1;
+  }
+
+  .table-grid > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .nav {
+    gap: var(--space-3);
+    margin-right: var(--space-2);
+  }
+}
+
+/* Bank picker (combobox) */
+
+.combobox {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.combobox-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.combobox-field .bank-logo {
+  position: absolute;
+  left: 8px;
+  pointer-events: none;
+}
+
+.combobox-field:has(.bank-logo) input {
+  padding-left: 80px;
+}
+
+.combobox-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 2px 0 0;
+  padding: var(--space-1) 0;
+  list-style: none;
+  background: var(--paper-raised);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+}
+
+.combobox-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px var(--space-3);
+  font-size: var(--text-small);
+  cursor: pointer;
+}
+
+.combobox-option[aria-selected="true"] {
+  background: var(--highlight);
+}
+
+.combobox-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combobox-name mark {
+  background: none;
+  color: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--compare);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.combobox-meta {
+  margin-left: auto;
+  padding-left: var(--space-3);
+  font-size: var(--text-caption);
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.combobox-empty {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-small);
+  color: var(--ink-muted);
+}
+
+.bank-logo {
+  flex: none;
+  box-sizing: border-box;
+  width: 64px;
+  height: 24px;
+  padding: 3px 5px;
+  border-radius: var(--radius);
+  border: var(--rule-hair);
+  object-fit: contain;
+  object-position: center;
+  /* Bank wordmarks are made for light backgrounds, so keep them on white in dark mode too. */
+  background: #fff;
+}
+
+.bank-logo-fallback {
+  display: grid;
+  place-items: center;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-display);
+  font-size: var(--text-caption);
+  font-weight: 500;
+}
+
+/* Categories page */
+
+.category-list {
+  margin-top: var(--space-4);
+  border-top: 1px solid var(--ink);
+}
+
+.category-row {
+  border-bottom: var(--rule-hair);
+  padding: var(--space-2) 0;
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.6fr) 140px 190px minmax(140px, 1fr) 80px;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+input.category-name {
+  font-weight: 500;
+  border-color: transparent;
+  background: transparent;
+  padding-left: 0;
+}
+
+input.category-name:hover,
+input.category-name:focus {
+  border-color: var(--rule);
+  background: var(--paper-raised);
+  padding-left: 8px;
+}
+
+.category-actions {
+  text-align: right;
+}
+
+.segmented-small button {
+  padding: 3px 10px;
+  font-size: var(--text-caption);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.field-label {
+  font-size: var(--text-label);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+}
+
+.delete-panel {
+  margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--paper-sunken);
+  border-left: 3px solid var(--signal);
+}
+
+.delete-panel p {
+  margin: 0 0 var(--space-3);
+  max-width: 70ch;
+}
+
+.delete-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: flex-end;
+}
+
+.delete-actions .inline-label {
+  flex: 0 1 auto;
+}
+
+.delete-actions select {
+  width: auto;
+  min-width: 220px;
+}
+
+button.danger {
+  background: var(--signal);
+  border-color: var(--signal);
+  color: var(--paper);
+}
+
+@media (max-width: 720px) {
+  .category-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .category-grid > :first-child {
+    grid-column: 1 / -1;
   }
 }

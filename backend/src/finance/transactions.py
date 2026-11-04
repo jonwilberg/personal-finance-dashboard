@@ -2,8 +2,38 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+from collections import Counter
 from decimal import Decimal
 from typing import Any
+
+
+def transaction_key(transaction: dict[str, Any]) -> str:
+    """Stable identity of a transaction within its account, for de-duplication and remembering choices.
+
+    The bank's transaction_id when there is one. entry_reference is not unique at every bank (the sandbox reuses
+    a handful of values), so it is combined with date, amount and direction. Otherwise a hash of the content.
+    """
+    if transaction.get("transaction_id"):
+        return str(transaction["transaction_id"])
+    if transaction.get("entry_reference"):
+        amount = (transaction.get("transaction_amount") or {}).get("amount", "")
+        parts = [transaction["entry_reference"], transaction_date(transaction), amount, transaction.get("credit_debit_indicator") or ""]
+        return "|".join(str(p) for p in parts)
+    content = json.dumps(transaction, sort_keys=True, ensure_ascii=False).encode()
+    return "h:" + hashlib.sha256(content).hexdigest()[:20]
+
+
+def unique_transaction_keys(transactions: list[dict[str, Any]]) -> list[str]:
+    """Keys for one account's transactions, numbering repeats (#2, #3) so no transaction is merged away."""
+    seen: Counter[str] = Counter()
+    keys = []
+    for transaction in transactions:
+        key = transaction_key(transaction)
+        seen[key] += 1
+        keys.append(key if seen[key] == 1 else f"{key}#{seen[key]}")
+    return keys
 
 
 def signed_amount(transaction: dict[str, Any]) -> Decimal:
