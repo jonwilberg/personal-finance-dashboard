@@ -34,6 +34,7 @@ export interface Account {
   iban: string | null;
   currency: string | null;
   cash_account_type: string | null;
+  identifiers?: string[];
   balances: { fetched_at: string; balances: Balance[] } | null;
   transactions: TransactionsSummary | null;
 }

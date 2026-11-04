@@ -147,29 +147,73 @@ function ConnectionCard(props: { connection: Connection; onChanged: () => void; 
   };
 
   return (
-    <article className="connection">
-      <div className="connection-header">
-        <div>
+    <article className="bank">
+      <header className="bank-header">
+        <span className="bank-mark" aria-hidden="true">
+          {initials(connection.aspsp.name)}
+        </span>
+        <div className="bank-title">
           <h3>{connection.aspsp.name}</h3>
-          <p className="meta">
+          <p className="meta small">
+            {plural(connection.accounts.length, "account")} ·{" "}
             {connection.expired ? (
               <span className="badge badge-warn">Consent expired, reconnect</span>
             ) : (
-              <>Access until {formatDate(connection.valid_until)}</>
+              <>access until {formatDate(connection.valid_until)}</>
             )}
           </p>
         </div>
         <button className="text" onClick={disconnect} disabled={busy}>
           Disconnect
         </button>
-      </div>
-      <div className="accounts">
+      </header>
+      <div className="account-list">
+        <div className="account-head account-grid" aria-hidden="true">
+          <span>Account</span>
+          <span className="num">Balance</span>
+          <span>Transactions</span>
+          <span />
+        </div>
         {connection.accounts.map((account) => (
           <AccountRow key={account.uid} account={account} onError={onError} />
         ))}
       </div>
     </article>
   );
+}
+
+function initials(bankName: string) {
+  const words = bankName.split(/\s+/).filter((w) => /^[A-Za-zÆØÅæøå]/.test(w));
+  return words
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+}
+
+const ACCOUNT_TYPES: Record<string, string> = {
+  CACC: "Current account",
+  SVGS: "Savings",
+  CARD: "Credit card",
+  LOAN: "Loan",
+};
+
+/** Bank product names arrive as "BRUKSKONTO PLUSS" or "SavingsAccountPlus"; make them readable. */
+function accountName(account: Account) {
+  const raw = account.product || account.name || ACCOUNT_TYPES[account.cash_account_type ?? ""] || "Account";
+  const spaced = raw.replace(/([a-z])([A-Z])/g, "$1 $2");
+  if (spaced !== spaced.toUpperCase()) return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  return spaced.toLowerCase().replace(/(^|\s)(\p{L})/gu, (_, space, letter) => space + letter.toUpperCase());
+}
+
+function accountNumber(account: Account) {
+  const number = account.iban ?? account.identifiers?.[0];
+  return number ? `••${number.replace(/\D/g, "").slice(-4)}` : null;
+}
+
+function monthRange(first: string | null, last: string | null) {
+  if (!first || !last) return null;
+  const month = (iso: string) => new Date(iso).toLocaleDateString("nb-NO", { month: "short", year: "numeric" });
+  return `${month(first)} – ${month(last)}`;
 }
 
 function AccountRow(props: { account: Account; onError: (e: unknown) => void }) {
@@ -202,11 +246,14 @@ function AccountRow(props: { account: Account; onError: (e: unknown) => void }) 
 
   return (
     <div className="account">
-      <div className="account-main">
+      <div className="account-grid">
         <div>
-          <div className="account-name">{account.product || account.name || "Account"}</div>
-          <div className="muted small">
-            {[maskIban(account.iban), account.currency, account.cash_account_type].filter(Boolean).join(" · ")}
+          <div className="account-name">{accountName(account)}</div>
+          <div className="account-meta small">
+            {ACCOUNT_TYPES[account.cash_account_type ?? ""] && (
+              <span className="account-type">{ACCOUNT_TYPES[account.cash_account_type ?? ""]}</span>
+            )}
+            <span className="muted">{[accountNumber(account), account.currency].filter(Boolean).join(" · ")}</span>
           </div>
         </div>
         <div className="account-balance">
@@ -226,7 +273,7 @@ function AccountRow(props: { account: Account; onError: (e: unknown) => void }) 
               {account.transactions.first_date && (
                 <>
                   <br />
-                  {account.transactions.first_date} → {account.transactions.last_date}
+                  {monthRange(account.transactions.first_date, account.transactions.last_date)}
                 </>
               )}
             </>
@@ -291,8 +338,4 @@ function describeCounts(counts: Record<string, number>) {
   return Object.entries(counts)
     .map(([value, count]) => `${value} ${count}`)
     .join(", ");
-}
-
-function maskIban(iban: string | null) {
-  return iban ? `•••• ${iban.slice(-4)}` : null;
 }
