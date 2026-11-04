@@ -151,3 +151,21 @@ def test_named_payees_keep_their_name_as_merchant():
     raw = {"checking": [tx("a", "300", "DBIT", creditor="Rema 1000 Majorstuen", counterparty_account="12345678901")]}
     [t] = categorized_transactions(SESSIONS, raw, CategorizationSettings())
     assert t["merchant"] == "REMA 1000 MAJORSTUEN"
+
+
+def test_payee_taken_from_first_line_that_names_one():
+    raw = {
+        "checking": [
+            {
+                **tx("a", "1500.00", "DBIT", counterparty_account="11112233334"),
+                "remittance_information": ["123456789012", "Til: KORTSELSKAP FINANS AS Betalt: 30.10.26"],
+            },
+            {
+                **tx("b", "1200.00", "DBIT", counterparty_account="11112233334"),
+                "remittance_information": ["123456789012", "Til: Kortselskap Finans AS Betalt: 25.04.26"],
+            },
+        ]
+    }
+    result = categorized_transactions(SESSIONS, raw, CategorizationSettings(rules=[Rule("KORTSELSKAP FINANS AS", "other_expense")]))
+    assert {t["merchant"] for t in result} == {"KORTSELSKAP FINANS AS"}
+    assert {t["category"] for t in result} == {"other_expense"}

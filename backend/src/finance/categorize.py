@@ -130,7 +130,7 @@ def normalize(account: Account, raw: dict[str, Any], key: str) -> dict[str, Any]
     name = counterparty.get("name") or ""
     code = raw.get("bank_transaction_code") or {}
     number = _digits(counterparty_account.get("iban") or (counterparty_account.get("other") or {}).get("identification") or "")
-    merchant = clean_text(name) if name else clean_text(remittance[0]) if remittance else ""
+    merchant = clean_text(name) if name else _payee_from_lines(remittance)
     text = clean_text(" ".join([name, *remittance]))
     if number:
         # Account numbers are stripped from the text as noise; keep the other party's number in a form rules can match.
@@ -290,9 +290,24 @@ def summarize_categorization(transactions: list[dict[str, Any]]) -> dict[str, An
 _GENERIC_WORDS_RE = re.compile(r"\b(?:TIL|FRA|BETALT|OVERFØRING|OVERFORING|DATO|KONTO|AVTALEGIRO|EFAKTURA|GIRO)\b")
 
 
+def _payee_core(text: str) -> str:
+    """Cleaned text without words like "Til:" and "Betalt:" that say nothing about the payee."""
+    return _SPACES_RE.sub(" ", _GENERIC_WORDS_RE.sub(" ", text)).strip(" -*/.,:;|")
+
+
 def _is_generic(merchant: str) -> bool:
     """True when the text says nothing about the payee, e.g. "TIL: . BETALT" once numbers are removed."""
-    return len(re.sub(r"[^A-ZÆØÅÄÖÜ]", "", _GENERIC_WORDS_RE.sub("", merchant))) < 3
+    return len(re.sub(r"[^A-ZÆØÅÄÖÜ]", "", _payee_core(merchant))) < 3
+
+
+def _payee_from_lines(lines: list[str]) -> str:
+    """The payee from the first text line that names one. Banks often put a reference number on the first line
+    ("123456789012") and the payee on the next ("Til: Kortselskap Finans AS Betalt: 30.10.26")."""
+    for line in lines:
+        core = _payee_core(clean_text(line))
+        if not _is_generic(core):
+            return core
+    return ""
 
 
 def _digits(value: str) -> str:
