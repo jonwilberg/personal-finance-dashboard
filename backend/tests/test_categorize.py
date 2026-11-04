@@ -183,3 +183,20 @@ def test_savings_are_not_spending():
     assert {t["id"].split(":", 1)[1]: t["category"] for t in transactions}["b"] == "savings"
     # 300 of 400 spent is uncategorized; the 5000 put into savings doesn't count as spending.
     assert summarize_categorization(transactions)["uncategorized_spend_share"] == 0.75
+
+
+def test_monthly_payments_group_together():
+    raw = {
+        "checking": [
+            {**tx(f"m{i}", "2500", "DBIT", counterparty_account="55556677778"), "remittance_information": ["99887766", f"Terminbeløp {month} 2026"]}
+            for i, month in enumerate(["okt.", "sep.", "mai.", "des."])
+        ]
+    }
+    result = categorized_transactions(SESSIONS, raw, CategorizationSettings())
+    assert {t["merchant"] for t in result} == {"TERMINBELØP"}
+
+
+def test_month_words_inside_names_are_kept():
+    assert clean_text("MARKET BAR OSLO") == "MARKET BAR OSLO"
+    assert clean_text("REMA 1000 JULIUS") == "REMA 1000 JULIUS"
+    assert clean_text("Spotify mai 2026") == "SPOTIFY"
