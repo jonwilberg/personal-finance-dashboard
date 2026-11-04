@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { type Overview, overviewApi } from "./api";
 import { formatKr } from "./format";
-import { SpendingChart, monthTitle } from "./SpendingChart";
+import { SpendingChart } from "./SpendingChart";
 
 export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
   const [month, setMonth] = useState<string | undefined>(undefined);
@@ -44,13 +44,16 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
           </button>
         </div>
 
-        <h2 className="front-headline">{overview.headline}</h2>
+        {/* --chars lets CSS size the headline to fit on one line (see .front-headline). */}
+        <h2 className="front-headline" style={{ ["--chars" as string]: overview.headline.length }}>
+          {overview.headline}
+        </h2>
 
         <div className="figures">
           <Figure
             label="Spent"
             value={formatKr(f.spent)}
-            note={f.usual_spent !== null ? `usual ${formatKr(f.usual_spent)}` : undefined}
+            note={f.usual_spent !== null ? `median month ${formatKr(f.usual_spent)}` : undefined}
           />
           <Figure label="Income" value={formatKr(f.income)} />
           <Figure
@@ -70,7 +73,7 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
           onSelect={setMonth}
         />
         <p className="meta small">
-          Usual month: the median of the {overview.usual_months || "previous"} months before. Select a bar to open that
+          Median month: the median of the {overview.usual_months || "previous"} months before. Select a bar to open that
           month.
         </p>
       </section>
@@ -78,7 +81,7 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
       {overview.changes && overview.changes.length > 0 && (
         <section className="section">
           <p className="label">What changed</p>
-          <h3>Biggest differences from a usual {monthTitle(overview.month).split(" ")[0]}</h3>
+          <h3>Biggest differences from a median month</h3>
           <div className="changes">
             {overview.changes.map((c) => (
               <div key={c.category} className="change-row">
@@ -87,7 +90,7 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
                   {c.fixed && <span className="account-type">Fixed</span>}
                 </span>
                 <span className="num">{formatKr(c.amount)}</span>
-                <span className="num meta">usual {formatKr(c.usual)}</span>
+                <span className="num meta">median {formatKr(c.usual)}</span>
                 <span className={`num change-delta ${c.delta > 0 ? "is-up" : "is-down"}`}>
                   {c.delta > 0 ? "▲ +" : "▼ −"}
                   {formatKr(Math.abs(c.delta))}

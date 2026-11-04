@@ -898,11 +898,24 @@ button.danger {
   color: var(--ink);
 }
 
+.front {
+  container-type: inline-size;
+}
+
+/* One line: the size shrinks with the headline's length so it fits the column, up to the display size. */
 .front-headline {
   margin-top: var(--space-4);
-  max-width: 24ch;
-  font-size: var(--text-display);
+  white-space: nowrap;
+  font-size: min(var(--text-display), calc(100cqi / (var(--chars, 40) * 0.5)));
   line-height: 1.15;
+}
+
+/* On narrow screens a single line would get too small; let it wrap instead. */
+@container (max-width: 600px) {
+  .front-headline {
+    white-space: normal;
+    font-size: var(--text-headline);
+  }
 }
 
 .figures {

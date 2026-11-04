@@ -1,4 +1,4 @@
-"""The front page: one month's key figures, its spending against your usual month, and what changed.
+"""The front page: one month's key figures, its spending against the median month, and what changed.
 
 Money is counted by the kind of category a transaction has:
 - spending:      expense categories (refunds count as negative spending), plus uncategorized money going out
@@ -7,7 +7,7 @@ Money is counted by the kind of category a transaction has:
 - loan payments: loan categories
 Transfers between your own accounts are left out.
 
-"Usual" is the median of the previous 12 months that have data, so a single holiday or one-off month doesn't
+The median month is the median of the previous 12 months that have data, so a single holiday or one-off month doesn't
 move it much.
 """
 
@@ -173,7 +173,7 @@ def _headline(month: str, spent: Decimal, usual: dict[str, Any] | None, changes:
         return f"You spent {_kr(spent)} in {name}"
     share = float((spent - usual["spent"]) / usual["spent"])
     if abs(share) < AS_USUAL_SHARE:
-        return f"Spending in {name} was about as usual"
+        return "Spending was about the same as in a median month"
     direction = "less" if share < 0 else "more"
     # Name a reason only when one change explains a good part of the difference.
     difference = float(spent - usual["spent"])
@@ -184,7 +184,7 @@ def _headline(month: str, spent: Decimal, usual: dict[str, Any] | None, changes:
             reason = ", mostly in payments that aren't categorized yet"
         else:
             reason = f", mostly on {driver['name'].lower()}"
-    return f"You spent {abs(share):.0%} {direction} than usual in {name}{reason}"
+    return f"You spent {abs(share):.0%} {direction} than in a median month{reason}"
 
 
 def _months_before(month: str, count: int) -> list[str]:

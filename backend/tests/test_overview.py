@@ -61,7 +61,7 @@ def test_figures_count_each_kind_once():
 
 def test_headline_and_changes_compare_with_usual():
     result = build_overview(history(), DEFAULT_CATEGORIES, today=date(2026, 11, 4))
-    assert result["headline"] == "You spent 6% less than usual in October, mostly on eating out"
+    assert result["headline"] == "You spent 6% less than in a median month, mostly on eating out"
     first = result["changes"][0]
     assert (first["category"], first["amount"], first["usual"], first["delta"]) == ("eating_out", 0, 1000, -1000)
     assert {c["category"] for c in result["changes"]} == {"eating_out", "uncategorized", "groceries"}
@@ -87,7 +87,7 @@ def test_as_usual_and_no_data():
     for month in ["2026-05", "2026-06", "2026-07", "2026-08"]:
         data += months_of(month, TYPICAL)
     result = build_overview(data, DEFAULT_CATEGORIES, today=date(2026, 11, 4))
-    assert result["headline"] == "Spending in August was about as usual"
+    assert result["headline"] == "Spending was about the same as in a median month"
     assert build_overview([], DEFAULT_CATEGORIES)["headline"] == "No transactions yet"
 
 
@@ -98,7 +98,7 @@ def test_headline_names_uncategorized_or_nothing_when_no_category_explains_it():
     # September: a big uncategorized payment and a little more groceries.
     data += months_of("2026-09", [*TYPICAL, t("12", "-20000", None), t("13", "-300", "groceries")])
     assert build_overview(data, DEFAULT_CATEGORIES, today=date(2026, 11, 4))["headline"] == (
-        "You spent 145% more than usual in September, mostly in payments that aren't categorized yet"
+        "You spent 145% more than in a median month, mostly in payments that aren't categorized yet"
     )
     # October: spread over several categories, none explaining 30% of it.
     spread = [t("01", "-10000", "housing"), t("02", "-1000", "transport"), t("03", "-1000", "leisure"),
@@ -106,5 +106,5 @@ def test_headline_names_uncategorized_or_nothing_when_no_category_explains_it():
               t("07", "-1000", "eating_out"), t("08", "-1000", "travel")]
     data += months_of("2026-10", spread)
     assert build_overview(data, DEFAULT_CATEGORIES, today=date(2026, 11, 4))["headline"] == (
-        "You spent 36% more than usual in October"
+        "You spent 36% more than in a median month"
     )
