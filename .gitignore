@@ -4,8 +4,15 @@ __pycache__/
 .venv/
 .pytest_cache/
 
+# Frontend
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
 # Secrets: never commit Enable Banking keys or local config
 .env
+.env.*
+!.env.example
 *.pem
 *.key
 

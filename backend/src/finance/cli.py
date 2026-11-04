@@ -6,19 +6,25 @@ Run `uv run finance --help` from the backend folder.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import time
 import webbrowser
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from finance.config import ConfigError, Settings, load_settings
+from finance.connections import (
+    BankNotFound,
+    ConnectionStore,
+    consent_valid_until,
+    find_aspsp,
+    session_record,
+)
 from finance.enable_banking import EnableBankingClient, EnableBankingError
+from finance.transactions import description, inspect, signed_amount, transaction_date
 
 CALLBACK_TIMEOUT_SECONDS = 300
 DEFAULT_CONSENT_DAYS = 90
@@ -26,7 +32,14 @@ DEFAULT_CONSENT_DAYS = 90
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="finance", description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--env",
+        help='Use backend/.env.<ENV> and data/<ENV> instead of backend/.env, e.g. "--env production"',
+    )
     commands = parser.add_subparsers(dest="command", required=True)
+
+    serve = commands.add_parser("serve", help="Run the local web app")
+    serve.add_argument("--port", type=int, help="Defaults to the port of the redirect URL")
 
     commands.add_parser("app", help="Show the registered Enable Banking application")
 
@@ -46,13 +59,32 @@ def main(argv: list[str] | None = None) -> int:
     transactions = commands.add_parser("transactions", help="Fetch transactions for an account")
     transactions.add_argument("account", help='Account uid as shown by "accounts"')
     transactions.add_argument("--days", type=int, default=90, help="How many days back to fetch")
+    transactions.add_argument(
+        "--longest",
+        action="store_true",
+        help="Ask the bank for as much history as it allows (ignores --days)",
+    )
+
+    inspect_parser = commands.add_parser(
+        "inspect", help="Summarize which fields saved transactions contain, without printing their values"
+    )
+    inspect_parser.add_argument("account", help="Account uid with saved transactions")
 
     disconnect = commands.add_parser("disconnect", help="Revoke a saved session")
     disconnect.add_argument("session_id")
 
     args = parser.parse_args(argv)
     try:
-        settings = load_settings()
+        settings = load_settings(args.env)
+        store = ConnectionStore(settings.data_dir)
+        if args.command == "serve":
+            from finance.web import serve_app
+
+            serve_app(settings, cert_dir=settings.data_dir / "certs", port=args.port)
+            return 0
+        if args.command == "inspect":
+            cmd_inspect(store, args)
+            return 0
         with EnableBankingClient.from_key_file(settings.application_id, settings.private_key_path) as client:
             handler = {
                 "app": cmd_app,
@@ -62,14 +94,14 @@ def main(argv: list[str] | None = None) -> int:
                 "transactions": cmd_transactions,
                 "disconnect": cmd_disconnect,
             }[args.command]
-            handler(client, settings, args)
-    except (ConfigError, EnableBankingError) as error:
+            handler(client, settings, store, args)
+    except (ConfigError, BankNotFound, EnableBankingError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1
     return 0
 
 
-def cmd_app(client: EnableBankingClient, settings: Settings, args: argparse.Namespace) -> None:
+def cmd_app(client: EnableBankingClient, settings: Settings, store: ConnectionStore, args: argparse.Namespace) -> None:
     app = client.get_application()
     print(f"Name:          {app.get('name')}")
     print(f"Environment:   {app.get('environment')}")
@@ -77,7 +109,7 @@ def cmd_app(client: EnableBankingClient, settings: Settings, args: argparse.Name
     print(f"Redirect URLs: {', '.join(app.get('redirect_urls', []))}")
 
 
-def cmd_banks(client: EnableBankingClient, settings: Settings, args: argparse.Namespace) -> None:
+def cmd_banks(client: EnableBankingClient, settings: Settings, store: ConnectionStore, args: argparse.Namespace) -> None:
     aspsps = client.list_aspsps(country=args.country)
     if args.search:
         aspsps = [a for a in aspsps if args.search.lower() in a["name"].lower()]
@@ -87,14 +119,10 @@ def cmd_banks(client: EnableBankingClient, settings: Settings, args: argparse.Na
     print(f"\n{len(aspsps)} bank(s)")
 
 
-def cmd_connect(client: EnableBankingClient, settings: Settings, args: argparse.Namespace) -> None:
-    aspsp = _find_aspsp(client, args.bank, args.country)
+def cmd_connect(client: EnableBankingClient, settings: Settings, store: ConnectionStore, args: argparse.Namespace) -> None:
+    aspsp = find_aspsp(client, args.bank, args.country)
     redirect_url = settings.redirect_url or client.get_application()["redirect_urls"][0]
-
-    consent_seconds = args.days * 86400
-    if max_seconds := aspsp.get("maximum_consent_validity"):
-        consent_seconds = min(consent_seconds, max_seconds)
-    valid_until = datetime.now(UTC) + timedelta(seconds=consent_seconds)
+    valid_until = consent_valid_until(aspsp, args.days)
 
     auth = client.start_authorization(aspsp["name"], aspsp["country"], redirect_url, valid_until)
     print(f"Open this URL to log in to {aspsp['name']} and approve access:\n\n  {auth['url']}\n")
@@ -105,6 +133,7 @@ def cmd_connect(client: EnableBankingClient, settings: Settings, args: argparse.
         params = _wait_for_callback(redirect_url)
     else:
         print("After approving, your browser is sent to the redirect URL (the page may fail to load).")
+        print('Tip: "finance serve" does this in the browser without copying URLs.')
         pasted = input("Paste the full URL from the address bar here: ").strip()
         params = {k: v[0] for k, v in parse_qs(urlparse(pasted).query).items()}
 
@@ -115,34 +144,18 @@ def cmd_connect(client: EnableBankingClient, settings: Settings, args: argparse.
     if "code" not in params:
         raise EnableBankingError(400, "No authorization code in the redirect URL.")
 
-    session = client.create_session(params["code"])
-    saved = {
-        "session_id": session["session_id"],
-        "aspsp": session["aspsp"],
-        "valid_until": session["access"]["valid_until"],
-        "created_at": datetime.now(UTC).isoformat(),
-        "accounts": [
-            {
-                "uid": account["uid"],
-                "name": account.get("name"),
-                "iban": (account.get("account_id") or {}).get("iban"),
-                "currency": account.get("currency"),
-            }
-            for account in session["accounts"]
-        ],
-    }
-    sessions = [s for s in _load_sessions(settings) if s["session_id"] != saved["session_id"]]
-    _save_sessions(settings, [*sessions, saved])
+    record = session_record(client.create_session(params["code"]))
+    store.add_session(record)
 
-    print(f"\nConnected {aspsp['name']}, consent valid until {saved['valid_until']}.")
-    for account in saved["accounts"]:
+    print(f"\nConnected {aspsp['name']}, consent valid until {record['valid_until']}.")
+    for account in record["accounts"]:
         print(f"  {account['uid']}  {account['name'] or ''}  {account['iban'] or ''}  {account['currency'] or ''}")
 
 
-def cmd_accounts(client: EnableBankingClient, settings: Settings, args: argparse.Namespace) -> None:
-    sessions = _load_sessions(settings)
+def cmd_accounts(client: EnableBankingClient, settings: Settings, store: ConnectionStore, args: argparse.Namespace) -> None:
+    sessions = store.sessions()
     if not sessions:
-        print('No saved sessions. Connect a bank with "finance connect".')
+        print('No saved sessions. Connect a bank with "finance connect" or "finance serve".')
         return
     for saved in sessions:
         status = client.get_session(saved["session_id"]).get("status")
@@ -150,6 +163,7 @@ def cmd_accounts(client: EnableBankingClient, settings: Settings, args: argparse
         print(f"  status {status}, valid until {saved['valid_until']}")
         for account in saved["accounts"]:
             balances = client.get_balances(account["uid"])
+            store.save_balances(account["uid"], balances)
             balance = (
                 f"{balances[0]['balance_amount']['amount']} {balances[0]['balance_amount']['currency']}"
                 f" ({balances[0].get('balance_type')})"
@@ -159,51 +173,47 @@ def cmd_accounts(client: EnableBankingClient, settings: Settings, args: argparse
             print(f"  {account['uid']}  {account['name'] or ''}  {account['iban'] or ''}  {balance}")
 
 
-def cmd_transactions(client: EnableBankingClient, settings: Settings, args: argparse.Namespace) -> None:
-    date_from = date.today() - timedelta(days=args.days)
-    transactions = list(client.iter_transactions(args.account, date_from=date_from))
+def cmd_transactions(client: EnableBankingClient, settings: Settings, store: ConnectionStore, args: argparse.Namespace) -> None:
+    if args.longest:
+        transactions = list(client.iter_transactions(args.account, strategy="longest"))
+    else:
+        date_from = date.today() - timedelta(days=args.days)
+        transactions = list(client.iter_transactions(args.account, date_from=date_from))
+    out_path = store.save_transactions(args.account, transactions)
 
-    out_path = settings.data_dir / "transactions" / f"{args.account}.json"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(transactions, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    money_in = sum((_signed_amount(t) for t in transactions if _signed_amount(t) > 0), Decimal())
-    money_out = sum((_signed_amount(t) for t in transactions if _signed_amount(t) < 0), Decimal())
-    print(f"{len(transactions)} transactions since {date_from}  in {money_in}  out {money_out}")
+    amounts = [signed_amount(t) for t in transactions]
+    money_in = sum((a for a in amounts if a > 0), Decimal())
+    money_out = sum((a for a in amounts if a < 0), Decimal())
+    since = min((d for t in transactions if (d := transaction_date(t))), default="-")
+    print(f"{len(transactions)} transactions since {since}  in {money_in}  out {money_out}")
     for transaction in transactions[:15]:
-        when = transaction.get("booking_date") or transaction.get("transaction_date") or ""
-        print(f"  {when:<10}  {_signed_amount(transaction):>12}  {_description(transaction)}")
+        print(f"  {transaction_date(transaction):<10}  {signed_amount(transaction):>12}  {description(transaction)}")
     if len(transactions) > 15:
         print(f"  ... and {len(transactions) - 15} more")
     print(f"\nSaved raw transactions to {out_path}")
 
 
-def cmd_disconnect(client: EnableBankingClient, settings: Settings, args: argparse.Namespace) -> None:
+def cmd_inspect(store: ConnectionStore, args: argparse.Namespace) -> None:
+    transactions = store.load_transactions(args.account)
+    if transactions is None:
+        raise ConfigError(f'No saved transactions for {args.account}. Run "finance transactions" first.')
+    if not transactions:
+        print("No transactions saved for this account.")
+        return
+
+    report = inspect(transactions)
+    print(f"{report['count']} transactions, {report['first_date']} to {report['last_date']}")
+    for label, key in [("Status", "statuses"), ("Direction", "directions"), ("Currency", "currencies")]:
+        print(f"{label + ':':<11}" + ", ".join(f"{value} {count}" for value, count in report[key].items()))
+    print("\nField coverage (share of transactions where the field has a value):")
+    for item in report["coverage"]:
+        print(f"  {item['share']:>4.0%}  {item['field']}")
+
+
+def cmd_disconnect(client: EnableBankingClient, settings: Settings, store: ConnectionStore, args: argparse.Namespace) -> None:
     client.delete_session(args.session_id)
-    _save_sessions(settings, [s for s in _load_sessions(settings) if s["session_id"] != args.session_id])
+    store.remove_session(args.session_id)
     print(f"Revoked session {args.session_id}.")
-
-
-def _find_aspsp(client: EnableBankingClient, name: str, country: str) -> dict[str, Any]:
-    aspsps = client.list_aspsps(country=country)
-    for aspsp in aspsps:
-        if aspsp["name"].lower() == name.lower():
-            return aspsp
-    close = [a["name"] for a in aspsps if name.lower() in a["name"].lower()]
-    hint = f" Did you mean: {', '.join(close)}?" if close else ' Run "finance banks" to see the options.'
-    raise ConfigError(f"No bank named {name!r} in {country.upper()}.{hint}")
-
-
-def _signed_amount(transaction: dict[str, Any]) -> Decimal:
-    amount = Decimal(transaction["transaction_amount"]["amount"])
-    return -abs(amount) if transaction.get("credit_debit_indicator") == "DBIT" else abs(amount)
-
-
-def _description(transaction: dict[str, Any]) -> str:
-    counterparty = transaction.get("creditor") if transaction.get("credit_debit_indicator") == "DBIT" else transaction.get("debtor")
-    parts = [(counterparty or {}).get("name"), *(transaction.get("remittance_information") or [])]
-    # Banks often repeat the counterparty name in the remittance text; show each part once.
-    return " | ".join(dict.fromkeys(p.strip() for p in parts if p and p.strip()))
 
 
 def _is_local_http(url: str) -> bool:
@@ -239,18 +249,3 @@ def _wait_for_callback(redirect_url: str, timeout: float = CALLBACK_TIMEOUT_SECO
     if not params:
         raise EnableBankingError(408, "Timed out waiting for the bank to redirect back.")
     return params
-
-
-def _sessions_path(settings: Settings) -> Path:
-    return settings.data_dir / "sessions.json"
-
-
-def _load_sessions(settings: Settings) -> list[dict[str, Any]]:
-    path = _sessions_path(settings)
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
-
-
-def _save_sessions(settings: Settings, sessions: list[dict[str, Any]]) -> None:
-    path = _sessions_path(settings)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(sessions, indent=2), encoding="utf-8")
