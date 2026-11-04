@@ -26,7 +26,7 @@ const PAGES = {
   "#/accounts": {
     nav: "Accounts",
     title: "Accounts",
-    dek: "Banks connected through Enable Banking, with read-only access to balances and transactions.",
+    dek: "Your banks, connected through Enable Banking.",
   },
 } as const;
 type Route = keyof typeof PAGES;
@@ -98,6 +98,8 @@ function AccountsPage({ onError }: { onError: (e: unknown) => void }) {
 
   return (
     <>
+      <ConnectBank onError={onError} />
+
       <section className="section">
         <p className="label">Connections</p>
         <h2>{connectionsHeadline(connections)}</h2>
@@ -110,8 +112,6 @@ function AccountsPage({ onError }: { onError: (e: unknown) => void }) {
           />
         ))}
       </section>
-
-      <ConnectBank onError={onError} />
     </>
   );
 }

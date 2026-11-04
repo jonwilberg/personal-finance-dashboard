@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { type Bank, api } from "./api";
+import { BankPicker } from "./BankPicker";
 
 const COUNTRIES = [
   ["NO", "Norway"],
@@ -40,10 +41,7 @@ export function ConnectBank({ onError }: { onError: (e: unknown) => void }) {
     <section className="section">
       <p className="label">Add a bank</p>
       <h2>Connect another bank</h2>
-      <p className="dek small">
-        You log in at your bank and approve read-only access to balances and transactions. In production, only accounts
-        linked to the application in the Enable Banking control panel are returned.
-      </p>
+      <p className="dek small">Log in at your bank to give read-only access to balances and transactions.</p>
       <form className="connect-form" onSubmit={submit}>
         <label>
           Country
@@ -55,20 +53,9 @@ export function ConnectBank({ onError }: { onError: (e: unknown) => void }) {
             ))}
           </select>
         </label>
-        <label className="grow">
-          Bank
-          <input
-            list="banks"
-            value={bank}
-            onChange={(e) => setBank(e.target.value)}
-            placeholder={banks.length ? `Search ${banks.length} banks…` : "Loading banks…"}
-          />
-          <datalist id="banks">
-            {banks.map((b) => (
-              <option key={b.name} value={b.name} />
-            ))}
-          </datalist>
-        </label>
+        <div className="grow">
+          <BankPicker label="Bank" banks={banks} value={bank} onChange={setBank} />
+        </div>
         <label>
           Access for (days)
           <input
