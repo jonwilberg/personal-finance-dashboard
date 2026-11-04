@@ -1050,28 +1050,6 @@ button.danger {
   font-weight: 500;
 }
 
-.changes {
-  margin-top: var(--space-3);
-  border-top: 1px solid var(--ink);
-}
-
-.change-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(100px, 1fr) minmax(120px, 1fr) minmax(110px, 1fr);
-  gap: var(--space-3);
-  align-items: baseline;
-  padding: var(--space-2) 0;
-  border-bottom: var(--rule-hair);
-  font-variant-numeric: tabular-nums;
-}
-
-.change-name {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-weight: 500;
-}
-
 .change-delta.is-up {
   color: var(--signal);
 }
@@ -1085,13 +1063,6 @@ button.danger {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .change-row {
-    grid-template-columns: 1fr auto;
-  }
-
-  .change-row .meta {
-    display: none;
-  }
 }
 
 .nav:last-child {
@@ -1108,4 +1079,97 @@ button.danger {
 .front .figures {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   max-width: 720px;
+}
+
+/* Category scoreboard */
+
+.scoreboard {
+  width: 100%;
+  margin-top: var(--space-3);
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.scoreboard th {
+  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  border-top: 1px solid var(--ink);
+  border-bottom: var(--rule-hair);
+  text-align: left;
+  font-size: var(--text-label);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+
+.scoreboard th.num {
+  text-align: right;
+}
+
+.scoreboard td {
+  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  border-bottom: var(--rule-hair);
+  vertical-align: middle;
+}
+
+.scoreboard td:last-child,
+.scoreboard th:last-child {
+  padding-left: var(--space-4);
+  width: 130px;
+}
+
+.scoreboard tfoot td {
+  border-top: 1px solid var(--ink);
+  border-bottom: none;
+  font-weight: 500;
+}
+
+button.sort {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 4px;
+}
+
+button.sort:focus-visible {
+  outline: 2px solid var(--compare);
+  outline-offset: 2px;
+}
+
+.sort-arrow {
+  display: inline-block;
+  min-width: 0.8em;
+  color: var(--ink);
+}
+
+.score-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 500;
+}
+
+.score-amount {
+  font-weight: 500;
+}
+
+.score-share {
+  display: inline-block;
+  min-width: 3.2em;
+  margin-left: var(--space-2);
+  text-align: right;
+}
+
+.sparkline {
+  display: block;
+}
+
+@media (max-width: 720px) {
+  .scoreboard th:nth-child(3),
+  .scoreboard td:nth-child(3),
+  .scoreboard th:last-child,
+  .scoreboard td:last-child {
+    display: none;
+  }
 }

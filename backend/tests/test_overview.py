@@ -108,3 +108,22 @@ def test_headline_names_uncategorized_or_nothing_when_no_category_explains_it():
     assert build_overview(data, DEFAULT_CATEGORIES, today=date(2026, 11, 4))["headline"] == (
         "You spent 36% more than in a median month"
     )
+
+
+def test_scoreboard_lists_spending_categories_with_history():
+    board = build_overview(history(), DEFAULT_CATEGORIES, today=date(2026, 11, 4))["scoreboard"]
+    assert [r["category"] for r in board] == ["housing", "groceries", "uncategorized", "eating_out"]
+    housing, groceries, uncategorized, eating_out = board
+    assert housing["fixed"] is True and housing["delta"] == 0
+    assert (groceries["amount"], groceries["usual"], groceries["delta"]) == (2800, 3000, -200)
+    assert groceries["history"] == [3000, 3000, 3000, 3000, 3000, 2800]
+    assert round(groceries["share"], 3) == round(2800 / 13100, 3)
+    assert (uncategorized["name"], uncategorized["delta"]) == ("Not categorized", 300)
+    assert (eating_out["amount"], eating_out["usual"]) == (0, 1000)
+    # Savings, loans and income aren't spending, and unused categories are left out.
+    assert not {"savings", "loans", "salary", "transport"} & {r["category"] for r in board}
+
+
+def test_scoreboard_without_enough_history_has_no_median():
+    board = build_overview(history(), DEFAULT_CATEGORIES, month="2026-06", today=date(2026, 11, 4))["scoreboard"]
+    assert all(r["usual"] is None and r["delta"] is None for r in board)

@@ -60,6 +60,7 @@ def build_overview(
 
     spent = this["fixed"] + this["adjustable"] + this["uncategorized"]
     changes = _changes(this, usual, by_id) if usual else []
+    shown = [m for m in [*reversed(_months_before(month, HISTORY_MONTHS - 1)), month] if m >= first]
     return {
         "month": month,
         "month_label": _month_label(month),
@@ -87,10 +88,10 @@ def build_overview(
                 "uncategorized": _money(totals.get(m, _empty())["uncategorized"]),
                 "income": _money(totals.get(m, _empty())["income"]),
             }
-            for m in [*reversed(_months_before(month, HISTORY_MONTHS - 1)), month]
-            if m >= first
+            for m in shown
         ],
         "changes": changes,
+        "scoreboard": _scoreboard(totals, shown, this, usual, spent, categories),
     }
 
 
@@ -140,6 +141,39 @@ def _usual(totals: dict[str, dict[str, Any]], months: list[str]) -> dict[str, An
         "spent": Decimal(median(r["fixed"] + r["adjustable"] + r["uncategorized"] for r in rows)),
         "by_category": {k: Decimal(median(r["by_category"].get(k, Decimal()) for r in rows)) for k in keys},
     }
+
+
+def _scoreboard(
+    totals: dict[str, dict[str, Any]],
+    months: list[str],
+    this: dict[str, Any],
+    usual: dict[str, Any] | None,
+    spent: Decimal,
+    categories: list[Category],
+) -> list[dict[str, Any]]:
+    """Every spending category with this month, the median month, the difference and its monthly history."""
+    rows = []
+    entries = [(c.id, c.name, c.fixed) for c in categories if c.kind == "expense"]
+    for key, name, fixed in [*entries, (UNCATEGORIZED, "Not categorized", False)]:
+        history = [totals.get(m, _empty())["by_category"].get(key, Decimal()) for m in months]
+        amount = this["by_category"].get(key, Decimal())
+        median_month = usual["by_category"].get(key, Decimal()) if usual else None
+        if not any(history) and not median_month:
+            continue  # never used in the period shown
+        rows.append(
+            {
+                "category": key,
+                "name": name,
+                "fixed": fixed,
+                "amount": _money(amount),
+                "share": float(amount / spent) if spent > 0 else None,
+                "usual": _money(median_month) if median_month is not None else None,
+                "delta": _money(amount - median_month) if median_month is not None else None,
+                "history": [_money(v) for v in history],
+            }
+        )
+    rows.sort(key=lambda r: r["amount"], reverse=True)
+    return rows
 
 
 def _changes(this: dict[str, Any], usual: dict[str, Any], by_id: dict[str, Category]) -> list[dict[str, Any]]:

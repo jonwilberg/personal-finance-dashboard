@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { type Overview, overviewApi } from "./api";
 import { formatKr } from "./format";
+import { CategoryScoreboard } from "./CategoryScoreboard";
 import { SpendingChart } from "./SpendingChart";
 
 export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
@@ -78,26 +79,16 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
         </p>
       </section>
 
-      {overview.changes && overview.changes.length > 0 && (
+      {overview.scoreboard && overview.scoreboard.length > 0 && (
         <section className="section">
-          <p className="label">What changed</p>
-          <h3>Biggest differences from a median month</h3>
-          <div className="changes">
-            {overview.changes.map((c) => (
-              <div key={c.category} className="change-row">
-                <span className="change-name">
-                  {c.name}
-                  {c.fixed && <span className="account-type">Fixed</span>}
-                </span>
-                <span className="num">{formatKr(c.amount)}</span>
-                <span className="num meta">median {formatKr(c.usual)}</span>
-                <span className={`num change-delta ${c.delta > 0 ? "is-up" : "is-down"}`}>
-                  {c.delta > 0 ? "▲ +" : "▼ −"}
-                  {formatKr(Math.abs(c.delta))}
-                </span>
-              </div>
-            ))}
-          </div>
+          <p className="label">Spending by category</p>
+          <CategoryScoreboard
+            rows={overview.scoreboard}
+            months={overview.series}
+            total={f.spent}
+            usual={f.usual_spent}
+          />
+          <p className="meta small">Select a column heading to sort.</p>
         </section>
       )}
     </>
