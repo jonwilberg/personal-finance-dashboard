@@ -1,0 +1,80 @@
+/* Editorial paper design tokens. See docs/design.md. Components use these variables, never raw colours. */
+
+:root {
+  color-scheme: light;
+
+  --paper: #fbf7ef;
+  --paper-raised: #fffdf8;
+  --paper-sunken: #f3ecdf;
+  --ink: #22201c;
+  --ink-secondary: #5e574b;
+  --ink-muted: #8c8475;
+  --rule: #e3d9c6;
+  --signal: #c8452f;
+  --compare: #2e5e8c;
+  --positive: #3f7a4f;
+  --highlight: #f6e3c8;
+
+  /* Category inks, in assignment order, then Other. */
+  --cat-1: #22201c;
+  --cat-2: #c8452f;
+  --cat-3: #2e5e8c;
+  --cat-4: #b98b2e;
+  --cat-5: #5f7f4e;
+  --cat-6: #7a4e6e;
+  --cat-7: #4f7a86;
+  --cat-8: #a8653d;
+  --cat-other: #b9b0a0;
+
+  --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
+  --font-ui: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --text-display: 2rem;
+  --text-headline: 1.375rem;
+  --text-subhead: 1.0625rem;
+  --text-body: 0.9375rem;
+  --text-small: 0.8125rem;
+  --text-caption: 0.75rem;
+  --text-label: 0.6875rem;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  --radius: 2px;
+  --rule-heavy: 2px solid var(--ink);
+  --rule-hair: 1px solid var(--rule);
+  --content-width: 1200px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --paper: #1b1916;
+    --paper-raised: #24211d;
+    --paper-sunken: #151310;
+    --ink: #f1eadc;
+    --ink-secondary: #c2b8a6;
+    --ink-muted: #8f8676;
+    --rule: #3a352e;
+    --signal: #e7705a;
+    --compare: #7fa8d4;
+    --positive: #7db38a;
+    --highlight: #3b2f1e;
+
+    --cat-1: #f1eadc;
+    --cat-2: #e7705a;
+    --cat-3: #7fa8d4;
+    --cat-4: #d6ac55;
+    --cat-5: #93b07f;
+    --cat-6: #b88aab;
+    --cat-7: #86b0bb;
+    --cat-8: #d08e66;
+    --cat-other: #6b6458;
+  }
+}

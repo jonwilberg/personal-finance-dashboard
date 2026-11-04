@@ -35,14 +35,18 @@ export function App() {
 
   return (
     <div className="page">
-      <header className="header">
-        <h1>Personal Finance</h1>
-        {appInfo && (
-          <span className={`badge ${appInfo.environment === "PRODUCTION" ? "badge-live" : "badge-test"}`}>
-            {appInfo.environment === "PRODUCTION" ? "Production" : "Sandbox"}
-            {!appInfo.active && " · inactive"}
-          </span>
-        )}
+      <header className="masthead">
+        <div className="masthead-top">
+          <span className="wordmark">Personal Finance</span>
+          {appInfo && (
+            <span className={`badge ${appInfo.environment === "PRODUCTION" ? "badge-live" : "badge-test"}`}>
+              {appInfo.environment === "PRODUCTION" ? "Production" : "Sandbox"}
+              {!appInfo.active && " · inactive"}
+            </span>
+          )}
+        </div>
+        <h1>Accounts</h1>
+        <p className="dek">Banks connected through Enable Banking, with read-only access to balances and transactions.</p>
       </header>
 
       {notice && (
@@ -54,12 +58,9 @@ export function App() {
         </div>
       )}
 
-      <ConnectBank onError={showError} />
-
-      <section>
-        <h2>Connected banks</h2>
-        {connections === null && <p className="muted">Loading…</p>}
-        {connections?.length === 0 && <p className="muted">No banks connected yet.</p>}
+      <section className="section">
+        <p className="label">Connections</p>
+        <h2>{connectionsHeadline(connections)}</h2>
         {connections?.map((connection) => (
           <ConnectionCard
             key={connection.session_id}
@@ -69,8 +70,23 @@ export function App() {
           />
         ))}
       </section>
+
+      <ConnectBank onError={showError} />
     </div>
   );
+}
+
+function connectionsHeadline(connections: Connection[] | null) {
+  if (connections === null) return "Loading…";
+  if (connections.length === 0) return "No banks connected yet";
+  const accounts = connections.reduce((sum, c) => sum + c.accounts.length, 0);
+  const expired = connections.filter((c) => c.expired).length;
+  const summary = `${plural(connections.length, "bank")}, ${plural(accounts, "account")}`;
+  return expired ? `${summary}; ${expired} need${expired === 1 ? "s" : ""} reconnecting` : summary;
+}
+
+function plural(count: number, word: string) {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
 function ConnectionCard(props: { connection: Connection; onChanged: () => void; onError: (e: unknown) => void }) {
@@ -91,11 +107,11 @@ function ConnectionCard(props: { connection: Connection; onChanged: () => void; 
   };
 
   return (
-    <article className="card">
-      <div className="card-header">
+    <article className="connection">
+      <div className="connection-header">
         <div>
           <h3>{connection.aspsp.name}</h3>
-          <p className="muted">
+          <p className="meta">
             {connection.expired ? (
               <span className="badge badge-warn">Consent expired, reconnect</span>
             ) : (
@@ -103,7 +119,7 @@ function ConnectionCard(props: { connection: Connection; onChanged: () => void; 
             )}
           </p>
         </div>
-        <button className="secondary" onClick={disconnect} disabled={busy}>
+        <button className="text" onClick={disconnect} disabled={busy}>
           Disconnect
         </button>
       </div>
@@ -180,13 +196,14 @@ function AccountRow(props: { account: Account; onError: (e: unknown) => void }) 
         </div>
         <div className="account-actions">
           <button
+            className="secondary"
             onClick={fetchHistory}
             disabled={fetching}
             title="Fetches balance and full history. Many banks allow about 4 fetches per account per day."
           >
             {fetching ? "Fetching…" : account.transactions ? "Refresh" : "Fetch history"}
           </button>
-          <button className="secondary" onClick={toggleInspect} disabled={!account.transactions}>
+          <button className="text" onClick={toggleInspect} disabled={!account.transactions}>
             {report ? "Hide fields" : "Inspect fields"}
           </button>
         </div>
