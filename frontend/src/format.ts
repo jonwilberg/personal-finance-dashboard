@@ -7,3 +7,8 @@ export function formatDate(iso: string) {
 export function formatMoney(amount: number | string, currency: string) {
   return new Intl.NumberFormat("nb-NO", { style: "currency", currency }).format(Number(amount));
 }
+
+/** Whole kroner, for overviews where øre are noise. */
+export function formatKr(amount: number) {
+  return new Intl.NumberFormat("nb-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 }).format(amount);
+}

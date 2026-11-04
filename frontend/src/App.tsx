@@ -3,6 +3,7 @@ import { type Account, type AppInfo, type Connection, type InspectReport, api } 
 import { CategoriesPage } from "./CategoriesPage";
 import { ConnectBank } from "./ConnectBank";
 import { formatDate, formatMoney } from "./format";
+import { OverviewPage } from "./OverviewPage";
 import { TransactionsPage } from "./TransactionsPage";
 
 type Notice = { kind: "success" | "error"; text: string };
@@ -19,6 +20,11 @@ function takeRedirectNotice(): Notice | null {
 }
 
 const PAGES = {
+  "#/overview": {
+    nav: "Overview",
+    title: "Overview",
+    dek: "How your money moved, one month at a time.",
+  },
   "#/transactions": {
     nav: "Transactions",
     title: "Transactions",
@@ -38,7 +44,7 @@ const PAGES = {
 type Route = keyof typeof PAGES;
 
 function currentRoute(): Route {
-  return window.location.hash in PAGES ? (window.location.hash as Route) : "#/accounts";
+  return window.location.hash in PAGES ? (window.location.hash as Route) : "#/overview";
 }
 
 export function App() {
@@ -90,6 +96,7 @@ export function App() {
         </div>
       )}
 
+      {route === "#/overview" && <OverviewPage onError={showError} />}
       {route === "#/transactions" && <TransactionsPage onError={showError} />}
       {route === "#/categories" && <CategoriesPage onError={showError} />}
       {route === "#/accounts" && <AccountsPage onError={showError} />}

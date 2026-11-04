@@ -29,6 +29,7 @@ from finance.connections import (
     session_record,
 )
 from finance.enable_banking import EnableBankingClient, EnableBankingError
+from finance.overview import build_overview
 from finance.storage import CategoryError, Storage
 from finance.transactions import inspect, summarize
 
@@ -240,6 +241,11 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
         if not store.delete_rule(pattern):
             raise HTTPException(404, "Unknown rule")
         return {"ok": True}
+
+    @app.get("/api/overview")
+    def overview(month: str | None = None) -> dict[str, Any]:
+        """The front page for one month (YYYY-MM); defaults to the last complete month."""
+        return build_overview(all_transactions(), store.categories(), month)
 
     @app.get("/api/categorization/summary")
     def categorization_summary() -> dict[str, Any]:
