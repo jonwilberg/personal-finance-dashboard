@@ -173,3 +173,49 @@ export const api = {
     }),
   categorizationSummary: () => request<CategorizationSummary>("/api/categorization/summary"),
 };
+
+export interface OverviewFigures {
+  spent: number;
+  fixed: number;
+  adjustable: number;
+  uncategorized: number;
+  income: number;
+  saved: number;
+  loans: number;
+  savings_rate: number | null;
+  usual_spent: number | null;
+}
+
+export interface OverviewMonth {
+  month: string;
+  label: string;
+  fixed: number;
+  adjustable: number;
+  uncategorized: number;
+  income: number;
+}
+
+export interface OverviewChange {
+  category: string;
+  name: string;
+  fixed: boolean;
+  amount: number;
+  usual: number;
+  delta: number;
+}
+
+export interface Overview {
+  month: string | null;
+  month_label?: string;
+  months: string[];
+  is_partial: boolean;
+  headline: string;
+  figures?: OverviewFigures;
+  usual_months?: number;
+  series: OverviewMonth[];
+  changes?: OverviewChange[];
+}
+
+export const overviewApi = {
+  get: (month?: string) => request<Overview>(`/api/overview${month ? `?month=${encodeURIComponent(month)}` : ""}`),
+};

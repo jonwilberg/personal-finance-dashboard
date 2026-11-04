@@ -26,6 +26,10 @@
   --cat-8: #a8653d;
   --cat-other: #b9b0a0;
 
+  /* Fixed vs adjustable spending (validated: lightness band, chroma, CVD and contrast on --paper). */
+  --chart-fixed: #2a63b0;
+  --chart-adjustable: #b8862a;
+
   --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
   --font-ui: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
 
@@ -76,5 +80,8 @@
     --cat-7: #86b0bb;
     --cat-8: #d08e66;
     --cat-other: #6b6458;
+
+    --chart-fixed: #4f86cc;
+    --chart-adjustable: #b8862a;
   }
 }
