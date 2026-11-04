@@ -84,8 +84,13 @@ export function App() {
             </span>
           )}
         </div>
-        <h1>{page.title}</h1>
-        <p className="dek">{page.dek}</p>
+        {/* The overview's own headline is its title. */}
+        {route !== "#/overview" && (
+          <>
+            <h1>{page.title}</h1>
+            <p className="dek">{page.dek}</p>
+          </>
+        )}
       </header>
 
       {notice && (

@@ -1084,3 +1084,15 @@ button.danger {
 .nav:last-child {
   margin-right: 0;
 }
+
+/* The overview starts right under the masthead rule, without a page title of its own. */
+.section.front {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.front .figures {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 720px;
+}
