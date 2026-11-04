@@ -1080,3 +1080,7 @@ button.danger {
     display: none;
   }
 }
+
+.nav:last-child {
+  margin-right: 0;
+}

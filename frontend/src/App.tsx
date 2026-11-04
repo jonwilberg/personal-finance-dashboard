@@ -68,7 +68,7 @@ export function App() {
     <div className="page">
       <header className="masthead">
         <div className="masthead-top">
-          <span className="wordmark">Personal Finance</span>
+          <span className="wordmark">Wilberg Household Finance</span>
           <nav className="nav">
             {(Object.keys(PAGES) as Route[]).map((key) => (
               <a key={key} href={key} aria-current={key === route ? "page" : undefined}>
@@ -76,10 +76,11 @@ export function App() {
               </a>
             ))}
           </nav>
-          {appInfo && (
-            <span className={`badge ${appInfo.environment === "PRODUCTION" ? "badge-live" : "badge-test"}`}>
-              {appInfo.environment === "PRODUCTION" ? "Production" : "Sandbox"}
-              {!appInfo.active && " · inactive"}
+          {/* Only flag the unusual cases: test data, or a bank access that stopped working. */}
+          {appInfo && (appInfo.environment !== "PRODUCTION" || !appInfo.active) && (
+            <span className="badge badge-test">
+              {appInfo.environment === "PRODUCTION" ? "Inactive" : "Sandbox"}
+              {appInfo.environment !== "PRODUCTION" && !appInfo.active && " · inactive"}
             </span>
           )}
         </div>

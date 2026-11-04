@@ -38,8 +38,9 @@ The tokens live in [`frontend/src/theme.css`](../frontend/src/theme.css) and the
 | `--positive` | `#3F7A4F` | `#7DB38A` | Down / under / good news |
 | `--highlight` | `#F6E3C8` | `#3B2F1E` | Marked text, selected row |
 
-Dark mode ("night edition") follows the system setting. It keeps the warm hue: charcoal paper and cream ink, never
-pure black or white.
+The app always shows light mode. A dark variant ("night edition") is kept in the tokens for a possible theme toggle;
+it applies only with `<html data-theme="dark">`. It keeps the warm hue: charcoal paper and cream ink, never pure black
+or white.
 
 ### Categories
 

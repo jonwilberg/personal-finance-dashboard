@@ -55,33 +55,33 @@
   --content-width: 1200px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
+/* Dark mode ("night edition"). The app always shows light mode; these values are kept for a possible
+   theme toggle later and apply only when <html data-theme="dark"> is set. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
 
-    --paper: #1b1916;
-    --paper-raised: #24211d;
-    --paper-sunken: #151310;
-    --ink: #f1eadc;
-    --ink-secondary: #c2b8a6;
-    --ink-muted: #8f8676;
-    --rule: #3a352e;
-    --signal: #e7705a;
-    --compare: #7fa8d4;
-    --positive: #7db38a;
-    --highlight: #3b2f1e;
+  --paper: #1b1916;
+  --paper-raised: #24211d;
+  --paper-sunken: #151310;
+  --ink: #f1eadc;
+  --ink-secondary: #c2b8a6;
+  --ink-muted: #8f8676;
+  --rule: #3a352e;
+  --signal: #e7705a;
+  --compare: #7fa8d4;
+  --positive: #7db38a;
+  --highlight: #3b2f1e;
 
-    --cat-1: #f1eadc;
-    --cat-2: #e7705a;
-    --cat-3: #7fa8d4;
-    --cat-4: #d6ac55;
-    --cat-5: #93b07f;
-    --cat-6: #b88aab;
-    --cat-7: #86b0bb;
-    --cat-8: #d08e66;
-    --cat-other: #6b6458;
+  --cat-1: #f1eadc;
+  --cat-2: #e7705a;
+  --cat-3: #7fa8d4;
+  --cat-4: #d6ac55;
+  --cat-5: #93b07f;
+  --cat-6: #b88aab;
+  --cat-7: #86b0bb;
+  --cat-8: #d08e66;
+  --cat-other: #6b6458;
 
-    --chart-fixed: #4f86cc;
-    --chart-adjustable: #b8862a;
-  }
+  --chart-fixed: #4f86cc;
+  --chart-adjustable: #b8862a;
 }
