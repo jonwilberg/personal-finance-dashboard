@@ -42,6 +42,10 @@ so the first time your browser warns: choose **Advanced → Proceed to localhost
 2. **Fetch history** per account gets the balance and as much transaction history as the bank allows. Many banks
    allow only about 4 fetches per account per day.
 3. **Inspect fields** shows which transaction fields the bank fills in, without amounts or names.
+4. **Transactions** groups uncategorized payments by payee; pick a category once and save it as a rule.
+5. **Categories** lets you rename, add and delete categories, set their type (spending, income, saving, loan) and
+   mark costs as fixed or adjustable. The defaults follow SSB's consumption groups and SIFO's reference budget
+   (see `backend/src/finance/categories.py`).
 
 Everything the app stores lives in a SQLite database, `backend/data/finance.db` (`backend/data/production/finance.db`
 for production). That includes bank connections, accounts, balances, raw transactions as the banks sent them, and

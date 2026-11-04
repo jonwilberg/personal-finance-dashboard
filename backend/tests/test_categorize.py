@@ -101,8 +101,8 @@ def test_income_keywords_only_for_money_in():
 
 def test_priority_manual_then_rule_then_keyword():
     raw = {"checking": [tx("a", "12000", "DBIT", text="OBOS husleie"), tx("b", "300", "DBIT", text="REMA 1000")]}
-    settings = CategorizationSettings(rules=[Rule("obos", "bills")])
-    assert run(raw, settings)["a"] == ("bills", "rule")
+    settings = CategorizationSettings(rules=[Rule("obos", "other_expense")])
+    assert run(raw, settings)["a"] == ("other_expense", "rule")
     settings.overrides["checking:a"] = "housing"
     assert run(raw, settings)["a"] == ("housing", "manual")
     assert run(raw, settings)["b"] == ("groceries", "keyword")
@@ -200,3 +200,39 @@ def test_month_words_inside_names_are_kept():
     assert clean_text("MARKET BAR OSLO") == "MARKET BAR OSLO"
     assert clean_text("REMA 1000 JULIUS") == "REMA 1000 JULIUS"
     assert clean_text("Spotify mai 2026") == "SPOTIFY"
+
+
+def test_rules_and_keywords_for_deleted_categories_are_skipped():
+    from finance.categories import DEFAULT_CATEGORIES
+
+    raw = {"checking": [tx("a", "300", "DBIT", text="REMA 1000"), tx("b", "99", "DBIT", text="KIWI 123")]}
+    categories = [c for c in DEFAULT_CATEGORIES if c.id != "groceries"]
+    settings = CategorizationSettings(rules=[Rule("KIWI", "groceries")], categories=categories)
+    assert run(raw, settings) == {"a": (None, None), "b": (None, None)}
+
+
+def test_loan_payments_are_not_spending_and_carry_their_kind():
+    raw = {"checking": [tx("a", "2500", "DBIT", text="Terminbeløp okt. 2026"), tx("b", "100", "DBIT", text="REMA 1000")]}
+    transactions = categorized_transactions(SESSIONS, raw, CategorizationSettings())
+    kinds = {t["id"].split(":", 1)[1]: (t["category"], t["kind"]) for t in transactions}
+    assert kinds == {"a": ("loans", "loan"), "b": ("groceries", "expense")}
+    assert summarize_categorization(transactions)["uncategorized_spend_share"] == 0.0
+
+
+def test_split_categories_have_their_own_keywords():
+    raw = {
+        "checking": [
+            tx("a", "500", "DBIT", text="Gjensidige Forsikring"),
+            tx("b", "399", "DBIT", text="Telenor Norge"),
+            tx("c", "1200", "DBIT", text="Tibber strøm"),
+            tx("d", "800", "DBIT", text="Cubus Storo"),
+            tx("e", "300", "DBIT", text="IKEA Furuset"),
+            tx("f", "450", "DBIT", text="Vinmonopolet Majorstuen"),
+            tx("g", "350", "DBIT", text="Frisør Hårfin"),
+        ]
+    }
+    result = run(raw)
+    assert {k: v[0] for k, v in result.items()} == {
+        "a": "insurance", "b": "phone_internet", "c": "housing", "d": "clothing", "e": "home", "f": "eating_out",
+        "g": "health",
+    }

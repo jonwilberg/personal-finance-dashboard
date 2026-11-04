@@ -173,3 +173,24 @@ def test_transactions_categories_and_rules(api, bank):
 
     summary = api.get("/api/categorization/summary").json()
     assert summary["count"] == 2 and summary["uncategorized"] == 0
+
+
+def test_categories_can_be_managed(api, bank):
+    connect(api, bank)
+    api.post("/api/accounts/acc-1/refresh", params={"longest": True})
+
+    groceries = next(c for c in api.get("/api/categories").json() if c["id"] == "groceries")
+    assert groceries | {"transactions": 1} == groceries and groceries["fixed"] is False
+
+    added = api.post("/api/categories", json={"name": "Memberships", "kind": "expense", "fixed": True}).json()
+    assert added["id"] == "memberships"
+    assert api.patch("/api/categories/memberships", json={"name": "Clubs"}).json()["name"] == "Clubs"
+    assert api.post("/api/categories", json={"name": "", "kind": "expense"}).status_code == 422
+
+    assert api.delete("/api/categories/groceries", params={"move_to": "memberships"}).json() == {"ok": True}
+    ids = [c["id"] for c in api.get("/api/categories").json()]
+    assert "groceries" not in ids
+    # Rema was a built-in groceries keyword; with groceries gone it needs review.
+    rema = next(t for t in api.get("/api/transactions").json()["items"] if t["description"] == "Rema 1000")
+    assert rema["category"] is None
+    assert api.delete("/api/categories/transfer").status_code == 422

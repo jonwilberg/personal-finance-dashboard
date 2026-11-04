@@ -6,6 +6,8 @@ Start it with `uv run finance serve` (add `--env production` for real banks).
 from __future__ import annotations
 
 import time
+from collections import Counter
+from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -16,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from finance.categories import CATEGORIES, CATEGORY_IDS
+from finance.categories import KINDS
 from finance.categorize import Rule, categorized_transactions, summarize_categorization
 from finance.config import BACKEND_DIR, Settings
 from finance.connections import (
@@ -27,7 +29,7 @@ from finance.connections import (
     session_record,
 )
 from finance.enable_banking import EnableBankingClient, EnableBankingError
-from finance.storage import Storage
+from finance.storage import CategoryError, Storage
 from finance.transactions import inspect, summarize
 
 FRONTEND_DIST = BACKEND_DIR.parent / "frontend" / "dist"
@@ -49,6 +51,18 @@ class CategoryChoice(BaseModel):
 class RuleRequest(BaseModel):
     pattern: str = Field(min_length=2)
     category: str
+
+
+class NewCategory(BaseModel):
+    name: str
+    kind: str = "expense"
+    fixed: bool = False
+
+
+class CategoryChanges(BaseModel):
+    name: str | None = None
+    kind: str | None = None
+    fixed: bool | None = None
 
 
 def create_app(settings: Settings, client: EnableBankingClient | None = None) -> FastAPI:
@@ -142,12 +156,39 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
         return categorized_transactions(store.sessions(), store.raw_transactions_by_account(), store.categorization())
 
     def require_category(category: str) -> None:
-        if category not in CATEGORY_IDS:
+        if store.category(category) is None:
             raise HTTPException(422, f"Unknown category {category!r}")
 
+    @app.exception_handler(CategoryError)
+    async def category_error(request: Request, error: CategoryError) -> JSONResponse:
+        return JSONResponse({"detail": str(error)}, status_code=422)
+
     @app.get("/api/categories")
-    def categories() -> list[dict[str, str]]:
-        return [{"id": c.id, "name": c.name, "kind": c.kind} for c in CATEGORIES]
+    def categories() -> list[dict[str, Any]]:
+        """Your categories, with how many transactions and rules use each."""
+        used = Counter(t["category"] for t in all_transactions())
+        rules = store.rule_counts()
+        return [
+            asdict(c) | {"transactions": used.get(c.id, 0), "rules": rules.get(c.id, 0)} for c in store.categories()
+        ]
+
+    @app.get("/api/category-kinds")
+    def category_kinds() -> list[str]:
+        return list(KINDS)
+
+    @app.post("/api/categories")
+    def add_category(request: NewCategory) -> dict[str, Any]:
+        return asdict(store.add_category(request.name, request.kind, request.fixed))
+
+    @app.patch("/api/categories/{category_id}")
+    def update_category(category_id: str, changes: CategoryChanges) -> dict[str, Any]:
+        return asdict(store.update_category(category_id, name=changes.name, kind=changes.kind, fixed=changes.fixed))
+
+    @app.delete("/api/categories/{category_id}")
+    def delete_category(category_id: str, move_to: str | None = None) -> dict[str, bool]:
+        """Delete a category; its rules and choices move to `move_to`, or are removed so they show up for review."""
+        store.delete_category(category_id, move_to or None)
+        return {"ok": True}
 
     @app.get("/api/transactions")
     def transactions(

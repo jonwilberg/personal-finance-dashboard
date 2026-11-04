@@ -58,11 +58,25 @@ export interface InspectReport {
   coverage: { field: string; share: number }[];
 }
 
+export type CategoryKind = "expense" | "income" | "saving" | "loan" | "transfer";
+
 export interface Category {
   id: string;
   name: string;
-  kind: "expense" | "income" | "saving" | "transfer";
+  kind: CategoryKind;
+  fixed: boolean;
+  system: boolean;
+  transactions?: number;
+  rules?: number;
 }
+
+export const KIND_LABELS: Record<CategoryKind, string> = {
+  expense: "Spending",
+  income: "Income",
+  saving: "Saving",
+  loan: "Loans",
+  transfer: "Transfers",
+};
 
 export type CategorySource = "manual" | "transfer" | "rule" | "keyword" | "bank" | null;
 
@@ -131,6 +145,15 @@ export const api = {
     ),
   inspect: (uid: string) => request<InspectReport>(`/api/accounts/${encodeURIComponent(uid)}/inspect`),
   categories: () => request<Category[]>("/api/categories"),
+  addCategory: (name: string, kind: CategoryKind, fixed: boolean) =>
+    request<Category>("/api/categories", { method: "POST", body: JSON.stringify({ name, kind, fixed }) }),
+  updateCategory: (id: string, changes: Partial<Pick<Category, "name" | "kind" | "fixed">>) =>
+    request<Category>(`/api/categories/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(changes) }),
+  deleteCategory: (id: string, moveTo: string | null) =>
+    request<{ ok: boolean }>(
+      `/api/categories/${encodeURIComponent(id)}${moveTo ? `?move_to=${encodeURIComponent(moveTo)}` : ""}`,
+      { method: "DELETE" },
+    ),
   transactions: (query: TransactionQuery) => {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {

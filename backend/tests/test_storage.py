@@ -1,7 +1,9 @@
 import json
 
+import pytest
+
 from finance.categorize import Rule
-from finance.storage import Storage
+from finance.storage import CategoryError, Storage
 
 SESSION = {
     "session_id": "s1",
@@ -146,3 +148,70 @@ def test_account_numbers_are_fetched_only_where_missing(tmp_path):
     storage.set_account_identifiers("acc-3", ["11223344556"])
     assert not storage.account_needs_numbers("acc-3")
     assert storage.sessions()[0]["accounts"][2]["identifiers"] == ["11223344556"]
+
+
+def test_default_categories_are_seeded(tmp_path):
+    storage = Storage(tmp_path)
+    categories = {c.id: c for c in storage.categories()}
+    assert categories["housing"].fixed and not categories["groceries"].fixed
+    assert categories["loans"].kind == "loan"
+    assert categories["transfer"].system
+    assert "bills" not in categories
+
+
+def test_add_rename_and_change_categories(tmp_path):
+    storage = Storage(tmp_path)
+    added = storage.add_category("  Memberships ", "expense", fixed=True)
+    assert (added.id, added.name, added.fixed) == ("memberships", "Memberships", True)
+    assert storage.add_category("Memberships", "expense").id == "memberships_2"
+
+    renamed = storage.update_category("eating_out", name="Dining out")
+    assert (renamed.name, renamed.kind) == ("Dining out", "expense")
+    assert storage.update_category("memberships", fixed=False).fixed is False
+
+    with pytest.raises(CategoryError):
+        storage.update_category("transfer", kind="expense")
+    with pytest.raises(CategoryError):
+        storage.add_category("   ", "expense")
+    with pytest.raises(CategoryError):
+        storage.add_category("Weird", "nonsense")
+
+
+def test_delete_category_moves_or_removes_rules_and_choices(tmp_path):
+    storage = Storage(tmp_path)
+    storage.add_rule("FORENING", "other_expense")
+    storage.set_override("acc-1:t1", "other_expense")
+    memberships = storage.add_category("Memberships", "expense", fixed=True)
+
+    storage.delete_category("other_expense", move_to=memberships.id)
+    settings = storage.categorization()
+    assert settings.rules == [Rule("FORENING", "memberships")]
+    assert settings.overrides == {"acc-1:t1": "memberships"}
+
+    storage.delete_category("memberships")
+    assert storage.categorization().rules == []
+    assert storage.categorization().overrides == {}
+
+    with pytest.raises(CategoryError):
+        storage.delete_category("transfer")
+    with pytest.raises(CategoryError):
+        storage.delete_category("groceries", move_to="groceries")
+
+
+def test_rules_on_split_categories_are_moved(tmp_path):
+    storage = Storage(tmp_path)
+    with storage._connect() as db:
+        db.execute("DELETE FROM categories")
+        db.execute("DELETE FROM meta WHERE key = 'categories_seeded_at'")
+    for pattern, category in [("TERMINBELØP", "bills"), ("FORENING-KONTINGENT", "bills"), ("GJENSIDIGE", "bills"),
+                              ("UNIQLO ONLINE", "shopping"), ("ELKJØP", "shopping")]:
+        storage.add_rule(pattern, category)
+
+    rules = {r.pattern: r.category for r in Storage(tmp_path).categorization().rules}
+    assert rules == {
+        "TERMINBELØP": "loans",
+        "FORENING-KONTINGENT": "other_expense",
+        "GJENSIDIGE": "insurance",
+        "UNIQLO ONLINE": "clothing",
+        "ELKJØP": "shopping",
+    }

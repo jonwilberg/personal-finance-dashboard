@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { type Account, type AppInfo, type Connection, type InspectReport, api } from "./api";
+import { CategoriesPage } from "./CategoriesPage";
 import { ConnectBank } from "./ConnectBank";
 import { formatDate, formatMoney } from "./format";
 import { TransactionsPage } from "./TransactionsPage";
@@ -22,6 +23,11 @@ const PAGES = {
     nav: "Transactions",
     title: "Transactions",
     dek: "Every transaction gets a category so the statistics add up. Review the ones the rules can't place.",
+  },
+  "#/categories": {
+    nav: "Categories",
+    title: "Categories",
+    dek: "Rename, add and remove categories, and mark which costs are fixed.",
   },
   "#/accounts": {
     nav: "Accounts",
@@ -84,7 +90,9 @@ export function App() {
         </div>
       )}
 
-      {route === "#/transactions" ? <TransactionsPage onError={showError} /> : <AccountsPage onError={showError} />}
+      {route === "#/transactions" && <TransactionsPage onError={showError} />}
+      {route === "#/categories" && <CategoriesPage onError={showError} />}
+      {route === "#/accounts" && <AccountsPage onError={showError} />}
     </div>
   );
 }

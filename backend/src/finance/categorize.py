@@ -24,13 +24,16 @@ from typing import Any
 from finance.categories import (
     BANK_CATEGORY_HINTS,
     CARD_PAYMENT_CODES,
-    CATEGORY_IDS,
-    CATEGORY_KINDS,
+    DEFAULT_CATEGORIES,
     INCOME_KEYWORDS,
     INTEREST_CODES,
     MERCHANT_KEYWORDS,
+    Category,
 )
 from finance.transactions import description, signed_amount, transaction_date, unique_transaction_keys
+
+# Kinds of category that aren't spending: money put into savings, loan payments and transfers between own accounts.
+NOT_SPENDING_KINDS = {"saving", "loan", "transfer"}
 
 # Days between a card bill payment leaving a bank account and arriving on the card.
 CARD_PAYMENT_WINDOW_DAYS = 7
@@ -72,6 +75,12 @@ _MERCHANT_PATTERNS = [(category, _keyword_regex(words)) for category, words in M
 _INCOME_PATTERNS = [(category, _keyword_regex(words)) for category, words in INCOME_KEYWORDS.items()]
 
 
+def keyword_category(text: str, allowed: list[str]) -> str | None:
+    """The first of the `allowed` categories whose built-in merchant keywords match the text, if any."""
+    patterns = dict(_MERCHANT_PATTERNS)
+    return next((c for c in allowed if c in patterns and patterns[c].search(text.upper())), None)
+
+
 @dataclass
 class Rule:
     pattern: str
@@ -83,10 +92,11 @@ class Rule:
 
 @dataclass
 class CategorizationSettings:
-    """Your choices: categories set on single transactions, and saved rules."""
+    """Your categories, the categories you set on single transactions, and your saved rules."""
 
     overrides: dict[str, str] = field(default_factory=dict)
     rules: list[Rule] = field(default_factory=list)
+    categories: list[Category] = field(default_factory=lambda: list(DEFAULT_CATEGORIES))
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> CategorizationSettings:
@@ -220,32 +230,36 @@ def _pair(credit, transactions, transfers, window_days, exclude_accounts, mark_s
 
 
 def categorize(transactions: list[dict[str, Any]], settings: CategorizationSettings, transfers: set[str]) -> None:
-    rules = sorted(settings.rules, key=lambda r: len(r.pattern), reverse=True)  # most specific first
+    kinds = {c.id: c.kind for c in settings.categories}
+    # Rules and built-in keywords for categories that no longer exist are skipped.
+    rules = sorted((r for r in settings.rules if r.category in kinds), key=lambda r: len(r.pattern), reverse=True)
     for t in transactions:
-        category, source = _decide(t, settings.overrides, rules, transfers)
-        t["category"], t["category_source"] = category, source
+        category, source = _decide(t, settings.overrides, rules, transfers, kinds)
+        t["category"], t["category_source"], t["kind"] = category, source, kinds.get(category)
 
 
-def _decide(t, overrides, rules, transfers) -> tuple[str | None, str | None]:
-    if (chosen := overrides.get(t["id"])) in CATEGORY_IDS:
+def _decide(t, overrides, rules, transfers, kinds) -> tuple[str | None, str | None]:
+    if (chosen := overrides.get(t["id"])) in kinds:
         return chosen, "manual"
-    if t["id"] in transfers:
+    if t["id"] in transfers and "transfer" in kinds:
         return "transfer", "transfer"
     for rule in rules:
         if rule.matches(t["text"]):
             return rule.category, "rule"
     if t["direction"] == "CRDT":
         for category, pattern in _INCOME_PATTERNS:
-            if pattern.search(t["text"]):
+            if category in kinds and pattern.search(t["text"]):
                 return category, "keyword"
     for category, pattern in _MERCHANT_PATTERNS:
-        if pattern.search(t["text"]):
+        if category in kinds and pattern.search(t["text"]):
             return category, "keyword"
     for hint, category in BANK_CATEGORY_HINTS:
-        if hint in t["bank_category"]:
+        if category in kinds and hint in t["bank_category"]:
             return category, "bank"
     if t["bank_code"] in INTEREST_CODES:
-        return ("fees" if t["direction"] == "DBIT" else "other_income"), "bank"
+        category = "fees" if t["direction"] == "DBIT" else "other_income"
+        if category in kinds:
+            return category, "bank"
     return None, None
 
 
@@ -277,8 +291,8 @@ def summarize_categorization(transactions: list[dict[str, Any]]) -> dict[str, An
         source = t["category_source"] or "uncategorized"
         by_source[source] = by_source.get(source, 0) + 1
         by_category[t["category"] or "uncategorized"] = by_category.get(t["category"] or "uncategorized", 0) + 1
-        # Spending: money out, except transfers between your accounts and money put into savings.
-        if t["direction"] == "DBIT" and CATEGORY_KINDS.get(t["category"]) not in ("transfer", "saving"):
+        # Spending: money out, except transfers, savings and loan payments.
+        if t["direction"] == "DBIT" and t.get("kind") not in NOT_SPENDING_KINDS:
             total_spend -= t["amount"]
             if t["category"] is None:
                 uncategorized_spend -= t["amount"]

@@ -282,6 +282,7 @@ function CategorySelect(props: {
     ["Spending", "expense"],
     ["Income", "income"],
     ["Saving", "saving"],
+    ["Loans", "loan"],
     ["Other", "transfer"],
   ];
   return (

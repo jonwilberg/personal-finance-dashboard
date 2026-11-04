@@ -1,4 +1,8 @@
-"""Category list and the built-in rules that map transactions to categories.
+"""Default categories and the built-in rules that map transactions to them.
+
+Categories are data: the defaults below are copied into the database on first start and can then be renamed,
+changed, added and deleted in the app. Built-in keywords refer to categories by id and are skipped when that
+category no longer exists.
 
 Rules match against a transaction's cleaned, upper-case text (merchant name plus payment text), so keywords
 are written in upper case. A keyword matches whole words: "MAX" matches "MAX BURGERS" but not "MAXIMUM".
@@ -8,50 +12,77 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+# What a category means for the statistics:
+#   expense   spending
+#   income    money in
+#   saving    money put into savings or investments; not spending, tracked on its own
+#   loan      loan payments (student loan, mortgage); not counted as consumption, tracked on its own
+#   transfer  money moving between your own accounts; left out of everything
+KINDS = ("expense", "income", "saving", "loan", "transfer")
+
 
 @dataclass(frozen=True)
 class Category:
     id: str
     name: str
-    # "expense" counts as spending and "income" as money in. "saving" (money put into savings or investments) and
-    # "transfer" (money moving between your own accounts) are left out of both; saving is tracked on its own.
     kind: str
+    # Fixed costs (rent, insurance, loans) versus spending you can adjust from month to month.
+    fixed: bool = False
+    # System categories are used by the app itself (transfer detection) and can be renamed but not deleted.
+    system: bool = False
 
 
-CATEGORIES = [
+DEFAULT_CATEGORIES = [
     Category("groceries", "Groceries", "expense"),
     Category("eating_out", "Eating out", "expense"),
     Category("transport", "Transport", "expense"),
     Category("travel", "Travel", "expense"),
-    Category("housing", "Housing", "expense"),
-    Category("bills", "Bills and utilities", "expense"),
+    Category("housing", "Housing", "expense", fixed=True),
+    Category("phone_internet", "Phone, internet and TV", "expense", fixed=True),
+    Category("insurance", "Insurance", "expense", fixed=True),
+    Category("clothing", "Clothing and shoes", "expense"),
+    Category("home", "Home and furnishings", "expense"),
     Category("shopping", "Shopping", "expense"),
-    Category("subscriptions", "Subscriptions", "expense"),
-    Category("health", "Health and fitness", "expense"),
+    Category("subscriptions", "Subscriptions", "expense", fixed=True),
+    Category("health", "Health and personal care", "expense"),
     Category("leisure", "Leisure", "expense"),
-    Category("fees", "Fees and interest", "expense"),
+    Category("fees", "Fees and interest", "expense", fixed=True),
     Category("cash", "Cash", "expense"),
     Category("other_expense", "Other spending", "expense"),
     Category("salary", "Salary", "income"),
     Category("other_income", "Other income", "income"),
     Category("savings", "Savings and investments", "saving"),
-    Category("transfer", "Transfers", "transfer"),
+    Category("loans", "Loan payments", "loan", fixed=True),
+    Category("transfer", "Transfers", "transfer", system=True),
 ]
-CATEGORY_IDS = {c.id for c in CATEGORIES}
-CATEGORY_KINDS = {c.id: c.kind for c in CATEGORIES}
 
 # Merchant keywords per category, checked in this order (first match wins). Norwegian merchants first.
+# Order matters where names overlap: "OBS BYGG" (home) is checked before "OBS" (groceries).
 MERCHANT_KEYWORDS: dict[str, list[str]] = {
     "savings": ["NORDNET", "KRON", "FIRI", "AKSJESPAREKONTO", "FONDSKONTO", "SPAREAVTALE"],
+    "loans": [
+        "LÅNEKASSEN", "LANEKASSEN", "STATENS LÅNEKASSE", "TERMINBELØP", "TERMINBELOP", "AVDRAG", "BOLIGLÅN",
+        "BOLIGLAN", "STUDIELÅN", "STUDIELAN",
+    ],
     "eating_out": [
         "FOODORA", "WOLT", "JUST EAT", "MCDONALDS", "MCDONALD'S", "BURGER KING", "MAX BURGERS", "PEPPES",
         "DOMINOS", "DOMINO'S", "STARBUCKS", "ESPRESSO HOUSE", "KAFFEBRENNERIET", "WAYNES COFFEE", "SUBWAY",
         "BAKER HANSEN", "BAKERI", "SUSHI", "PIZZA", "PIZZERIA", "KEBAB", "RESTAURANT", "RESTAURANG", "CAFE",
-        "KAFE", "BISTRO", "BURGER", "THAI", "BAR", "PUB", "BRASSERIE",
+        "KAFE", "BISTRO", "BURGER", "THAI", "BAR", "PUB", "BRASSERIE", "VINMONOPOLET",
+    ],
+    "clothing": [
+        "H&M", "ZARA", "CUBUS", "DRESSMANN", "BOOZT", "ZALANDO", "LINDEX", "KAPPAHL", "VOLT", "CARLINGS",
+        "JACK & JONES", "BIK BOK", "GINA TRICOT", "VERO MODA", "UNIQLO", "COS", "WEEKDAY", "MANGO", "SKORINGEN",
+        "ECCO", "NILSON", "BRANDOS", "FOOTWAY", "SKOPUNKTEN",
+    ],
+    "home": [
+        "IKEA", "JYSK", "JULA", "CLAS OHLSON", "BILTEMA", "EUROPRIS", "PLANTASJEN", "MEGAFLIS", "MAXBO",
+        "OBS BYGG", "BYGGMAX", "MONTER", "BOHUS", "SKEIDAR", "KID INTERIØR", "KITCHN", "TILBORDS", "NILLE",
+        "RUSTA", "JERNIA", "FARGERIKE", "BYGGER'N", "HAGELAND",
     ],
     "groceries": [
         "REMA 1000", "REMA", "KIWI", "COOP", "EXTRA", "OBS", "PRIX", "MENY", "SPAR", "JOKER", "BUNNPRIS", "ODA",
-        "MATKROKEN", "NÆRBUTIKKEN", "NAERBUTIKKEN", "VINMONOPOLET", "LIDL", "ICA", "NETTO", "FØTEX",
+        "MATKROKEN", "NÆRBUTIKKEN", "NAERBUTIKKEN", "LIDL", "ICA", "NETTO", "FØTEX",
     ],
     "transport": [
         "RUTER", "VY", "ENTUR", "ATB", "SKYSS", "KOLUMBUS", "BRAKAR", "FLYTOGET", "BOLT", "UBER", "VOI", "TIER",
@@ -68,27 +99,31 @@ MERCHANT_KEYWORDS: dict[str, list[str]] = {
         "GOOGLE STORAGE", "GOOGLE ONE", "YOUTUBE", "MICROSOFT", "ADOBE", "OPENAI", "ANTHROPIC", "CLAUDE.AI",
         "GITHUB", "DROPBOX", "AUDIBLE", "STORYTEL", "TV 2 PLAY", "PATREON", "1PASSWORD",
     ],
-    "bills": [
-        "TELENOR", "TELIA", "ICE.NO", "TALKMORE", "ALTIBOX", "FJORDKRAFT", "TIBBER", "HAFSLUND", "ELVIA", "LYSE",
-        "GJENSIDIGE", "IF SKADEFORSIKRING", "TRYG", "FREMTIND", "FORSIKRING", "STRØM", "NETTLEIE",
+    "phone_internet": [
+        "TELENOR", "TELIA", "ICE.NO", "ICE NORGE", "TALKMORE", "ALTIBOX", "CHILI MOBIL", "ONECALL", "MYCALL",
+        "FJORDKRAFT MOBIL", "RIKSTV", "ALLENTE", "CANAL DIGITAL", "GLOBALCONNECT", "NEXTGENTEL",
+    ],
+    "insurance": [
+        "GJENSIDIGE", "IF SKADEFORSIKRING", "IF FORSIKRING", "TRYG", "FREMTIND", "FRENDE", "CODAN", "EIKA FORSIKRING",
+        "STOREBRAND FORSIKRING", "KLP SKADEFORSIKRING", "FORSIKRING",
     ],
     "housing": [
         "HUSLEIE", "FELLESKOSTNADER", "FELLESUTGIFTER", "BORETTSLAG", "SAMEIE", "OBOS", "USBL",
-        "KOMMUNALE AVGIFTER", "EIENDOMSSKATT",
+        "KOMMUNALE AVGIFTER", "EIENDOMSSKATT", "FJORDKRAFT", "TIBBER", "HAFSLUND", "ELVIA", "LYSE", "NORGESENERGI",
+        "FORTUM", "STRØM", "NETTLEIE",
     ],
     "health": [
         "APOTEK", "VITUSAPOTEK", "APOTEK 1", "BOOTS", "LEGE", "LEGESENTER", "LEGEVAKT", "TANNLEGE", "FYSIO",
-        "OPTIKER", "SPECSAVERS", "SATS", "EVO FITNESS", "ELIXIA", "FRISKIS", "3T",
+        "OPTIKER", "SPECSAVERS", "SATS", "EVO FITNESS", "ELIXIA", "FRISKIS", "3T", "FRISØR", "FRISOR", "BARBER",
+        "NEGLESALONG", "HUDPLEIE", "KICKS", "VITA",
     ],
     "leisure": [
         "KINO", "NORDISK FILM", "ODEON", "TICKETMASTER", "BILLETTSERVICE", "TICKETCO", "STEAM", "PLAYSTATION",
         "NINTENDO", "XBOX", "MUSEUM", "SKISENTER",
     ],
     "shopping": [
-        "ELKJØP", "ELKJOP", "POWER", "KOMPLETT", "NETONNET", "XXL", "CLAS OHLSON", "BILTEMA", "JULA", "IKEA",
-        "JYSK", "H&M", "ZARA", "CUBUS", "DRESSMANN", "BOOZT", "ZALANDO", "AMAZON", "AMZN", "ALIEXPRESS", "TEMU",
-        "NORMAL", "EUROPRIS", "PLANTASJEN", "MEGAFLIS", "MAXBO", "OBS BYGG", "BYGGMAX", "MONTER", "NOTABENE",
-        "ARK", "TANUM", "SPORT 1", "INTERSPORT", "ANTON SPORT",
+        "ELKJØP", "ELKJOP", "POWER", "KOMPLETT", "NETONNET", "XXL", "AMAZON", "AMZN", "ALIEXPRESS", "TEMU",
+        "NORMAL", "NOTABENE", "ARK", "TANUM", "SPORT 1", "INTERSPORT", "ANTON SPORT",
     ],
     "fees": ["GEBYR", "ÅRSAVGIFT", "ARSAVGIFT", "RENTER", "RENTE", "TERMINGEBYR", "PURREGEBYR"],
     "cash": ["MINIBANK", "ATM", "KONTANTUTTAK", "UTTAK MINIBANK"],
@@ -106,7 +141,7 @@ BANK_CATEGORY_HINTS: list[tuple[str, str]] = [
     ("GROCERY", "groceries"),
     ("SUPERMARKET", "groceries"),
     ("BAKERIES", "groceries"),
-    ("PACKAGE STORES", "groceries"),
+    ("PACKAGE STORES", "eating_out"),  # liquor stores; alcohol is counted with eating out
     ("FAST FOOD", "eating_out"),
     ("RESTAURANT", "eating_out"),
     ("EATING PLACES", "eating_out"),
@@ -129,11 +164,11 @@ BANK_CATEGORY_HINTS: list[tuple[str, str]] = [
     ("CAR RENTAL", "travel"),
     ("DIGITAL GOODS", "subscriptions"),
     ("COMPUTER SOFTWARE", "subscriptions"),
-    ("CABLE", "subscriptions"),
     ("STREAMING", "subscriptions"),
-    ("TELECOMMUNICATION", "bills"),
-    ("UTILITIES", "bills"),
-    ("INSURANCE", "bills"),
+    ("CABLE", "phone_internet"),
+    ("TELECOMMUNICATION", "phone_internet"),
+    ("UTILITIES", "housing"),
+    ("INSURANCE", "insurance"),
     ("DRUG STORES", "health"),
     ("PHARMAC", "health"),
     ("MEDICAL", "health"),
@@ -143,6 +178,9 @@ BANK_CATEGORY_HINTS: list[tuple[str, str]] = [
     ("HEALTH", "health"),
     ("ATHLETIC", "health"),
     ("FITNESS", "health"),
+    ("BEAUTY", "health"),
+    ("BARBER", "health"),
+    ("COSMETIC", "health"),
     ("MOTION PICTURE", "leisure"),
     ("THEATRICAL", "leisure"),
     ("AMUSEMENT", "leisure"),
@@ -150,21 +188,23 @@ BANK_CATEGORY_HINTS: list[tuple[str, str]] = [
     ("TICKET", "leisure"),
     ("GAMES", "leisure"),
     ("CASH", "cash"),
-    ("CLOTHING", "shopping"),
-    ("APPAREL", "shopping"),
-    ("SHOE", "shopping"),
+    ("CLOTHING", "clothing"),
+    ("APPAREL", "clothing"),
+    ("SHOE", "clothing"),
+    ("FURNITURE", "home"),
+    ("HOME SUPPLY", "home"),
+    ("HOME FURNISH", "home"),
+    ("HOUSEHOLD", "home"),
+    ("HARDWARE", "home"),
+    ("GARDEN", "home"),
+    ("LUMBER", "home"),
     ("DEPARTMENT STORE", "shopping"),
     ("DISCOUNT STORE", "shopping"),
     ("VARIETY STORE", "shopping"),
     ("ELECTRONICS", "shopping"),
     ("COMPUTER", "shopping"),
-    ("HARDWARE", "shopping"),
-    ("HOME SUPPLY", "shopping"),
-    ("FURNITURE", "shopping"),
-    ("HOUSEHOLD", "shopping"),
     ("SPORTING GOODS", "shopping"),
     ("BOOK", "shopping"),
-    ("COSMETIC", "shopping"),
     ("GENERAL MERCHANDISE", "shopping"),
     ("COURIER", "shopping"),
     ("RETAIL", "shopping"),
@@ -174,3 +214,10 @@ BANK_CATEGORY_HINTS: list[tuple[str, str]] = [
 CARD_PAYMENT_CODES = {"PAYMENT", "INNBETALING"}
 # Bank transaction codes for interest.
 INTEREST_CODES = {"INTR"}
+
+# Categories that were split when categories became data: rules and choices that pointed to them are moved to the
+# first matching new category by keyword, or to the fallback.
+SPLIT_CATEGORIES: dict[str, tuple[list[str], str]] = {
+    "bills": (["phone_internet", "insurance", "housing", "loans"], "other_expense"),
+    "shopping": (["clothing", "home"], "shopping"),
+}

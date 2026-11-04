@@ -8,6 +8,7 @@ data/json-backup/.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import sqlite3
 from collections.abc import Iterator
@@ -16,7 +17,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from finance.categorize import CategorizationSettings, Rule
+from finance.categories import DEFAULT_CATEGORIES, KINDS, SPLIT_CATEGORIES, Category
+from finance.categorize import CategorizationSettings, Rule, keyword_category
 from finance.transactions import transaction_date, unique_transaction_keys
 
 DATABASE_FILE = "finance.db"
@@ -84,7 +86,21 @@ CREATE TABLE IF NOT EXISTS category_rules (
     category TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+-- Categories you can rename, change, add and delete. Seeded from categories.DEFAULT_CATEGORIES.
+CREATE TABLE IF NOT EXISTS categories (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,          -- expense, income, saving, loan or transfer (see categories.KINDS)
+    fixed INTEGER NOT NULL DEFAULT 0,
+    system INTEGER NOT NULL DEFAULT 0,
+    position INTEGER NOT NULL
+);
 """
+
+
+class CategoryError(Exception):
+    pass
 
 
 class Storage:
@@ -95,6 +111,7 @@ class Storage:
         with self._connect() as db:
             db.executescript(SCHEMA)
         _import_json_files(self)
+        _seed_categories(self)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -269,7 +286,76 @@ class Storage:
         with self._connect() as db:
             overrides = {row["transaction_id"]: row["category"] for row in db.execute("SELECT * FROM category_overrides")}
             rules = [Rule(row["pattern"], row["category"]) for row in db.execute("SELECT * FROM category_rules ORDER BY created_at")]
-        return CategorizationSettings(overrides=overrides, rules=rules)
+        return CategorizationSettings(overrides=overrides, rules=rules, categories=self.categories())
+
+    # Categories
+
+    def categories(self) -> list[Category]:
+        with self._connect() as db:
+            rows = db.execute("SELECT * FROM categories ORDER BY position, name").fetchall()
+        return [Category(r["id"], r["name"], r["kind"], bool(r["fixed"]), bool(r["system"])) for r in rows]
+
+    def category(self, category_id: str) -> Category | None:
+        return next((c for c in self.categories() if c.id == category_id), None)
+
+    def rule_counts(self) -> dict[str, int]:
+        with self._connect() as db:
+            rows = db.execute("SELECT category, count(*) AS n FROM category_rules GROUP BY category").fetchall()
+        return {row["category"]: row["n"] for row in rows}
+
+    def add_category(self, name: str, kind: str, fixed: bool = False) -> Category:
+        name = _category_name(name)
+        _check_kind(kind)
+        with self._connect() as db:
+            taken = {row["id"] for row in db.execute("SELECT id FROM categories")}
+            category_id = _unique_slug(name, taken)
+            position = db.execute("SELECT coalesce(max(position), -1) + 1 FROM categories").fetchone()[0]
+            db.execute(
+                "INSERT INTO categories VALUES (?, ?, ?, ?, 0, ?)", (category_id, name, kind, int(fixed), position)
+            )
+        return Category(category_id, name, kind, fixed)
+
+    def update_category(
+        self, category_id: str, *, name: str | None = None, kind: str | None = None, fixed: bool | None = None
+    ) -> Category:
+        current = self.category(category_id)
+        if current is None:
+            raise CategoryError("Unknown category")
+        if kind is not None:
+            _check_kind(kind)
+            if current.system and kind != current.kind:
+                raise CategoryError(f"{current.name} is used by the app itself, so its type can't change")
+        updated = Category(
+            category_id,
+            _category_name(name) if name is not None else current.name,
+            kind or current.kind,
+            current.fixed if fixed is None else fixed,
+            current.system,
+        )
+        with self._connect() as db:
+            db.execute(
+                "UPDATE categories SET name = ?, kind = ?, fixed = ? WHERE id = ?",
+                (updated.name, updated.kind, int(updated.fixed), category_id),
+            )
+        return updated
+
+    def delete_category(self, category_id: str, move_to: str | None = None) -> None:
+        """Delete a category. Your rules and choices for it move to `move_to`, or are removed (back to review)."""
+        current = self.category(category_id)
+        if current is None:
+            raise CategoryError("Unknown category")
+        if current.system:
+            raise CategoryError(f"{current.name} is used by the app itself and can't be deleted")
+        if move_to is not None and (move_to == category_id or self.category(move_to) is None):
+            raise CategoryError("Choose another existing category to move to")
+        with self._connect() as db:
+            if move_to is None:
+                db.execute("DELETE FROM category_rules WHERE category = ?", (category_id,))
+                db.execute("DELETE FROM category_overrides WHERE category = ?", (category_id,))
+            else:
+                db.execute("UPDATE category_rules SET category = ? WHERE category = ?", (move_to, category_id))
+                db.execute("UPDATE category_overrides SET category = ? WHERE category = ?", (move_to, category_id))
+            db.execute("DELETE FROM categories WHERE id = ?", (category_id,))
 
     def set_override(self, transaction_id: str, category: str | None) -> None:
         """Set your category for one transaction, or remove it (None) so the automatic category applies."""
@@ -345,3 +431,45 @@ def _read_json(path: Path, default: Any) -> Any:
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _seed_categories(storage: Storage) -> None:
+    """Copy the default categories into the database once, and move rules from categories that were split."""
+    if storage._meta("categories_seeded_at"):
+        return
+    with storage._connect() as db:
+        db.executemany(
+            "INSERT OR IGNORE INTO categories VALUES (?, ?, ?, ?, ?, ?)",
+            [(c.id, c.name, c.kind, int(c.fixed), int(c.system), i) for i, c in enumerate(DEFAULT_CATEGORIES)],
+        )
+        for old, (targets, fallback) in SPLIT_CATEGORIES.items():
+            for row in db.execute("SELECT pattern FROM category_rules WHERE category = ?", (old,)).fetchall():
+                db.execute(
+                    "UPDATE category_rules SET category = ? WHERE pattern = ?",
+                    (keyword_category(row["pattern"], targets) or fallback, row["pattern"]),
+                )
+            db.execute("UPDATE category_overrides SET category = ? WHERE category = ?", (fallback, old))
+    storage._set_meta("categories_seeded_at", _now())
+
+
+def _category_name(name: str) -> str:
+    name = " ".join(name.split())
+    if not name:
+        raise CategoryError("A category needs a name")
+    if len(name) > 60:
+        raise CategoryError("Keep the name under 60 characters")
+    return name
+
+
+def _check_kind(kind: str) -> None:
+    if kind not in KINDS:
+        raise CategoryError(f"Unknown type {kind!r}")
+
+
+def _unique_slug(name: str, taken: set[str]) -> str:
+    base = re.sub(r"[^a-z0-9]+", "_", name.lower().replace("æ", "ae").replace("ø", "o").replace("å", "a")).strip("_")
+    base = base or "category"
+    slug, n = base, 2
+    while slug in taken:
+        slug, n = f"{base}_{n}", n + 1
+    return slug
