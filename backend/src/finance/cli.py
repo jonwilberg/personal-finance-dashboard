@@ -15,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from finance.categorize import CategorizationSettings, categorized_transactions, summarize_categorization
 from finance.config import ConfigError, Settings, load_settings
 from finance.connections import (
     BankNotFound,
@@ -70,6 +71,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     inspect_parser.add_argument("account", help="Account uid with saved transactions")
 
+    commands.add_parser(
+        "categorize", help="Report how many transactions get a category, without printing transaction details"
+    )
+
     disconnect = commands.add_parser("disconnect", help="Revoke a saved session")
     disconnect.add_argument("session_id")
 
@@ -84,6 +89,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "inspect":
             cmd_inspect(store, args)
+            return 0
+        if args.command == "categorize":
+            cmd_categorize(store)
             return 0
         with EnableBankingClient.from_key_file(settings.application_id, settings.private_key_path) as client:
             handler = {
@@ -208,6 +216,15 @@ def cmd_inspect(store: ConnectionStore, args: argparse.Namespace) -> None:
     print("\nField coverage (share of transactions where the field has a value):")
     for item in report["coverage"]:
         print(f"  {item['share']:>4.0%}  {item['field']}")
+
+
+def cmd_categorize(store: ConnectionStore) -> None:
+    settings = CategorizationSettings.from_json(store.load_categorization())
+    report = summarize_categorization(categorized_transactions(store.sessions(), store.raw_transactions_by_account(), settings))
+    print(f"{report['count']} transactions, {report['categorized_share']:.0%} categorized")
+    print(f"Uncategorized: {report['uncategorized']} ({report['uncategorized_spend_share']:.0%} of spending)")
+    print("By source:   " + ", ".join(f"{k} {v}" for k, v in sorted(report["by_source"].items(), key=lambda i: -i[1])))
+    print("By category: " + ", ".join(f"{k} {v}" for k, v in sorted(report["by_category"].items(), key=lambda i: -i[1])))
 
 
 def cmd_disconnect(client: EnableBankingClient, settings: Settings, store: ConnectionStore, args: argparse.Namespace) -> None:

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { type Account, type AppInfo, type Connection, type InspectReport, api } from "./api";
 import { ConnectBank } from "./ConnectBank";
+import { formatDate, formatMoney } from "./format";
+import { TransactionsPage } from "./TransactionsPage";
 
 type Notice = { kind: "success" | "error"; text: string };
 
@@ -15,29 +17,53 @@ function takeRedirectNotice(): Notice | null {
   return null;
 }
 
+const PAGES = {
+  "#/transactions": {
+    nav: "Transactions",
+    title: "Transactions",
+    dek: "Every transaction gets a category so the statistics add up. Review the ones the rules can't place.",
+  },
+  "#/accounts": {
+    nav: "Accounts",
+    title: "Accounts",
+    dek: "Banks connected through Enable Banking, with read-only access to balances and transactions.",
+  },
+} as const;
+type Route = keyof typeof PAGES;
+
+function currentRoute(): Route {
+  return window.location.hash in PAGES ? (window.location.hash as Route) : "#/accounts";
+}
+
 export function App() {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
-  const [connections, setConnections] = useState<Connection[] | null>(null);
+  const [route, setRoute] = useState<Route>(currentRoute);
   const [notice, setNotice] = useState<Notice | null>(takeRedirectNotice);
 
   const showError = useCallback((error: unknown) => {
     setNotice({ kind: "error", text: error instanceof Error ? error.message : String(error) });
   }, []);
 
-  const loadConnections = useCallback(() => {
-    api.connections().then(setConnections).catch(showError);
-  }, [showError]);
-
   useEffect(() => {
     api.app().then(setAppInfo).catch(showError);
-    loadConnections();
-  }, [loadConnections, showError]);
+    const onHashChange = () => setRoute(currentRoute());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [showError]);
 
+  const page = PAGES[route];
   return (
     <div className="page">
       <header className="masthead">
         <div className="masthead-top">
           <span className="wordmark">Personal Finance</span>
+          <nav className="nav">
+            {(Object.keys(PAGES) as Route[]).map((key) => (
+              <a key={key} href={key} aria-current={key === route ? "page" : undefined}>
+                {PAGES[key].nav}
+              </a>
+            ))}
+          </nav>
           {appInfo && (
             <span className={`badge ${appInfo.environment === "PRODUCTION" ? "badge-live" : "badge-test"}`}>
               {appInfo.environment === "PRODUCTION" ? "Production" : "Sandbox"}
@@ -45,8 +71,8 @@ export function App() {
             </span>
           )}
         </div>
-        <h1>Accounts</h1>
-        <p className="dek">Banks connected through Enable Banking, with read-only access to balances and transactions.</p>
+        <h1>{page.title}</h1>
+        <p className="dek">{page.dek}</p>
       </header>
 
       {notice && (
@@ -58,6 +84,20 @@ export function App() {
         </div>
       )}
 
+      {route === "#/transactions" ? <TransactionsPage onError={showError} /> : <AccountsPage onError={showError} />}
+    </div>
+  );
+}
+
+function AccountsPage({ onError }: { onError: (e: unknown) => void }) {
+  const [connections, setConnections] = useState<Connection[] | null>(null);
+  const loadConnections = useCallback(() => {
+    api.connections().then(setConnections).catch(onError);
+  }, [onError]);
+  useEffect(loadConnections, [loadConnections]);
+
+  return (
+    <>
       <section className="section">
         <p className="label">Connections</p>
         <h2>{connectionsHeadline(connections)}</h2>
@@ -66,13 +106,13 @@ export function App() {
             key={connection.session_id}
             connection={connection}
             onChanged={loadConnections}
-            onError={showError}
+            onError={onError}
           />
         ))}
       </section>
 
-      <ConnectBank onError={showError} />
-    </div>
+      <ConnectBank onError={onError} />
+    </>
   );
 }
 
@@ -255,12 +295,4 @@ function describeCounts(counts: Record<string, number>) {
 
 function maskIban(iban: string | null) {
   return iban ? `•••• ${iban.slice(-4)}` : null;
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("nb-NO", { day: "numeric", month: "short", year: "numeric" });
-}
-
-function formatMoney(amount: string, currency: string) {
-  return new Intl.NumberFormat("nb-NO", { style: "currency", currency }).format(Number(amount));
 }

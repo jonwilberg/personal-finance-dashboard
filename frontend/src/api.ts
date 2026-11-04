@@ -57,6 +57,49 @@ export interface InspectReport {
   coverage: { field: string; share: number }[];
 }
 
+export interface Category {
+  id: string;
+  name: string;
+  kind: "expense" | "income" | "transfer";
+}
+
+export type CategorySource = "manual" | "transfer" | "rule" | "keyword" | "bank" | null;
+
+export interface Transaction {
+  id: string;
+  account_uid: string;
+  account: string;
+  bank: string;
+  date: string;
+  amount: number;
+  currency: string | null;
+  direction: "DBIT" | "CRDT";
+  status: string | null;
+  description: string;
+  merchant: string;
+  bank_code: string;
+  bank_category: string;
+  category: string | null;
+  category_source: CategorySource;
+}
+
+export interface CategorizationSummary {
+  count: number;
+  categorized_share: number;
+  uncategorized: number;
+  uncategorized_spend_share: number;
+  by_source: Record<string, number>;
+  by_category: Record<string, number>;
+}
+
+export interface TransactionQuery {
+  view?: "all" | "review";
+  category?: string;
+  account?: string;
+  q?: string;
+  limit?: number;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -86,4 +129,23 @@ export const api = {
       { method: "POST" },
     ),
   inspect: (uid: string) => request<InspectReport>(`/api/accounts/${encodeURIComponent(uid)}/inspect`),
+  categories: () => request<Category[]>("/api/categories"),
+  transactions: (query: TransactionQuery) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (value !== undefined && value !== "") params.set(key, String(value));
+    }
+    return request<{ total: number; items: Transaction[] }>(`/api/transactions?${params}`);
+  },
+  setCategory: (id: string, category: string | null) =>
+    request<Transaction>(`/api/transactions/${encodeURIComponent(id)}/category`, {
+      method: "PUT",
+      body: JSON.stringify({ category }),
+    }),
+  addRule: (pattern: string, category: string) =>
+    request<{ pattern: string; category: string; matched: number }>("/api/rules", {
+      method: "POST",
+      body: JSON.stringify({ pattern, category }),
+    }),
+  categorizationSummary: () => request<CategorizationSummary>("/api/categorization/summary"),
 };

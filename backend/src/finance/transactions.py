@@ -2,8 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 from typing import Any
+
+
+def transaction_key(transaction: dict[str, Any]) -> str:
+    """Stable identity of a transaction within its account, for de-duplication and remembering choices."""
+    return transaction.get("transaction_id") or transaction.get("entry_reference") or json.dumps(
+        transaction, sort_keys=True
+    )
 
 
 def signed_amount(transaction: dict[str, Any]) -> Decimal:

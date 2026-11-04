@@ -5,7 +5,6 @@ Reference: https://enablebanking.com/docs/api/reference/
 
 from __future__ import annotations
 
-import json
 import time
 import uuid
 from collections.abc import Iterator
@@ -16,7 +15,7 @@ from typing import Any
 import httpx
 import jwt
 
-from finance.transactions import transaction_date
+from finance.transactions import transaction_date, transaction_key
 
 API_URL = "https://api.enablebanking.com"
 # The API rejects tokens with a lifetime above 24 hours; one hour matches the official samples.
@@ -163,7 +162,7 @@ class EnableBankingClient:
                 page = self._request("GET", f"/accounts/{account_uid}/transactions", params=params)
                 last_page = page.get("transactions", [])
                 for transaction in last_page:
-                    key = _transaction_key(transaction)
+                    key = transaction_key(transaction)
                     if key not in seen:
                         seen.add(key)
                         yield transaction
@@ -181,9 +180,3 @@ class EnableBankingClient:
             lookback = date.fromisoformat(oldest) - timedelta(days=CAPPED_LOOKBACK_DAYS)
             params = {"date_from": params.get("date_from", lookback.isoformat()), "date_to": oldest}
 
-
-def _transaction_key(transaction: dict[str, Any]) -> str:
-    """Stable identity for de-duplicating transactions returned by overlapping requests."""
-    return transaction.get("transaction_id") or transaction.get("entry_reference") or json.dumps(
-        transaction, sort_keys=True
-    )

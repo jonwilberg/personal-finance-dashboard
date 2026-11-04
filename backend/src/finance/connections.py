@@ -47,10 +47,20 @@ def session_record(session: dict[str, Any]) -> dict[str, Any]:
                 "iban": (account.get("account_id") or {}).get("iban"),
                 "currency": account.get("currency"),
                 "cash_account_type": account.get("cash_account_type"),
+                "identifiers": _account_identifiers(account),
             }
             for account in session["accounts"]
         ],
     }
+
+
+def _account_identifiers(account: dict[str, Any]) -> list[str]:
+    """All account numbers the bank reports for an account (used to recognise transfers between your accounts)."""
+    account_id = account.get("account_id") or {}
+    candidates = [account_id.get("iban"), (account_id.get("other") or {}).get("identification")]
+    for identification in account.get("all_account_ids") or []:
+        candidates += [identification.get("identification"), identification.get("iban")]
+    return sorted({c for c in candidates if c})
 
 
 class ConnectionStore:
@@ -95,6 +105,19 @@ class ConnectionStore:
 
     def load_balances(self, account_uid: str) -> dict[str, Any] | None:
         return _read_json(self._balances_path, default={}).get(account_uid)
+
+    def load_categorization(self) -> dict[str, Any]:
+        return _read_json(self.data_dir / "categorization.json", default={"overrides": {}, "rules": []})
+
+    def save_categorization(self, data: dict[str, Any]) -> None:
+        _write_json(self.data_dir / "categorization.json", data)
+
+    def raw_transactions_by_account(self) -> dict[str, list[dict[str, Any]]]:
+        return {
+            account["uid"]: self.load_transactions(account["uid"]) or []
+            for session in self.sessions()
+            for account in session["accounts"]
+        }
 
     @property
     def _balances_path(self) -> Path:
