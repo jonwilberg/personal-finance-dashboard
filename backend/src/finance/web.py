@@ -17,16 +17,16 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from finance.categories import CATEGORIES, CATEGORY_IDS
-from finance.categorize import CategorizationSettings, Rule, categorized_transactions, summarize_categorization
+from finance.categorize import Rule, categorized_transactions, summarize_categorization
 from finance.config import BACKEND_DIR, Settings
 from finance.connections import (
     BankNotFound,
-    ConnectionStore,
     consent_valid_until,
     find_aspsp,
     session_record,
 )
 from finance.enable_banking import EnableBankingClient, EnableBankingError
+from finance.storage import Storage
 from finance.transactions import inspect, summarize
 
 FRONTEND_DIST = BACKEND_DIR.parent / "frontend" / "dist"
@@ -52,7 +52,7 @@ class RuleRequest(BaseModel):
 
 def create_app(settings: Settings, client: EnableBankingClient | None = None) -> FastAPI:
     client = client or EnableBankingClient.from_key_file(settings.application_id, settings.private_key_path)
-    store = ConnectionStore(settings.data_dir)
+    store = Storage(settings.data_dir)
     redirect_url = settings.redirect_url or client.get_application()["redirect_urls"][0]
     # state -> bank login started by this server; checked when the bank redirects back.
     pending_logins: dict[str, dict[str, Any]] = {}
@@ -134,13 +134,8 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
             raise HTTPException(404, "No transactions fetched for this account yet")
         return inspect(transactions)
 
-    def load_categorization() -> CategorizationSettings:
-        return CategorizationSettings.from_json(store.load_categorization())
-
-    def all_transactions(categorization: CategorizationSettings | None = None) -> list[dict[str, Any]]:
-        return categorized_transactions(
-            store.sessions(), store.raw_transactions_by_account(), categorization or load_categorization()
-        )
+    def all_transactions() -> list[dict[str, Any]]:
+        return categorized_transactions(store.sessions(), store.raw_transactions_by_account(), store.categorization())
 
     def require_category(category: str) -> None:
         if category not in CATEGORY_IDS:
@@ -174,42 +169,31 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
 
     @app.put("/api/transactions/{transaction_id:path}/category")
     def set_category(transaction_id: str, choice: CategoryChoice) -> dict[str, Any]:
-        categorization = load_categorization()
-        if choice.category is None:
-            categorization.overrides.pop(transaction_id, None)
-        else:
-            require_category(choice.category)
-            categorization.overrides[transaction_id] = choice.category
-        updated = next((t for t in all_transactions(categorization) if t["id"] == transaction_id), None)
-        if updated is None:
+        if not store.has_transaction(transaction_id):
             raise HTTPException(404, "Unknown transaction")
-        store.save_categorization(categorization.to_json())
-        return _public(updated)
+        if choice.category is not None:
+            require_category(choice.category)
+        store.set_override(transaction_id, choice.category)
+        return _public(next(t for t in all_transactions() if t["id"] == transaction_id))
 
     @app.get("/api/rules")
     def rules() -> list[dict[str, str]]:
-        return load_categorization().to_json()["rules"]
+        return store.categorization().to_json()["rules"]
 
     @app.post("/api/rules")
     def add_rule(request: RuleRequest) -> dict[str, Any]:
         """Save a rule: transactions whose text contains the pattern get the category (unless set by hand)."""
         require_category(request.category)
-        categorization = load_categorization()
         pattern = request.pattern.strip().upper()
-        categorization.rules = [r for r in categorization.rules if r.pattern.upper() != pattern]
-        categorization.rules.append(Rule(pattern, request.category))
-        store.save_categorization(categorization.to_json())
-        matched = sum(1 for t in all_transactions(categorization) if t["category_source"] == "rule" and Rule(pattern, "").matches(t["text"]))
+        store.add_rule(pattern, request.category)
+        rule = Rule(pattern, request.category)
+        matched = sum(1 for t in all_transactions() if t["category_source"] == "rule" and rule.matches(t["text"]))
         return {"pattern": pattern, "category": request.category, "matched": matched}
 
     @app.delete("/api/rules")
     def delete_rule(pattern: str) -> dict[str, bool]:
-        categorization = load_categorization()
-        remaining = [r for r in categorization.rules if r.pattern.upper() != pattern.upper()]
-        if len(remaining) == len(categorization.rules):
+        if not store.delete_rule(pattern):
             raise HTTPException(404, "Unknown rule")
-        categorization.rules = remaining
-        store.save_categorization(categorization.to_json())
         return {"ok": True}
 
     @app.get("/api/categorization/summary")
@@ -249,7 +233,7 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
     return app
 
 
-def _account_state(store: ConnectionStore, account_uid: str) -> dict[str, Any]:
+def _account_state(store: Storage, account_uid: str) -> dict[str, Any]:
     transactions = store.load_transactions(account_uid)
     return {
         "balances": store.load_balances(account_uid),
@@ -267,7 +251,7 @@ def _public(transaction: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in transaction.items() if k not in hidden} | {"amount": float(transaction["amount"])}
 
 
-def _require_account(store: ConnectionStore, account_uid: str) -> None:
+def _require_account(store: Storage, account_uid: str) -> None:
     # Also keeps arbitrary path segments out of the file names built from account_uid.
     if not store.has_account(account_uid):
         raise HTTPException(404, "Unknown account")

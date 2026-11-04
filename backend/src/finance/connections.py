@@ -1,10 +1,8 @@
-"""Bank connections: helpers for the Enable Banking consent flow and the local files that store its results."""
+"""Bank connections: helpers for the Enable Banking consent flow. Results are stored by storage.Storage."""
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 from finance.enable_banking import EnableBankingClient
@@ -62,75 +60,3 @@ def _account_identifiers(account: dict[str, Any]) -> list[str]:
         candidates += [identification.get("identification"), identification.get("iban")]
     return sorted({c for c in candidates if c})
 
-
-class ConnectionStore:
-    """Sessions, balances and raw transactions stored as JSON files under the data folder."""
-
-    def __init__(self, data_dir: Path):
-        self.data_dir = data_dir
-
-    @property
-    def _sessions_path(self) -> Path:
-        return self.data_dir / "sessions.json"
-
-    def sessions(self) -> list[dict[str, Any]]:
-        return _read_json(self._sessions_path, default=[])
-
-    def add_session(self, record: dict[str, Any]) -> None:
-        others = [s for s in self.sessions() if s["session_id"] != record["session_id"]]
-        _write_json(self._sessions_path, [*others, record])
-
-    def remove_session(self, session_id: str) -> None:
-        _write_json(self._sessions_path, [s for s in self.sessions() if s["session_id"] != session_id])
-
-    def has_account(self, account_uid: str) -> bool:
-        return any(a["uid"] == account_uid for s in self.sessions() for a in s["accounts"])
-
-    def save_transactions(self, account_uid: str, transactions: list[dict[str, Any]]) -> Path:
-        path = self._transactions_path(account_uid)
-        _write_json(path, transactions)
-        return path
-
-    def load_transactions(self, account_uid: str) -> list[dict[str, Any]] | None:
-        return _read_json(self._transactions_path(account_uid), default=None)
-
-    def transactions_fetched_at(self, account_uid: str) -> str | None:
-        path = self._transactions_path(account_uid)
-        return datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat() if path.exists() else None
-
-    def save_balances(self, account_uid: str, balances: list[dict[str, Any]]) -> None:
-        all_balances = _read_json(self._balances_path, default={})
-        all_balances[account_uid] = {"fetched_at": datetime.now(UTC).isoformat(), "balances": balances}
-        _write_json(self._balances_path, all_balances)
-
-    def load_balances(self, account_uid: str) -> dict[str, Any] | None:
-        return _read_json(self._balances_path, default={}).get(account_uid)
-
-    def load_categorization(self) -> dict[str, Any]:
-        return _read_json(self.data_dir / "categorization.json", default={"overrides": {}, "rules": []})
-
-    def save_categorization(self, data: dict[str, Any]) -> None:
-        _write_json(self.data_dir / "categorization.json", data)
-
-    def raw_transactions_by_account(self) -> dict[str, list[dict[str, Any]]]:
-        return {
-            account["uid"]: self.load_transactions(account["uid"]) or []
-            for session in self.sessions()
-            for account in session["accounts"]
-        }
-
-    @property
-    def _balances_path(self) -> Path:
-        return self.data_dir / "balances.json"
-
-    def _transactions_path(self, account_uid: str) -> Path:
-        return self.data_dir / "transactions" / f"{account_uid}.json"
-
-
-def _read_json(path: Path, default: Any) -> Any:
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
-
-
-def _write_json(path: Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")

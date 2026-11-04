@@ -29,7 +29,7 @@ from finance.categories import (
     INTEREST_CODES,
     MERCHANT_KEYWORDS,
 )
-from finance.transactions import description, signed_amount, transaction_date, transaction_key
+from finance.transactions import description, signed_amount, transaction_date, unique_transaction_keys
 
 # Days between a card bill payment leaving a bank account and arriving on the card.
 CARD_PAYMENT_WINDOW_DAYS = 7
@@ -122,7 +122,7 @@ def accounts_from_sessions(sessions: list[dict[str, Any]]) -> list[Account]:
     return accounts
 
 
-def normalize(account: Account, raw: dict[str, Any]) -> dict[str, Any]:
+def normalize(account: Account, raw: dict[str, Any], key: str) -> dict[str, Any]:
     is_debit = raw.get("credit_debit_indicator") == "DBIT"
     counterparty = (raw.get("creditor") if is_debit else raw.get("debtor")) or {}
     counterparty_account = (raw.get("creditor_account") if is_debit else raw.get("debtor_account")) or {}
@@ -130,7 +130,7 @@ def normalize(account: Account, raw: dict[str, Any]) -> dict[str, Any]:
     name = counterparty.get("name") or ""
     code = raw.get("bank_transaction_code") or {}
     return {
-        "id": f"{account.uid}:{transaction_key(raw)}",
+        "id": f"{account.uid}:{key}",
         "account_uid": account.uid,
         "account": account.label,
         "bank": account.bank,
@@ -243,7 +243,9 @@ def categorized_transactions(
     """All transactions, normalized and categorized, newest first."""
     accounts = accounts_from_sessions(sessions)
     transactions = [
-        normalize(account, raw) for account in accounts for raw in raw_by_account.get(account.uid, [])
+        normalize(account, raw, key)
+        for account in accounts
+        for raw, key in zip(raw_by_account.get(account.uid, []), unique_transaction_keys(raw_by_account.get(account.uid, [])))
     ]
     transfers = find_transfers(transactions, accounts, own_account_numbers(accounts, raw_by_account))
     categorize(transactions, settings, transfers)

@@ -155,21 +155,25 @@ class EnableBankingClient:
         if strategy:
             params["strategy"] = strategy
 
+        # Keys from earlier (overlapping) date windows. Within one window every transaction is kept, even if two
+        # look the same, since they can be separate purchases.
         seen: set[str] = set()
         while True:
             last_page: list[dict[str, Any]] = []
+            window_keys: set[str] = set()
             while True:
                 page = self._request("GET", f"/accounts/{account_uid}/transactions", params=params)
                 last_page = page.get("transactions", [])
                 for transaction in last_page:
                     key = transaction_key(transaction)
+                    window_keys.add(key)
                     if key not in seen:
-                        seen.add(key)
                         yield transaction
                 continuation_key = page.get("continuation_key")
                 if not continuation_key:
                     break
                 params["continuation_key"] = continuation_key
+            seen |= window_keys
 
             if len(last_page) < CAPPED_PAGE_SIZE:
                 return

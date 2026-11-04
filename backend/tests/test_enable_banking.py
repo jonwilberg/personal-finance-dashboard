@@ -187,3 +187,10 @@ def test_local_callback_captures_code():
     urllib.request.urlopen(f"{redirect_url}?code=abc&state=xyz").read()
     thread.join()
     assert result == {"code": "abc", "state": "xyz"}
+
+
+def test_same_looking_transactions_in_one_response_are_kept(key_pair):
+    private_pem, _ = key_pair
+    coffee = {"entry_reference": "x", "booking_date": "2026-10-01", "transaction_amount": {"amount": "45", "currency": "NOK"}}
+    client = make_client(private_pem, lambda request: httpx.Response(200, json={"transactions": [coffee, coffee]}))
+    assert len(list(client.iter_transactions("acc-1"))) == 2

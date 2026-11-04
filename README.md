@@ -43,8 +43,11 @@ so the first time your browser warns: choose **Advanced → Proceed to localhost
    allow only about 4 fetches per account per day.
 3. **Inspect fields** shows which transaction fields the bank fills in, without amounts or names.
 
-Sessions, balances and raw transactions are stored as JSON under `backend/data/` (`backend/data/production/` for
-production). They are git-ignored.
+Everything the app stores lives in a SQLite database, `backend/data/finance.db` (`backend/data/production/finance.db`
+for production). That includes bank connections, accounts, balances, raw transactions as the banks sent them, and
+your category choices and rules. The schema is in [`storage.py`](backend/src/finance/storage.py). The data folder is
+git-ignored, so back it up by copying `finance.db` while the app is stopped. Data from older versions, which used JSON
+files, is imported on first start and the old files are moved to `json-backup/`.
 
 ## CLI
 
