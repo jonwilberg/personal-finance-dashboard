@@ -236,3 +236,25 @@ def test_split_categories_have_their_own_keywords():
         "a": "insurance", "b": "phone_internet", "c": "housing", "d": "clothing", "e": "home", "f": "eating_out",
         "g": "health",
     }
+
+
+def test_bank_codes_are_not_merchant_categories():
+    raw = {
+        "checking": [
+            tx("a", "250", "DBIT", text="Overføring", description="BOOK"),
+            tx("b", "12", "CRDT", text="Renter", code="INTR", description="BOOK"),
+            tx("c", "199", "DBIT", creditor="Bokhandel", description="BOOK STORES"),
+            tx("d", "89", "DBIT", creditor="Some SaaS", description="COMPUTER PROGRAM/SYS DESIGN"),
+        ]
+    }
+    assert run(raw) == {
+        "a": (None, None),
+        "b": ("other_income", "keyword"),
+        "c": ("shopping", "bank"),
+        "d": ("subscriptions", "bank"),
+    }
+
+
+def test_interest_code_wins_over_category_hints():
+    raw = {"checking": [tx("a", "40", "DBIT", text="Gebyrfritt", code="INTR", description="BANK SERVICES")]}
+    assert run(raw)["a"] == ("fees", "bank")

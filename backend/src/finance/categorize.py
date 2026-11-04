@@ -253,14 +253,21 @@ def _decide(t, overrides, rules, transfers, kinds) -> tuple[str | None, str | No
     for category, pattern in _MERCHANT_PATTERNS:
         if category in kinds and pattern.search(t["text"]):
             return category, "keyword"
-    for hint, category in BANK_CATEGORY_HINTS:
-        if category in kinds and hint in t["bank_category"]:
-            return category, "bank"
     if t["bank_code"] in INTEREST_CODES:
         category = "fees" if t["direction"] == "DBIT" else "other_income"
         if category in kinds:
             return category, "bank"
+    if _is_merchant_category(t["bank_category"]):
+        for hint, category in BANK_CATEGORY_HINTS:
+            if category in kinds and hint in t["bank_category"]:
+                return category, "bank"
     return None, None
+
+
+def _is_merchant_category(description: str) -> bool:
+    """Card-scheme merchant categories ("GROCERY STORES/SUPERMARKETS"), not technical ISO 20022 codes such as
+    "BOOK", "PMNT" or "OTHR" that some banks send in the same field."""
+    return bool(description.strip()) and not re.fullmatch(r"[A-Z]{4}", description.strip())
 
 
 def categorized_transactions(

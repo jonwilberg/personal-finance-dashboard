@@ -164,6 +164,7 @@ BANK_CATEGORY_HINTS: list[tuple[str, str]] = [
     ("CAR RENTAL", "travel"),
     ("DIGITAL GOODS", "subscriptions"),
     ("COMPUTER SOFTWARE", "subscriptions"),
+    ("COMPUTER PROGRAM", "subscriptions"),  # software services, e.g. "COMPUTER PROGRAM/SYS DESIGN"
     ("STREAMING", "subscriptions"),
     ("CABLE", "phone_internet"),
     ("TELECOMMUNICATION", "phone_internet"),
@@ -204,7 +205,7 @@ BANK_CATEGORY_HINTS: list[tuple[str, str]] = [
     ("ELECTRONICS", "shopping"),
     ("COMPUTER", "shopping"),
     ("SPORTING GOODS", "shopping"),
-    ("BOOK", "shopping"),
+    ("BOOK STORE", "shopping"),
     ("GENERAL MERCHANDISE", "shopping"),
     ("COURIER", "shopping"),
     ("RETAIL", "shopping"),
