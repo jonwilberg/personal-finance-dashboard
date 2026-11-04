@@ -21,7 +21,7 @@ from finance.transactions import transaction_date
 API_URL = "https://api.enablebanking.com"
 # The API rejects tokens with a lifetime above 24 hours; one hour matches the official samples.
 TOKEN_TTL_SECONDS = 3600
-# Some banks (e.g. SAS EuroBonus Mastercard) return at most this many transactions per request and no
+# Some banks return at most this many transactions per request and no
 # continuation_key. A final page this full means older transactions may be missing.
 CAPPED_PAGE_SIZE = 100
 # How far back to ask when splitting a capped request that had no date_from.
