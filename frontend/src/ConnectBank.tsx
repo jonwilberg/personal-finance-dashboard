@@ -37,9 +37,10 @@ export function ConnectBank({ onError }: { onError: (e: unknown) => void }) {
   };
 
   return (
-    <section className="card">
-      <h2>Connect a bank</h2>
-      <p className="muted small">
+    <section className="section">
+      <p className="label">Add a bank</p>
+      <h2>Connect another bank</h2>
+      <p className="dek small">
         You log in at your bank and approve read-only access to balances and transactions. In production, only accounts
         linked to the application in the Enable Banking control panel are returned.
       </p>

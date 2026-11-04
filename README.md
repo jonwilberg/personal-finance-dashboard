@@ -3,6 +3,7 @@ Personal finance app that pulls bank transactions via the Enable Banking API, au
 
 - `backend/`: Python (uv). Enable Banking client, FastAPI web app and the `finance` CLI.
 - `frontend/`: React + TypeScript (Vite), served by the backend once built.
+- `docs/design.md`: the visual design ("Editorial paper"). Tokens are in `frontend/src/theme.css`.
 
 Bank access is read-only (Account Information). The app can't initiate payments.
 
