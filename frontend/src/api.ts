@@ -61,7 +61,7 @@ export interface InspectReport {
 export interface Category {
   id: string;
   name: string;
-  kind: "expense" | "income" | "transfer";
+  kind: "expense" | "income" | "saving" | "transfer";
 }
 
 export type CategorySource = "manual" | "transfer" | "rule" | "keyword" | "bank" | null;

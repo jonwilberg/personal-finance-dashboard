@@ -25,6 +25,7 @@ from finance.categories import (
     BANK_CATEGORY_HINTS,
     CARD_PAYMENT_CODES,
     CATEGORY_IDS,
+    CATEGORY_KINDS,
     INCOME_KEYWORDS,
     INTEREST_CODES,
     MERCHANT_KEYWORDS,
@@ -271,7 +272,8 @@ def summarize_categorization(transactions: list[dict[str, Any]]) -> dict[str, An
         source = t["category_source"] or "uncategorized"
         by_source[source] = by_source.get(source, 0) + 1
         by_category[t["category"] or "uncategorized"] = by_category.get(t["category"] or "uncategorized", 0) + 1
-        if t["direction"] == "DBIT" and t["category"] != "transfer":
+        # Spending: money out, except transfers between your accounts and money put into savings.
+        if t["direction"] == "DBIT" and CATEGORY_KINDS.get(t["category"]) not in ("transfer", "saving"):
             total_spend -= t["amount"]
             if t["category"] is None:
                 uncategorized_spend -= t["amount"]

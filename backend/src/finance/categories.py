@@ -13,8 +13,8 @@ from dataclasses import dataclass
 class Category:
     id: str
     name: str
-    # "expense" counts as spending, "income" as money in, "transfer" is money moving between your own accounts
-    # and is left out of spending and income.
+    # "expense" counts as spending and "income" as money in. "saving" (money put into savings or investments) and
+    # "transfer" (money moving between your own accounts) are left out of both; saving is tracked on its own.
     kind: str
 
 
@@ -34,12 +34,15 @@ CATEGORIES = [
     Category("other_expense", "Other spending", "expense"),
     Category("salary", "Salary", "income"),
     Category("other_income", "Other income", "income"),
+    Category("savings", "Savings and investments", "saving"),
     Category("transfer", "Transfers", "transfer"),
 ]
 CATEGORY_IDS = {c.id for c in CATEGORIES}
+CATEGORY_KINDS = {c.id: c.kind for c in CATEGORIES}
 
 # Merchant keywords per category, checked in this order (first match wins). Norwegian merchants first.
 MERCHANT_KEYWORDS: dict[str, list[str]] = {
+    "savings": ["NORDNET", "KRON", "FIRI", "AKSJESPAREKONTO", "FONDSKONTO", "SPAREAVTALE"],
     "eating_out": [
         "FOODORA", "WOLT", "JUST EAT", "MCDONALDS", "MCDONALD'S", "BURGER KING", "MAX BURGERS", "PEPPES",
         "DOMINOS", "DOMINO'S", "STARBUCKS", "ESPRESSO HOUSE", "KAFFEBRENNERIET", "WAYNES COFFEE", "SUBWAY",

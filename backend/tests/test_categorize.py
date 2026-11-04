@@ -169,3 +169,17 @@ def test_payee_taken_from_first_line_that_names_one():
     result = categorized_transactions(SESSIONS, raw, CategorizationSettings(rules=[Rule("KORTSELSKAP FINANS AS", "other_expense")]))
     assert {t["merchant"] for t in result} == {"KORTSELSKAP FINANS AS"}
     assert {t["category"] for t in result} == {"other_expense"}
+
+
+def test_savings_are_not_spending():
+    raw = {
+        "checking": [
+            tx("a", "100", "DBIT", text="REMA 1000"),
+            tx("b", "5000", "DBIT", text="Nordnet Bank AB"),
+            tx("c", "300", "DBIT", text="Unknown payee"),
+        ]
+    }
+    transactions = categorized_transactions(SESSIONS, raw, CategorizationSettings())
+    assert {t["id"].split(":", 1)[1]: t["category"] for t in transactions}["b"] == "savings"
+    # 300 of 400 spent is uncategorized; the 5000 put into savings doesn't count as spending.
+    assert summarize_categorization(transactions)["uncategorized_spend_share"] == 0.75

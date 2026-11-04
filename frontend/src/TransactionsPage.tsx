@@ -281,6 +281,7 @@ function CategorySelect(props: {
   const groups: [string, Category["kind"]][] = [
     ["Spending", "expense"],
     ["Income", "income"],
+    ["Saving", "saving"],
     ["Other", "transfer"],
   ];
   return (
