@@ -99,6 +99,8 @@ export interface Transaction {
   bank_category: string;
   category: string | null;
   category_source: CategorySource;
+  /** The kind of its category ("transfer" for money between your own accounts); null when uncategorized. */
+  kind: CategoryKind | null;
 }
 
 export interface CategorizationSummary {
