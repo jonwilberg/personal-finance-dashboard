@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { type Account, type AppInfo, type Connection, type InspectReport, api } from "./api";
 import { CategoriesPage } from "./CategoriesPage";
 import { ConnectBank } from "./ConnectBank";
@@ -51,6 +52,7 @@ export function App() {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [route, setRoute] = useState<Route>(currentRoute);
   const [notice, setNotice] = useState<Notice | null>(takeRedirectNotice);
+  const [titleActions, setTitleActions] = useState<HTMLElement | null>(null);
 
   const showError = useCallback((error: unknown) => {
     setNotice({ kind: "error", text: error instanceof Error ? error.message : String(error) });
@@ -87,7 +89,11 @@ export function App() {
         {/* The overview's own headline is its title. */}
         {route !== "#/overview" && (
           <>
-            <h1>{page.title}</h1>
+            <div className="title-row">
+              <h1>{page.title}</h1>
+              {/* Pages can put actions here, on the title's row (see AccountsPage). */}
+              <div className="title-actions" ref={setTitleActions} />
+            </div>
             <p className="dek">{page.dek}</p>
           </>
         )}
@@ -105,12 +111,12 @@ export function App() {
       {route === "#/overview" && <OverviewPage onError={showError} />}
       {route === "#/transactions" && <TransactionsPage onError={showError} />}
       {route === "#/categories" && <CategoriesPage onError={showError} />}
-      {route === "#/accounts" && <AccountsPage onError={showError} />}
+      {route === "#/accounts" && <AccountsPage titleActions={titleActions} onError={showError} />}
     </div>
   );
 }
 
-function AccountsPage({ onError }: { onError: (e: unknown) => void }) {
+function AccountsPage({ titleActions, onError }: { titleActions: HTMLElement | null; onError: (e: unknown) => void }) {
   const [connections, setConnections] = useState<Connection[] | null>(null);
   const loadConnections = useCallback(() => {
     api.connections().then(setConnections).catch(onError);
@@ -119,9 +125,10 @@ function AccountsPage({ onError }: { onError: (e: unknown) => void }) {
 
   return (
     <>
-      {connections && connections.length > 0 && (
-        <RefreshAll connections={connections} onChanged={loadConnections} />
-      )}
+      {titleActions &&
+        connections &&
+        connections.length > 0 &&
+        createPortal(<RefreshAll connections={connections} onChanged={loadConnections} />, titleActions)}
 
       <ConnectBank onError={onError} />
 
@@ -179,24 +186,23 @@ function RefreshAll({ connections, onChanged }: { connections: Connection[]; onC
 
   const done = Object.values(status).filter((s) => s.state === "done" || s.state === "failed").length;
   const failed = Object.values(status).filter((s) => s.state === "failed").length;
+  const latest = rows
+    .map((row) => row.updated)
+    .filter((t): t is string => !!t)
+    .reduce<string | null>((a, b) => (a && new Date(a) > new Date(b) ? a : b), null);
 
   return (
-    <section className="section refresh-all">
-      <div className="refresh-all-head">
-        <button
-          onClick={refreshAll}
-          disabled={running || refreshable.length === 0}
-          title="Fetches balance and full history for every account. Many banks allow about 4 fetches per account per day."
-        >
-          {running ? `Refreshing ${Math.min(done + 1, refreshable.length)} of ${refreshable.length}…` : "Refresh all"}
-        </button>
-        {!running && done > 0 && (
-          <span className={`small ${failed ? "refresh-failed" : "muted"}`}>
-            {failed ? `${failed} of ${done} failed` : `All ${plural(done, "account")} updated`}
-          </span>
-        )}
-      </div>
-      <ul className="refresh-list small">
+    <div className="refresh-all">
+      {/* Focusable so keyboard users can open the per-account list too. */}
+      <span className={`refresh-summary small ${failed && !running ? "refresh-failed" : "muted"}`} tabIndex={0}>
+        {failed && !running
+          ? `${failed} of ${done} failed`
+          : latest
+            ? `Last refreshed ${formatUpdated(latest)}`
+            : "Never refreshed"}
+      </span>
+      {/* Shown on hover or focus of the summary, and kept open while refreshing to show progress. */}
+      <ul className={`refresh-list small${running ? " is-open" : ""}`} role="tooltip">
         {rows.map(({ connection, account, updated }) => {
           const s = status[account.uid];
           return (
@@ -215,14 +221,22 @@ function RefreshAll({ connections, onChanged }: { connections: Connection[]; onC
                       : s?.state === "failed"
                         ? `Failed: ${s.message}`
                         : updated
-                          ? `Updated ${formatUpdated(updated)}`
-                          : "Never updated"}
+                          ? formatUpdated(updated)
+                          : "Never"}
               </span>
             </li>
           );
         })}
       </ul>
-    </section>
+      <button
+        className="secondary"
+        onClick={refreshAll}
+        disabled={running || refreshable.length === 0}
+        title="Fetches balance and full history for every account. Many banks allow about 4 fetches per account per day."
+      >
+        {running ? `Refreshing ${Math.min(done + 1, refreshable.length)} of ${refreshable.length}…` : "Refresh all"}
+      </button>
+    </div>
   );
 }
 

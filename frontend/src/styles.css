@@ -1190,46 +1190,79 @@ button.sort:focus-visible {
   }
 }
 
-/* Accounts: refresh all */
+/* Page title row, with room for page actions on the right */
 
-.refresh-all-head {
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* Accounts: refresh all, in the title row */
+
+.refresh-all {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
 }
 
+.refresh-summary {
+  cursor: default;
+  border-bottom: 1px dotted currentColor;
+}
+
 .refresh-list {
+  display: none;
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 5;
+  width: max-content;
+  max-width: min(480px, calc(100vw - 32px));
   list-style: none;
-  margin: var(--space-3) 0 0;
-  padding: 0;
-  max-width: 640px;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--paper-raised);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  font-size: var(--text-caption);
+}
+
+.refresh-summary:hover + .refresh-list,
+.refresh-summary:focus + .refresh-list,
+.refresh-list:hover,
+.refresh-list.is-open {
+  display: block;
 }
 
 .refresh-list li {
   display: flex;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-1) 0;
-  border-bottom: var(--rule-hair);
+  padding: 2px 0;
+}
+
+.refresh-list li + li {
+  border-top: var(--rule-hair);
 }
 
 .refresh-list li > span:last-child {
   text-align: right;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .refresh-failed {
   color: var(--signal);
 }
 
+/* On narrow screens the actions wrap under the title, at the left edge. */
 @media (max-width: 600px) {
-  .refresh-list li {
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .refresh-list li > span:last-child {
-    text-align: left;
-    white-space: normal;
+  .refresh-list {
+    right: auto;
+    left: 0;
   }
 }
