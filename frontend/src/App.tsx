@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { type Account, type AppInfo, type Connection, type InspectReport, api } from "./api";
+import { type Account, type AppInfo, type Connection, api } from "./api";
 import { CategoriesPage } from "./CategoriesPage";
 import { ConnectBank } from "./ConnectBank";
 import { formatDate, formatMoney, formatUpdated } from "./format";
@@ -291,17 +291,11 @@ function ConnectionCard(props: { connection: Connection; onChanged: () => void; 
           Disconnect
         </button>
       </header>
-      <div className="account-list">
-        <div className="account-head account-grid" aria-hidden="true">
-          <span>Account</span>
-          <span className="num">Balance</span>
-          <span>Transactions</span>
-          <span />
-        </div>
+      <ul className="account-list">
         {connection.accounts.map((account) => (
-          <AccountRow key={account.uid} account={account} onChanged={onChanged} onError={onError} />
+          <AccountRow key={account.uid} account={account} />
         ))}
-      </div>
+      </ul>
     </article>
   );
 }
@@ -334,136 +328,39 @@ function accountNumber(account: Account) {
   return number ? `••${number.replace(/\D/g, "").slice(-4)}` : null;
 }
 
-function monthRange(first: string | null, last: string | null) {
-  if (!first || !last) return null;
-  const month = (iso: string) => new Date(iso).toLocaleDateString("nb-NO", { month: "short", year: "numeric" });
-  return `${month(first)} – ${month(last)}`;
+function sinceMonth(iso: string) {
+  return new Date(iso).toLocaleDateString("nb-NO", { month: "short", year: "numeric" });
 }
 
-function AccountRow(props: { account: Account; onChanged: () => void; onError: (e: unknown) => void }) {
-  const [account, setAccount] = useState(props.account);
-  const [fetching, setFetching] = useState(false);
-  const [report, setReport] = useState<InspectReport | null>(null);
+function transactionsText(account: Account) {
+  const t = account.transactions;
+  if (!t) return "Not fetched yet";
+  if (t.count === 0) return "No transactions";
+  return `${plural(t.count, "transaction")}${t.first_date ? ` since ${sinceMonth(t.first_date)}` : ""}`;
+}
+
+/** One line per account: name and details on the left, balance on the right. */
+function AccountRow({ account }: { account: Account }) {
+  const name = accountName(account);
+  const type = ACCOUNT_TYPES[account.cash_account_type ?? ""];
   const balance = account.balances?.balances[0];
-
-  // Pick up new data when the page reloads connections, e.g. after "Refresh all".
-  useEffect(() => setAccount(props.account), [props.account]);
-
-  const fetchHistory = async () => {
-    setFetching(true);
-    try {
-      const state = await api.refresh(account.uid);
-      setAccount((current) => ({ ...current, ...state }));
-      props.onChanged(); // keeps the "last updated" list at the top in step
-      if (report) setReport(await api.inspect(account.uid));
-    } catch (error) {
-      props.onError(error);
-    } finally {
-      setFetching(false);
-    }
-  };
-
-  const toggleInspect = async () => {
-    if (report) return setReport(null);
-    try {
-      setReport(await api.inspect(account.uid));
-    } catch (error) {
-      props.onError(error);
-    }
-  };
+  const details = [type !== name ? type : null, accountNumber(account), transactionsText(account)].filter(Boolean);
 
   return (
-    <div className="account">
-      <div className="account-grid">
-        <div>
-          <div className="account-name">{accountName(account)}</div>
-          <div className="account-meta small">
-            {ACCOUNT_TYPES[account.cash_account_type ?? ""] && (
-              <span className="account-type">{ACCOUNT_TYPES[account.cash_account_type ?? ""]}</span>
-            )}
-            <span className="muted">{[accountNumber(account), account.currency].filter(Boolean).join(" · ")}</span>
-          </div>
-        </div>
-        <div className="account-balance">
-          {balance ? (
-            <>
-              <div className="amount">{formatMoney(balance.balance_amount.amount, balance.balance_amount.currency)}</div>
-              <div className="muted small">as of {formatDate(account.balances!.fetched_at)}</div>
-            </>
-          ) : (
-            <span className="muted small">No balance yet</span>
-          )}
-        </div>
-        <div className="account-transactions muted small">
-          {account.transactions ? (
-            <>
-              {account.transactions.count} transactions
-              {account.transactions.first_date && (
-                <>
-                  <br />
-                  {monthRange(account.transactions.first_date, account.transactions.last_date)}
-                </>
-              )}
-            </>
-          ) : (
-            "Not fetched yet"
-          )}
-        </div>
-        <div className="account-actions">
-          <button
-            className="secondary"
-            onClick={fetchHistory}
-            disabled={fetching}
-            title="Fetches balance and full history. Many banks allow about 4 fetches per account per day."
-          >
-            {fetching ? "Fetching…" : account.transactions ? "Refresh" : "Fetch history"}
-          </button>
-          <button className="text" onClick={toggleInspect} disabled={!account.transactions}>
-            {report ? "Hide fields" : "Inspect fields"}
-          </button>
-        </div>
+    <li className="account">
+      <div className="account-main">
+        <div className="account-name">{name}</div>
+        <div className="account-meta small">{details.join(" · ")}</div>
       </div>
-      {report && <InspectPanel report={report} />}
-    </div>
+      {balance ? (
+        <div className="account-balance amount" title={`Balance as of ${formatDate(account.balances!.fetched_at)}`}>
+          {formatMoney(balance.balance_amount.amount, balance.balance_amount.currency)}
+        </div>
+      ) : (
+        <div className="account-balance muted" title="The bank hasn't reported a balance">
+          –
+        </div>
+      )}
+    </li>
   );
-}
-
-function InspectPanel({ report }: { report: InspectReport }) {
-  return (
-    <div className="inspect">
-      <p className="small">
-        {report.count} transactions from {report.first_date ?? "?"} to {report.last_date ?? "?"} ·{" "}
-        {describeCounts(report.statuses)} · {describeCounts(report.directions)} · {describeCounts(report.currencies)}
-      </p>
-      <table className="coverage">
-        <thead>
-          <tr>
-            <th>Field</th>
-            <th>Filled in</th>
-          </tr>
-        </thead>
-        <tbody>
-          {report.coverage.map(({ field, share }) => (
-            <tr key={field}>
-              <td>
-                <code>{field}</code>
-              </td>
-              <td>
-                <div className="bar">
-                  <div className="bar-fill" style={{ width: `${share * 100}%` }} />
-                  <span>{Math.round(share * 100)}%</span>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function describeCounts(counts: Record<string, number>) {
-  return Object.entries(counts)
-    .map(([value, count]) => `${value} ${count}`)
-    .join(", ");
 }

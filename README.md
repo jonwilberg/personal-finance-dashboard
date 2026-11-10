@@ -39,11 +39,11 @@ so the first time your browser warns: choose **Advanced → Proceed to localhost
 
 1. **Connect a bank:** pick the bank, click Connect, log in at the bank and approve. The bank redirects back to
    `/callback`, and the connection appears in the list.
-2. **Fetch history** per account gets the balance and as much transaction history as the bank allows. Many banks
-   allow only about 4 fetches per account per day.
-3. **Inspect fields** shows which transaction fields the bank fills in, without amounts or names.
-4. **Transactions** groups uncategorized payments by payee; pick a category once and save it as a rule.
-5. **Categories** lets you rename, add and delete categories, set their type (spending, income, saving, loan) and
+2. **Refresh all** (top right of Accounts) gets every account’s balance and as much transaction history as the bank
+   allows, keeping older history it already has. Hover the last-refreshed time to see each account. Many banks allow
+   only about 4 fetches per account per day.
+3. **Transactions** groups uncategorized payments by payee; pick a category once and save it as a rule.
+4. **Categories** lets you rename, add and delete categories, set their type (spending, income, saving, loan) and
    mark costs as fixed or adjustable. The defaults follow SSB's consumption groups and SIFO's reference budget
    (see `backend/src/finance/categories.py`).
 
