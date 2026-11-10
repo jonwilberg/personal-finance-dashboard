@@ -37,6 +37,19 @@ export interface Account {
   identifiers?: string[];
   balances: { fetched_at: string; balances: Balance[] } | null;
   transactions: TransactionsSummary | null;
+  /** The owning person's id (as text), or "shared". */
+  owner: string;
+}
+
+export interface Person {
+  id: number;
+  name: string;
+}
+
+/** Someone accounts can belong to: a person, or "shared" (always last). */
+export interface Owner {
+  id: string;
+  name: string;
 }
 
 export interface Connection {
@@ -128,6 +141,17 @@ export const api = {
     }),
   disconnect: (sessionId: string) =>
     request<{ ok: boolean }>(`/api/connections/${encodeURIComponent(sessionId)}`, { method: "DELETE" }),
+  owners: () => request<Owner[]>("/api/owners"),
+  people: () => request<Person[]>("/api/people"),
+  addPerson: (name: string) => request<Person>("/api/people", { method: "POST", body: JSON.stringify({ name }) }),
+  renamePerson: (id: number, name: string) =>
+    request<Person>(`/api/people/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  removePerson: (id: number) => request<{ ok: boolean }>(`/api/people/${id}`, { method: "DELETE" }),
+  setOwner: (uid: string, owner: string) =>
+    request<{ owner: string }>(`/api/accounts/${encodeURIComponent(uid)}/owner`, {
+      method: "PUT",
+      body: JSON.stringify({ owner }),
+    }),
   refresh: (uid: string) =>
     request<Pick<Account, "balances" | "transactions">>(
       `/api/accounts/${encodeURIComponent(uid)}/refresh?longest=true`,
@@ -218,5 +242,12 @@ export interface Overview {
 }
 
 export const overviewApi = {
-  get: (month?: string) => request<Overview>(`/api/overview${month ? `?month=${encodeURIComponent(month)}` : ""}`),
+  /** `owners` limits the overview to those owners' accounts; leave it out for everyone's. */
+  get: (month?: string, owners?: string[]) => {
+    const params = new URLSearchParams();
+    if (month) params.set("month", month);
+    for (const owner of owners ?? []) params.append("owner", owner);
+    const query = params.toString();
+    return request<Overview>(`/api/overview${query ? `?${query}` : ""}`);
+  },
 };

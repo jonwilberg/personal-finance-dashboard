@@ -50,6 +50,20 @@ CREATE TABLE IF NOT EXISTS accounts (
     identifiers TEXT NOT NULL DEFAULT '[]'  -- JSON list of account numbers
 );
 
+-- The people in the household. Accounts can belong to one of them; the id stays when a person is renamed.
+CREATE TABLE IF NOT EXISTS people (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    position INTEGER NOT NULL
+);
+
+-- Who an account belongs to. Accounts without a row are shared, and so are a removed person's accounts.
+-- Kept apart from accounts, which are rewritten when a bank is reconnected.
+CREATE TABLE IF NOT EXISTS account_owners (
+    account_uid TEXT PRIMARY KEY,
+    person_id INTEGER NOT NULL REFERENCES people (id) ON DELETE CASCADE
+);
+
 -- Latest balances per account, as the bank sent them (JSON).
 CREATE TABLE IF NOT EXISTS balances (
     account_uid TEXT PRIMARY KEY,
@@ -100,6 +114,10 @@ CREATE TABLE IF NOT EXISTS categories (
 
 
 class CategoryError(Exception):
+    pass
+
+
+class PersonError(Exception):
     pass
 
 
@@ -207,6 +225,49 @@ class Storage:
             db.execute(
                 "UPDATE accounts SET identifiers = ? WHERE uid = ?", (json.dumps(sorted(set(identifiers))), account_uid)
             )
+
+    # People and the accounts they own
+
+    def people(self) -> list[dict[str, Any]]:
+        with self._connect() as db:
+            return [{"id": row["id"], "name": row["name"]} for row in db.execute("SELECT * FROM people ORDER BY position, id")]
+
+    def add_person(self, name: str) -> dict[str, Any]:
+        name = _person_name(name)
+        with self._connect() as db:
+            _check_name_free(db, name)
+            position = db.execute("SELECT coalesce(max(position), -1) + 1 FROM people").fetchone()[0]
+            person_id = db.execute("INSERT INTO people (name, position) VALUES (?, ?)", (name, position)).lastrowid
+        return {"id": person_id, "name": name}
+
+    def rename_person(self, person_id: int, name: str) -> dict[str, Any]:
+        name = _person_name(name)
+        with self._connect() as db:
+            _check_name_free(db, name, except_id=person_id)
+            if db.execute("UPDATE people SET name = ? WHERE id = ?", (name, person_id)).rowcount == 0:
+                raise PersonError("Unknown person")
+        return {"id": person_id, "name": name}
+
+    def remove_person(self, person_id: int) -> None:
+        """Remove a person; their accounts become shared."""
+        with self._connect() as db:
+            if db.execute("DELETE FROM people WHERE id = ?", (person_id,)).rowcount == 0:
+                raise PersonError("Unknown person")
+
+    def account_owners(self) -> dict[str, int]:
+        """Account uid -> person id, for accounts that belong to one person (the rest are shared)."""
+        with self._connect() as db:
+            return {row["account_uid"]: row["person_id"] for row in db.execute("SELECT * FROM account_owners")}
+
+    def set_account_owner(self, account_uid: str, person_id: int | None) -> None:
+        """Give the account to a person, or make it shared with None."""
+        with self._connect() as db:
+            if person_id is None:
+                db.execute("DELETE FROM account_owners WHERE account_uid = ?", (account_uid,))
+                return
+            if db.execute("SELECT 1 FROM people WHERE id = ?", (person_id,)).fetchone() is None:
+                raise PersonError("Unknown person")
+            db.execute("INSERT OR REPLACE INTO account_owners VALUES (?, ?)", (account_uid, person_id))
 
     # Balances
 
@@ -460,6 +521,23 @@ def _import_json_files(storage: Storage) -> None:
 
 def _read_json(path: Path, default: Any) -> Any:
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
+
+
+def _person_name(name: str) -> str:
+    name = " ".join(name.split())
+    if not name:
+        raise PersonError("Give the person a name")
+    if len(name) > 40:
+        raise PersonError("Keep the name to 40 characters")
+    if name.lower() == "shared":
+        raise PersonError("“Shared” is already the choice for accounts that aren't one person's")
+    return name
+
+
+def _check_name_free(db: sqlite3.Connection, name: str, except_id: int | None = None) -> None:
+    row = db.execute("SELECT id FROM people WHERE name = ?", (name,)).fetchone()  # NOCASE column
+    if row and row["id"] != except_id:
+        raise PersonError(f"There's already someone called {name}")
 
 
 def _now() -> str:

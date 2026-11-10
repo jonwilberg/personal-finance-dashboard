@@ -3,7 +3,7 @@ import json
 import pytest
 
 from finance.categorize import Rule
-from finance.storage import CategoryError, Storage
+from finance.storage import CategoryError, PersonError, Storage
 
 SESSION = {
     "session_id": "s1",
@@ -254,3 +254,21 @@ def test_rules_on_split_categories_are_moved(tmp_path):
         "UNIQLO ONLINE": "clothing",
         "ELKJØP": "shopping",
     }
+
+
+def test_account_owners_survive_reconnecting_and_follow_their_person(tmp_path):
+    storage = Storage(tmp_path)
+    storage.add_session(SESSION)
+    alex = storage.add_person("Alex")["id"]
+    storage.set_account_owner("acc-1", alex)
+    storage.add_session(SESSION)  # reconnecting rewrites the accounts
+    assert storage.account_owners() == {"acc-1": alex}
+
+    storage.rename_person(alex, "  Alexandra   Berg ")
+    assert storage.people() == [{"id": alex, "name": "Alexandra Berg"}]
+    assert storage.account_owners() == {"acc-1": alex}
+
+    storage.remove_person(alex)  # their accounts become shared
+    assert storage.account_owners() == {}
+    with pytest.raises(PersonError):
+        storage.set_account_owner("acc-1", alex)

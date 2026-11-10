@@ -1,24 +1,83 @@
 import { useEffect, useState } from "react";
-import { type Overview, overviewApi } from "./api";
+import { type Overview, type Owner, api, overviewApi } from "./api";
 import { formatKr } from "./format";
 import { CategoryScoreboard } from "./CategoryScoreboard";
+import { OwnerPicker } from "./OwnerPicker";
 import { SpendingChart } from "./SpendingChart";
+
+const OWNERS_KEY = "overview-owners";
+
+/** The owners chosen last time in this browser, if they still exist; otherwise everyone. */
+function rememberedOwners(owners: Owner[]): string[] {
+  const all = owners.map((o) => o.id);
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(OWNERS_KEY) ?? "null");
+    const kept = Array.isArray(saved) ? all.filter((id) => saved.includes(id)) : [];
+    return kept.length ? kept : all;
+  } catch {
+    return all;
+  }
+}
 
 export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
   const [month, setMonth] = useState<string | undefined>(undefined);
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [owners, setOwners] = useState<Owner[] | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
 
   useEffect(() => {
-    overviewApi.get(month).then(setOverview).catch(onError);
-  }, [month, onError]);
+    api
+      .owners()
+      .then((list) => {
+        setOwners(list);
+        setSelected(rememberedOwners(list));
+      })
+      .catch((error) => {
+        setOwners([]); // still show everyone's overview
+        onError(error);
+      });
+  }, [onError]);
+
+  // Everyone selected means no filter, so accounts of anyone added later are counted too.
+  const filter = owners && selected.length < owners.length ? selected : undefined;
+  const filterKey = filter?.join(",");
+  useEffect(() => {
+    if (owners === null) return; // wait for the remembered choice
+    overviewApi.get(month, filterKey?.split(",")).then(setOverview).catch(onError);
+  }, [month, owners, filterKey, onError]);
+
+  const toggle = (id: string) => {
+    const next = selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id];
+    const ordered = (owners ?? []).map((o) => o.id).filter((o) => next.includes(o));
+    setSelected(ordered);
+    try {
+      localStorage.setItem(OWNERS_KEY, JSON.stringify(ordered));
+    } catch {
+      // storage unavailable: the choice lasts until the page reloads
+    }
+  };
+
+  const ownerFilter = owners && owners.length > 1 && (
+    <div className="owner-filter">
+      <span className="label">Accounts</span>
+      <OwnerPicker mode="multi" label="Whose accounts to count" owners={owners} selected={selected} onToggle={toggle} />
+    </div>
+  );
 
   if (!overview) return <p className="muted">Loading…</p>;
   if (!overview.month || !overview.figures) {
     return (
-      <section className="section">
-        <h2>{overview.headline}</h2>
+      <section className="section front">
+        {ownerFilter}
+        <h2>{filter ? "No transactions in these accounts" : overview.headline}</h2>
         <p className="dek">
-          Connect a bank and fetch its history on the <a href="#/accounts">Accounts</a> page.
+          {filter ? (
+            "Switch in more accounts above, or choose whose each account is on the Accounts page."
+          ) : (
+            <>
+              Connect a bank and fetch its history on the <a href="#/accounts">Accounts</a> page.
+            </>
+          )}
         </p>
       </section>
     );
@@ -32,6 +91,7 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
   return (
     <>
       <section className="section front">
+        {ownerFilter}
         <div className="month-switcher">
           <button className="text" onClick={() => setMonth(previous)} disabled={!previous} aria-label="Previous month">
             ‹ {previous ? shortMonth(previous) : ""}

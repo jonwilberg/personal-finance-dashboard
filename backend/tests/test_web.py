@@ -188,3 +188,107 @@ def test_categories_can_be_managed(api, bank):
     rema = next(t for t in api.get("/api/transactions").json()["items"] if t["description"] == "Rema 1000")
     assert rema["category"] is None
     assert api.delete("/api/categories/transfer").status_code == 422
+
+
+def _household_tx(amount, direction, day, **fields):
+    return {"transaction_amount": {"amount": amount, "currency": "NOK"}, "credit_debit_indicator": direction,
+            "status": "BOOK", "booking_date": f"2026-10-{day}", **fields}
+
+
+@pytest.fixture
+def household(tmp_path, bank):
+    """Two people with an account each, and a shared account; one of them sends the other money."""
+    from finance.storage import Storage
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    client = EnableBankingClient("app-id", pem, http_client=httpx.Client(base_url=API_URL, transport=httpx.MockTransport(bank)))
+    settings = Settings(
+        application_id="app-id",
+        private_key_path=tmp_path / "unused.pem",
+        redirect_url="https://localhost:8765/callback",
+        data_dir=tmp_path / "data",
+    )
+    store = Storage(settings.data_dir)
+    store.add_session({
+        "session_id": "s1", "aspsp": {"name": "Bank", "country": "NO"}, "valid_until": "2099-01-01T00:00:00+00:00",
+        "accounts": [
+            {"uid": "alex", "iban": "NO1111111111111", "cash_account_type": "CACC"},
+            {"uid": "sam", "iban": "NO2222222222222", "cash_account_type": "CACC"},
+            {"uid": "joint", "iban": "NO3333333333333", "cash_account_type": "CACC"},
+        ],
+    })
+    store.save_transactions("alex", [
+        _household_tx("300", "DBIT", "05", creditor={"name": "Rema 1000"}),
+        _household_tx("1000", "DBIT", "10", remittance_information=["Til Sam"], creditor_account={"iban": "NO2222222222222"}),
+    ])
+    store.save_transactions("sam", [
+        _household_tx("1000", "CRDT", "10", remittance_information=["Fra Alex"], debtor_account={"iban": "NO1111111111111"}),
+        _household_tx("200", "DBIT", "12", creditor={"name": "Kiwi"}),
+    ])
+    store.save_transactions("joint", [_household_tx("50", "DBIT", "15", creditor={"name": "Coop Extra"})])
+    return TestClient(create_app(settings, client=client), follow_redirects=False)
+
+
+def spent(api, *owners):
+    figures = api.get("/api/overview", params={"month": "2026-10", "owner": list(owners)}).json()["figures"]
+    return figures["spent"], figures["income"]
+
+
+def add_people(api, *names):
+    return {name: str(api.post("/api/people", json={"name": name}).json()["id"]) for name in names}
+
+
+def test_people_can_be_added_renamed_and_removed(household):
+    assert household.get("/api/owners").json() == [{"id": "shared", "name": "Shared"}]
+    ids = add_people(household, "Alex", "Sam")
+    assert household.get("/api/owners").json() == [
+        {"id": ids["Alex"], "name": "Alex"}, {"id": ids["Sam"], "name": "Sam"}, {"id": "shared", "name": "Shared"},
+    ]
+    assert household.post("/api/people", json={"name": " alex "}).status_code == 422  # taken, whatever the case
+    assert household.post("/api/people", json={"name": "Shared"}).status_code == 422
+    assert household.post("/api/people", json={"name": "  "}).status_code == 422
+
+    assert household.patch(f"/api/people/{ids['Alex']}", json={"name": "Alexandra"}).json()["name"] == "Alexandra"
+    assert household.patch(f"/api/people/{ids['Alex']}", json={"name": "sam"}).status_code == 422
+    assert household.patch("/api/people/999", json={"name": "Kim"}).status_code == 404
+    assert household.delete("/api/people/999").status_code == 404
+
+
+def owners_of(api):
+    return {a["uid"]: a["owner"] for a in api.get("/api/connections").json()[0]["accounts"]}
+
+
+def test_accounts_are_shared_until_given_to_a_person(household):
+    ids = add_people(household, "Alex", "Sam")
+    assert owners_of(household) == {"alex": "shared", "sam": "shared", "joint": "shared"}
+
+    assert household.put("/api/accounts/alex/owner", json={"owner": ids["Alex"]}).status_code == 200
+    assert household.put("/api/accounts/sam/owner", json={"owner": ids["Sam"]}).status_code == 200
+    assert owners_of(household) == {"alex": ids["Alex"], "sam": ids["Sam"], "joint": "shared"}
+
+    # Renaming keeps the accounts; removing a person makes their accounts shared.
+    household.patch(f"/api/people/{ids['Alex']}", json={"name": "Alexandra"})
+    assert owners_of(household)["alex"] == ids["Alex"]
+    assert household.delete(f"/api/people/{ids['Sam']}").status_code == 200
+    assert owners_of(household)["sam"] == "shared"
+
+    assert household.put("/api/accounts/alex/owner", json={"owner": "shared"}).status_code == 200
+    assert owners_of(household)["alex"] == "shared"
+    assert household.put("/api/accounts/alex/owner", json={"owner": "Nobody"}).status_code == 422
+    assert household.put("/api/accounts/alex/owner", json={"owner": "999"}).status_code == 404
+    assert household.put("/api/accounts/missing/owner", json={"owner": ids["Alex"]}).status_code == 404
+
+
+def test_overview_counts_only_the_chosen_owners_and_never_transfers(household):
+    ids = add_people(household, "Alex", "Sam")
+    household.put("/api/accounts/alex/owner", json={"owner": ids["Alex"]})
+    household.put("/api/accounts/sam/owner", json={"owner": ids["Sam"]})
+
+    assert spent(household) == (550, 0)  # everyone: the 1 000 moved between the two accounts is left out
+    # Alex's 1 000 to Sam's account is a transfer, not spending, even when Sam's accounts aren't shown...
+    assert spent(household, ids["Alex"]) == (300, 0)
+    # ...and not income on Sam's side either.
+    assert spent(household, ids["Sam"]) == (200, 0)
+    assert spent(household, "shared") == (50, 0)
+    assert spent(household, ids["Alex"], "shared") == (350, 0)

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { type Account, type AppInfo, type Connection, api } from "./api";
+import { type Account, type AppInfo, type Connection, type Owner, api } from "./api";
+import { OwnerPicker } from "./OwnerPicker";
+import { PeopleSection } from "./PeopleSection";
 import { CategoriesPage } from "./CategoriesPage";
 import { ConnectBank } from "./ConnectBank";
 import { formatDate, formatMoney, formatUpdated } from "./format";
@@ -122,6 +124,42 @@ function AccountsPage({ titleActions, onError }: { titleActions: HTMLElement | n
     api.connections().then(setConnections).catch(onError);
   }, [onError]);
   useEffect(loadConnections, [loadConnections]);
+  const [owners, setOwners] = useState<Owner[]>([]);
+  const loadOwners = useCallback(() => {
+    api.owners().then(setOwners).catch(onError);
+  }, [onError]);
+  useEffect(loadOwners, [loadOwners]);
+  const people = owners.filter((o) => o.id !== "shared").map((o) => ({ id: Number(o.id), name: o.name }));
+  const accountCounts: Record<string, number> = {};
+  for (const account of connections?.flatMap((c) => c.accounts) ?? []) {
+    accountCounts[account.owner] = (accountCounts[account.owner] ?? 0) + 1;
+  }
+  // Adding, renaming or removing someone changes the pickers and, on removal, the accounts' owners.
+  const peopleChanged = useCallback(() => {
+    loadOwners();
+    loadConnections();
+  }, [loadOwners, loadConnections]);
+
+  /** Shows the new owner at once, saves it, and puts the old one back if saving fails. */
+  const changeOwner = useCallback(
+    async (uid: string, owner: string) => {
+      const withOwner = (list: Connection[] | null, pick: (current: string) => string) =>
+        list?.map((c) => ({ ...c, accounts: c.accounts.map((a) => (a.uid === uid ? { ...a, owner: pick(a.owner) } : a)) })) ??
+        null;
+      let previous = "shared";
+      setConnections((list) => {
+        previous = list?.flatMap((c) => c.accounts).find((a) => a.uid === uid)?.owner ?? previous;
+        return withOwner(list, () => owner);
+      });
+      try {
+        await api.setOwner(uid, owner);
+      } catch (error) {
+        setConnections((list) => withOwner(list, () => previous));
+        onError(error);
+      }
+    },
+    [onError],
+  );
 
   return (
     <>
@@ -139,11 +177,15 @@ function AccountsPage({ titleActions, onError }: { titleActions: HTMLElement | n
           <ConnectionCard
             key={connection.session_id}
             connection={connection}
+            owners={owners}
+            onOwnerChange={changeOwner}
             onChanged={loadConnections}
             onError={onError}
           />
         ))}
       </section>
+
+      <PeopleSection people={people} accountCounts={accountCounts} onChanged={peopleChanged} onError={onError} />
     </>
   );
 }
@@ -253,8 +295,14 @@ function plural(count: number, word: string) {
   return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
-function ConnectionCard(props: { connection: Connection; onChanged: () => void; onError: (e: unknown) => void }) {
-  const { connection, onChanged, onError } = props;
+function ConnectionCard(props: {
+  connection: Connection;
+  owners: Owner[];
+  onOwnerChange: (uid: string, owner: string) => void;
+  onChanged: () => void;
+  onError: (e: unknown) => void;
+}) {
+  const { connection, owners, onOwnerChange, onChanged, onError } = props;
   const [busy, setBusy] = useState(false);
 
   const disconnect = async () => {
@@ -293,7 +341,7 @@ function ConnectionCard(props: { connection: Connection; onChanged: () => void; 
       </header>
       <ul className="account-list">
         {connection.accounts.map((account) => (
-          <AccountRow key={account.uid} account={account} />
+          <AccountRow key={account.uid} account={account} owners={owners} onOwnerChange={onOwnerChange} />
         ))}
       </ul>
     </article>
@@ -340,7 +388,8 @@ function transactionsText(account: Account) {
 }
 
 /** One line per account: name and details on the left, balance on the right. */
-function AccountRow({ account }: { account: Account }) {
+function AccountRow(props: { account: Account; owners: Owner[]; onOwnerChange: (uid: string, owner: string) => void }) {
+  const { account, owners, onOwnerChange } = props;
   const name = accountName(account);
   const type = ACCOUNT_TYPES[account.cash_account_type ?? ""];
   const balance = account.balances?.balances[0];
@@ -352,6 +401,16 @@ function AccountRow({ account }: { account: Account }) {
         <div className="account-name">{name}</div>
         <div className="account-meta small">{details.join(" · ")}</div>
       </div>
+      {/* Until people are added (below) every account is shared, so there's nothing to pick. */}
+      {owners.length > 1 && (
+        <OwnerPicker
+          mode="single"
+          label={`Whose is ${name}?`}
+          owners={owners}
+          selected={[account.owner]}
+          onToggle={(owner) => onOwnerChange(account.uid, owner)}
+        />
+      )}
       {balance ? (
         <div className="account-balance amount" title={`Balance as of ${formatDate(account.balances!.fetched_at)}`}>
           {formatMoney(balance.balance_amount.amount, balance.balance_amount.currency)}

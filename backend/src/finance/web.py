@@ -30,7 +30,7 @@ from finance.connections import (
 )
 from finance.enable_banking import EnableBankingClient, EnableBankingError
 from finance.overview import build_overview
-from finance.storage import CategoryError, Storage
+from finance.storage import CategoryError, PersonError, Storage
 from finance.transactions import summarize
 
 FRONTEND_DIST = BACKEND_DIR.parent / "frontend" / "dist"
@@ -52,6 +52,19 @@ class CategoryChoice(BaseModel):
 class RuleRequest(BaseModel):
     pattern: str = Field(min_length=2)
     category: str
+
+
+class OwnerChoice(BaseModel):
+    # A person's id (as text, from /api/owners), or "shared".
+    owner: str
+
+
+class PersonName(BaseModel):
+    name: str
+
+
+# The owner of accounts that aren't one person's.
+SHARED = "shared"
 
 
 class NewCategory(BaseModel):
@@ -101,17 +114,64 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
             for aspsp in sorted(client.list_aspsps(country=country), key=lambda a: a["name"].lower())
         ]
 
+    def owners_by_account() -> dict[str, str]:
+        """Account uid -> owner id (a person's id as text) for accounts that are one person's."""
+        return {uid: str(person_id) for uid, person_id in store.account_owners().items()}
+
+    @app.exception_handler(PersonError)
+    async def person_error(request: Request, error: PersonError) -> JSONResponse:
+        status = 404 if str(error) == "Unknown person" else 422
+        return JSONResponse({"detail": str(error)}, status_code=status)
+
+    @app.get("/api/people")
+    def people() -> list[dict[str, Any]]:
+        return store.people()
+
+    @app.post("/api/people")
+    def add_person(request: PersonName) -> dict[str, Any]:
+        return store.add_person(request.name)
+
+    @app.patch("/api/people/{person_id}")
+    def rename_person(person_id: int, request: PersonName) -> dict[str, Any]:
+        return store.rename_person(person_id, request.name)
+
+    @app.delete("/api/people/{person_id}")
+    def remove_person(person_id: int) -> dict[str, bool]:
+        """Remove a person; their accounts become shared."""
+        store.remove_person(person_id)
+        return {"ok": True}
+
+    @app.get("/api/owners")
+    def owners() -> list[dict[str, str]]:
+        """Who accounts can belong to: each person (id as text), then shared."""
+        return [{"id": str(p["id"]), "name": p["name"]} for p in store.people()] + [{"id": SHARED, "name": "Shared"}]
+
     @app.get("/api/connections")
     def connections() -> list[dict[str, Any]]:
         now = datetime.now(UTC)
+        owned = owners_by_account()
         return [
             record
             | {
                 "expired": datetime.fromisoformat(record["valid_until"]) <= now,
-                "accounts": [account | _account_state(store, account["uid"]) for account in record["accounts"]],
+                "accounts": [
+                    account | _account_state(store, account["uid"]) | {"owner": owned.get(account["uid"], SHARED)}
+                    for account in record["accounts"]
+                ],
             }
             for record in store.sessions()
         ]
+
+    @app.put("/api/accounts/{account_uid}/owner")
+    def set_owner(account_uid: str, choice: OwnerChoice) -> dict[str, str]:
+        _require_account(store, account_uid)
+        if choice.owner == SHARED:
+            store.set_account_owner(account_uid, None)
+        elif choice.owner.isdigit():
+            store.set_account_owner(account_uid, int(choice.owner))
+        else:
+            raise HTTPException(422, f"Unknown owner {choice.owner!r}")
+        return {"owner": choice.owner}
 
     @app.post("/api/connections")
     def start_connection(request: ConnectRequest) -> dict[str, str]:
@@ -235,9 +295,19 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
         return {"ok": True}
 
     @app.get("/api/overview")
-    def overview(month: str | None = None) -> dict[str, Any]:
-        """The front page for one month (YYYY-MM); defaults to the last complete month."""
-        return build_overview(all_transactions(), store.categories(), month)
+    def overview(month: str | None = None, owner: list[str] | None = Query(default=None)) -> dict[str, Any]:
+        """The front page for one month (YYYY-MM); defaults to the last complete month.
+
+        With `owner` (repeatable: a person or "shared"), only those owners' accounts count. Transfers are found
+        across all accounts first, so money moved between any two of your accounts never counts as spending or
+        income, whoever the accounts belong to.
+        """
+        transactions = all_transactions()
+        if owner:
+            owned = owners_by_account()
+            wanted = set(owner)
+            transactions = [t for t in transactions if owned.get(t["account_uid"], SHARED) in wanted]
+        return build_overview(transactions, store.categories(), month)
 
     @app.get("/api/categorization/summary")
     def categorization_summary() -> dict[str, Any]:
