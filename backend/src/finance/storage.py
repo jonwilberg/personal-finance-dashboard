@@ -50,6 +50,13 @@ CREATE TABLE IF NOT EXISTS accounts (
     identifiers TEXT NOT NULL DEFAULT '[]'  -- JSON list of account numbers
 );
 
+-- Who an account belongs to: one of the people in FINANCE_PEOPLE. Accounts without a row are shared.
+-- Kept apart from accounts, which are rewritten when a bank is reconnected.
+CREATE TABLE IF NOT EXISTS account_owners (
+    account_uid TEXT PRIMARY KEY,
+    owner TEXT NOT NULL
+);
+
 -- Latest balances per account, as the bank sent them (JSON).
 CREATE TABLE IF NOT EXISTS balances (
     account_uid TEXT PRIMARY KEY,
@@ -207,6 +214,21 @@ class Storage:
             db.execute(
                 "UPDATE accounts SET identifiers = ? WHERE uid = ?", (json.dumps(sorted(set(identifiers))), account_uid)
             )
+
+    # Owners
+
+    def account_owners(self) -> dict[str, str]:
+        """Account uid -> person, for accounts that belong to one person (the rest are shared)."""
+        with self._connect() as db:
+            return {row["account_uid"]: row["owner"] for row in db.execute("SELECT * FROM account_owners")}
+
+    def set_account_owner(self, account_uid: str, owner: str | None) -> None:
+        """Give the account to a person, or make it shared with None."""
+        with self._connect() as db:
+            if owner is None:
+                db.execute("DELETE FROM account_owners WHERE account_uid = ?", (account_uid,))
+            else:
+                db.execute("INSERT OR REPLACE INTO account_owners VALUES (?, ?)", (account_uid, owner))
 
     # Balances
 

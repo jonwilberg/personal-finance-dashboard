@@ -254,3 +254,14 @@ def test_rules_on_split_categories_are_moved(tmp_path):
         "UNIQLO ONLINE": "clothing",
         "ELKJØP": "shopping",
     }
+
+
+def test_account_owners_survive_reconnecting(tmp_path):
+    storage = Storage(tmp_path)
+    storage.add_session(SESSION)
+    storage.set_account_owner("acc-1", "Alex")
+    storage.add_session(SESSION)  # reconnecting rewrites the accounts
+    assert storage.account_owners() == {"acc-1": "Alex"}
+
+    storage.set_account_owner("acc-1", None)
+    assert storage.account_owners() == {}

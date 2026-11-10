@@ -294,6 +294,7 @@ label {
 }
 
 .account-main {
+  flex: 1 1 0;
   min-width: 0;
 }
 
@@ -1170,5 +1171,85 @@ button.sort:focus-visible {
   .refresh-list {
     right: auto;
     left: 0;
+  }
+}
+
+/* Owner picker: joined buttons, the chosen ones filled in ink */
+
+.owner-picker {
+  display: inline-flex;
+  flex: none;
+}
+
+.owner-picker button {
+  background: transparent;
+  color: var(--ink-secondary);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  padding: 3px 10px;
+  font-size: var(--text-caption);
+  font-weight: 500;
+}
+
+.owner-picker button + button {
+  margin-left: -1px;
+}
+
+.owner-picker button:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.owner-picker button:last-child {
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.owner-picker button:hover:not(.is-on) {
+  background: var(--paper-sunken);
+  color: var(--ink);
+  opacity: 1;
+}
+
+.owner-picker button.is-on {
+  position: relative;
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
+.owner-picker button[aria-disabled="true"] {
+  cursor: default;
+}
+
+/* Accounts: the picker sits between the account and its balance; the balance column keeps a steady width. */
+.account .owner-picker {
+  margin-left: auto;
+  align-self: center;
+}
+
+.account .account-balance {
+  min-width: 10rem;
+}
+
+/* Overview: whose accounts are counted, above the month switcher */
+.owner-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+@media (max-width: 600px) {
+  .account {
+    flex-wrap: wrap;
+  }
+
+  .account .owner-picker {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .account .account-balance {
+    min-width: 0;
   }
 }

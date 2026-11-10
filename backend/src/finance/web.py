@@ -54,6 +54,15 @@ class RuleRequest(BaseModel):
     category: str
 
 
+class OwnerChoice(BaseModel):
+    # One of the people in FINANCE_PEOPLE, or "shared".
+    owner: str
+
+
+# The owner of accounts that aren't one person's.
+SHARED = "shared"
+
+
 class NewCategory(BaseModel):
     name: str
     kind: str = "expense"
@@ -101,17 +110,38 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
             for aspsp in sorted(client.list_aspsps(country=country), key=lambda a: a["name"].lower())
         ]
 
+    def owners_by_account() -> dict[str, str]:
+        """Account uid -> owner for every stored choice; an owner no longer in FINANCE_PEOPLE counts as shared."""
+        return {uid: owner for uid, owner in store.account_owners().items() if owner in settings.people}
+
+    @app.get("/api/owners")
+    def owners() -> list[dict[str, str]]:
+        """Who accounts can belong to: each person, then shared."""
+        return [{"id": person, "name": person} for person in settings.people] + [{"id": SHARED, "name": "Shared"}]
+
     @app.get("/api/connections")
     def connections() -> list[dict[str, Any]]:
         now = datetime.now(UTC)
+        owned = owners_by_account()
         return [
             record
             | {
                 "expired": datetime.fromisoformat(record["valid_until"]) <= now,
-                "accounts": [account | _account_state(store, account["uid"]) for account in record["accounts"]],
+                "accounts": [
+                    account | _account_state(store, account["uid"]) | {"owner": owned.get(account["uid"], SHARED)}
+                    for account in record["accounts"]
+                ],
             }
             for record in store.sessions()
         ]
+
+    @app.put("/api/accounts/{account_uid}/owner")
+    def set_owner(account_uid: str, choice: OwnerChoice) -> dict[str, str]:
+        _require_account(store, account_uid)
+        if choice.owner != SHARED and choice.owner not in settings.people:
+            raise HTTPException(422, f"Unknown owner {choice.owner!r}")
+        store.set_account_owner(account_uid, None if choice.owner == SHARED else choice.owner)
+        return {"owner": choice.owner}
 
     @app.post("/api/connections")
     def start_connection(request: ConnectRequest) -> dict[str, str]:
@@ -235,9 +265,19 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
         return {"ok": True}
 
     @app.get("/api/overview")
-    def overview(month: str | None = None) -> dict[str, Any]:
-        """The front page for one month (YYYY-MM); defaults to the last complete month."""
-        return build_overview(all_transactions(), store.categories(), month)
+    def overview(month: str | None = None, owner: list[str] | None = Query(default=None)) -> dict[str, Any]:
+        """The front page for one month (YYYY-MM); defaults to the last complete month.
+
+        With `owner` (repeatable: a person or "shared"), only those owners' accounts count. Transfers are found
+        across all accounts first, so money moved between any two of your accounts never counts as spending or
+        income, whoever the accounts belong to.
+        """
+        transactions = all_transactions()
+        if owner:
+            owned = owners_by_account()
+            wanted = set(owner)
+            transactions = [t for t in transactions if owned.get(t["account_uid"], SHARED) in wanted]
+        return build_overview(transactions, store.categories(), month)
 
     @app.get("/api/categorization/summary")
     def categorization_summary() -> dict[str, Any]:
