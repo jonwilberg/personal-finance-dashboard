@@ -242,8 +242,9 @@ function TransactionTable(props: {
         <span>Category</span>
       </div>
       {props.items.map((t) => (
-        // Rows without a category are marked so they stand out while scrolling (see .is-uncategorized).
-        <div key={t.id} className={`ledger-row table-grid${t.category ? "" : " is-uncategorized"}`}>
+        // Rows without a category stand out while scrolling; transfers between your own accounts, which aren't
+        // spending or income, step back (see .is-uncategorized and .is-transfer).
+        <div key={t.id} className={`ledger-row table-grid${rowMark(t)}`}>
           <span className="small nowrap">{formatDate(t.date)}</span>
           <span>
             {t.description || "No description"}
@@ -330,6 +331,12 @@ function headline(summary: CategorizationSummary | null) {
   if (summary.count === 0) return "No transactions yet";
   if (summary.uncategorized === 0) return "Every transaction has a category";
   return `${summary.uncategorized} transaction${summary.uncategorized === 1 ? "" : "s"} need${summary.uncategorized === 1 ? "s" : ""} a category`;
+}
+
+function rowMark(t: Transaction) {
+  if (!t.category) return " is-uncategorized";
+  if (t.kind === "transfer") return " is-transfer";
+  return "";
 }
 
 function sourceLabel(source: Transaction["category_source"]) {
