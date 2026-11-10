@@ -968,12 +968,29 @@ button.danger {
   opacity: 0.6;
 }
 
-.chart-value {
+/* Totals above the bars. The selected month’s is in full and darker; the others are quieter. Each has a halo
+   in the colour behind it, so the median line stops short of the digits instead of running through them; hovered
+   and selected columns are tinted, so their halo matches the tint. */
+.chart-total {
   font-family: var(--font-ui);
+  font-size: 11px;
+  fill: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.chart-total.is-hovered {
+  stroke: color-mix(in srgb, var(--rule) 30%, var(--paper));
+}
+
+.chart-total.is-selected {
   font-size: 12px;
   font-weight: 500;
   fill: var(--ink);
-  font-variant-numeric: tabular-nums;
+  stroke: color-mix(in srgb, var(--rule) 60%, var(--paper));
 }
 
 .chart-tooltip {
