@@ -242,7 +242,8 @@ function TransactionTable(props: {
         <span>Category</span>
       </div>
       {props.items.map((t) => (
-        <div key={t.id} className="ledger-row table-grid">
+        // Rows without a category are marked so they stand out while scrolling (see .is-uncategorized).
+        <div key={t.id} className={`ledger-row table-grid${t.category ? "" : " is-uncategorized"}`}>
           <span className="small nowrap">{formatDate(t.date)}</span>
           <span>
             {t.description || "No description"}
@@ -257,7 +258,8 @@ function TransactionTable(props: {
               categories={props.categories}
               value={t.category ?? ""}
               onChange={(value) => change(t, value)}
-              placeholder="Uncategorized"
+              placeholder="Needs a category"
+              needsCategory={!t.category}
             />
             <span className={`source source-${t.category_source ?? "none"}`}>{sourceLabel(t.category_source)}</span>
           </span>
@@ -277,6 +279,8 @@ function CategorySelect(props: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  /** Marks the box as still to be chosen (in the full list, where most rows have a category). */
+  needsCategory?: boolean;
 }) {
   const groups: [string, Category["kind"]][] = [
     ["Spending", "expense"],
@@ -286,7 +290,12 @@ function CategorySelect(props: {
     ["Other", "transfer"],
   ];
   return (
-    <select value={props.value} onChange={(e) => props.onChange(e.target.value)} aria-label="Category">
+    <select
+      className={props.needsCategory ? "needs-category" : undefined}
+      value={props.value}
+      onChange={(e) => props.onChange(e.target.value)}
+      aria-label="Category"
+    >
       <option value="">{props.placeholder ?? "Choose category"}</option>
       {groups.map(([label, kind]) => (
         <optgroup key={kind} label={label}>

@@ -476,6 +476,27 @@ button.disclosure[aria-expanded="true"] .disclosure-arrow {
   flex: 1 1 180px;
 }
 
+/* All transactions: rows still without a category stand out while scrolling. A signal-red bar at the edge and a
+   faint tint reaching into the margin (so the columns stay aligned), plus "Needs a category" in the box itself. */
+.ledger-row.is-uncategorized {
+  margin: 0 calc(-1 * var(--space-3));
+  padding-left: var(--space-3);
+  padding-right: var(--space-3);
+  background: color-mix(in srgb, var(--signal) 6%, transparent);
+  box-shadow: inset 3px 0 0 var(--signal);
+}
+
+select.needs-category {
+  color: var(--signal);
+  border: 1px dashed var(--signal);
+  background: var(--paper-raised);
+}
+
+select.needs-category option,
+select.needs-category optgroup {
+  color: var(--ink);
+}
+
 .category-cell {
   display: flex;
   flex-direction: column;
