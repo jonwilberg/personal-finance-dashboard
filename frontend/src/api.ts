@@ -37,8 +37,13 @@ export interface Account {
   identifiers?: string[];
   balances: { fetched_at: string; balances: Balance[] } | null;
   transactions: TransactionsSummary | null;
-  /** A person's name from FINANCE_PEOPLE, or "shared". */
+  /** The owning person's id (as text), or "shared". */
   owner: string;
+}
+
+export interface Person {
+  id: number;
+  name: string;
 }
 
 /** Someone accounts can belong to: a person, or "shared" (always last). */
@@ -137,6 +142,11 @@ export const api = {
   disconnect: (sessionId: string) =>
     request<{ ok: boolean }>(`/api/connections/${encodeURIComponent(sessionId)}`, { method: "DELETE" }),
   owners: () => request<Owner[]>("/api/owners"),
+  people: () => request<Person[]>("/api/people"),
+  addPerson: (name: string) => request<Person>("/api/people", { method: "POST", body: JSON.stringify({ name }) }),
+  renamePerson: (id: number, name: string) =>
+    request<Person>(`/api/people/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+  removePerson: (id: number) => request<{ ok: boolean }>(`/api/people/${id}`, { method: "DELETE" }),
   setOwner: (uid: string, owner: string) =>
     request<{ owner: string }>(`/api/accounts/${encodeURIComponent(uid)}/owner`, {
       method: "PUT",

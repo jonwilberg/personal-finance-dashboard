@@ -208,7 +208,6 @@ def household(tmp_path, bank):
         private_key_path=tmp_path / "unused.pem",
         redirect_url="https://localhost:8765/callback",
         data_dir=tmp_path / "data",
-        people=("Alex", "Sam"),
     )
     store = Storage(settings.data_dir)
     store.add_session({
@@ -236,31 +235,60 @@ def spent(api, *owners):
     return figures["spent"], figures["income"]
 
 
-def test_accounts_are_shared_until_given_to_a_person(household):
-    assert household.get("/api/owners").json() == [
-        {"id": "Alex", "name": "Alex"}, {"id": "Sam", "name": "Sam"}, {"id": "shared", "name": "Shared"},
-    ]
-    owners = lambda: {a["uid"]: a["owner"] for a in household.get("/api/connections").json()[0]["accounts"]}  # noqa: E731
-    assert owners() == {"alex": "shared", "sam": "shared", "joint": "shared"}
+def add_people(api, *names):
+    return {name: str(api.post("/api/people", json={"name": name}).json()["id"]) for name in names}
 
-    assert household.put("/api/accounts/alex/owner", json={"owner": "Alex"}).status_code == 200
-    assert household.put("/api/accounts/sam/owner", json={"owner": "Sam"}).status_code == 200
-    assert owners() == {"alex": "Alex", "sam": "Sam", "joint": "shared"}
+
+def test_people_can_be_added_renamed_and_removed(household):
+    assert household.get("/api/owners").json() == [{"id": "shared", "name": "Shared"}]
+    ids = add_people(household, "Alex", "Sam")
+    assert household.get("/api/owners").json() == [
+        {"id": ids["Alex"], "name": "Alex"}, {"id": ids["Sam"], "name": "Sam"}, {"id": "shared", "name": "Shared"},
+    ]
+    assert household.post("/api/people", json={"name": " alex "}).status_code == 422  # taken, whatever the case
+    assert household.post("/api/people", json={"name": "Shared"}).status_code == 422
+    assert household.post("/api/people", json={"name": "  "}).status_code == 422
+
+    assert household.patch(f"/api/people/{ids['Alex']}", json={"name": "Alexandra"}).json()["name"] == "Alexandra"
+    assert household.patch(f"/api/people/{ids['Alex']}", json={"name": "sam"}).status_code == 422
+    assert household.patch("/api/people/999", json={"name": "Kim"}).status_code == 404
+    assert household.delete("/api/people/999").status_code == 404
+
+
+def owners_of(api):
+    return {a["uid"]: a["owner"] for a in api.get("/api/connections").json()[0]["accounts"]}
+
+
+def test_accounts_are_shared_until_given_to_a_person(household):
+    ids = add_people(household, "Alex", "Sam")
+    assert owners_of(household) == {"alex": "shared", "sam": "shared", "joint": "shared"}
+
+    assert household.put("/api/accounts/alex/owner", json={"owner": ids["Alex"]}).status_code == 200
+    assert household.put("/api/accounts/sam/owner", json={"owner": ids["Sam"]}).status_code == 200
+    assert owners_of(household) == {"alex": ids["Alex"], "sam": ids["Sam"], "joint": "shared"}
+
+    # Renaming keeps the accounts; removing a person makes their accounts shared.
+    household.patch(f"/api/people/{ids['Alex']}", json={"name": "Alexandra"})
+    assert owners_of(household)["alex"] == ids["Alex"]
+    assert household.delete(f"/api/people/{ids['Sam']}").status_code == 200
+    assert owners_of(household)["sam"] == "shared"
 
     assert household.put("/api/accounts/alex/owner", json={"owner": "shared"}).status_code == 200
-    assert owners()["alex"] == "shared"
+    assert owners_of(household)["alex"] == "shared"
     assert household.put("/api/accounts/alex/owner", json={"owner": "Nobody"}).status_code == 422
-    assert household.put("/api/accounts/missing/owner", json={"owner": "Alex"}).status_code == 404
+    assert household.put("/api/accounts/alex/owner", json={"owner": "999"}).status_code == 404
+    assert household.put("/api/accounts/missing/owner", json={"owner": ids["Alex"]}).status_code == 404
 
 
 def test_overview_counts_only_the_chosen_owners_and_never_transfers(household):
-    household.put("/api/accounts/alex/owner", json={"owner": "Alex"})
-    household.put("/api/accounts/sam/owner", json={"owner": "Sam"})
+    ids = add_people(household, "Alex", "Sam")
+    household.put("/api/accounts/alex/owner", json={"owner": ids["Alex"]})
+    household.put("/api/accounts/sam/owner", json={"owner": ids["Sam"]})
 
     assert spent(household) == (550, 0)  # everyone: the 1 000 moved between the two accounts is left out
     # Alex's 1 000 to Sam's account is a transfer, not spending, even when Sam's accounts aren't shown...
-    assert spent(household, "Alex") == (300, 0)
+    assert spent(household, ids["Alex"]) == (300, 0)
     # ...and not income on Sam's side either.
-    assert spent(household, "Sam") == (200, 0)
+    assert spent(household, ids["Sam"]) == (200, 0)
     assert spent(household, "shared") == (50, 0)
-    assert spent(household, "Alex", "shared") == (350, 0)
+    assert spent(household, ids["Alex"], "shared") == (350, 0)

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { type Account, type AppInfo, type Connection, type Owner, api } from "./api";
 import { OwnerPicker } from "./OwnerPicker";
+import { PeopleSection } from "./PeopleSection";
 import { CategoriesPage } from "./CategoriesPage";
 import { ConnectBank } from "./ConnectBank";
 import { formatDate, formatMoney, formatUpdated } from "./format";
@@ -124,9 +125,20 @@ function AccountsPage({ titleActions, onError }: { titleActions: HTMLElement | n
   }, [onError]);
   useEffect(loadConnections, [loadConnections]);
   const [owners, setOwners] = useState<Owner[]>([]);
-  useEffect(() => {
+  const loadOwners = useCallback(() => {
     api.owners().then(setOwners).catch(onError);
   }, [onError]);
+  useEffect(loadOwners, [loadOwners]);
+  const people = owners.filter((o) => o.id !== "shared").map((o) => ({ id: Number(o.id), name: o.name }));
+  const accountCounts: Record<string, number> = {};
+  for (const account of connections?.flatMap((c) => c.accounts) ?? []) {
+    accountCounts[account.owner] = (accountCounts[account.owner] ?? 0) + 1;
+  }
+  // Adding, renaming or removing someone changes the pickers and, on removal, the accounts' owners.
+  const peopleChanged = useCallback(() => {
+    loadOwners();
+    loadConnections();
+  }, [loadOwners, loadConnections]);
 
   /** Shows the new owner at once, saves it, and puts the old one back if saving fails. */
   const changeOwner = useCallback(
@@ -172,6 +184,8 @@ function AccountsPage({ titleActions, onError }: { titleActions: HTMLElement | n
           />
         ))}
       </section>
+
+      <PeopleSection people={people} accountCounts={accountCounts} onChanged={peopleChanged} onError={onError} />
     </>
   );
 }
@@ -387,7 +401,7 @@ function AccountRow(props: { account: Account; owners: Owner[]; onOwnerChange: (
         <div className="account-name">{name}</div>
         <div className="account-meta small">{details.join(" · ")}</div>
       </div>
-      {/* With no people configured every account is shared, so there's nothing to pick. */}
+      {/* Until people are added (below) every account is shared, so there's nothing to pick. */}
       {owners.length > 1 && (
         <OwnerPicker
           mode="single"

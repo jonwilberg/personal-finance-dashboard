@@ -26,8 +26,6 @@ Bank access is read-only (Account Information). The app can't initiate payments.
      Configure it in `backend/.env.production`.
 
    Create the config files from [`backend/.env.example`](backend/.env.example). They are git-ignored.
-   Set `FINANCE_PEOPLE` there to the people in the household (e.g. `FINANCE_PEOPLE=Alex,Sam`) so each account can
-   be given to one of them; the names stay out of the repository.
 
 ## Running the web app
 
@@ -48,9 +46,10 @@ so the first time your browser warns: choose **Advanced → Proceed to localhost
 4. **Categories** lets you rename, add and delete categories, set their type (spending, income, saving, loan) and
    mark costs as fixed or adjustable. The defaults follow SSB's consumption groups and SIFO's reference budget
    (see `backend/src/finance/categories.py`).
-5. **Whose accounts:** on Accounts, mark each account as one person’s or Shared (the default). On Overview, switch
-   each person and Shared in or out to see just those accounts. Money moved between any two of your accounts is a
-   transfer, never spending or income, whoever they belong to.
+5. **Whose accounts:** under People on Accounts, add the people in the household; then mark each account as one
+   person’s or Shared (the default). On Overview, switch each person and Shared in or out to see just those
+   accounts. Money moved between any two of your accounts is a transfer, never spending or income, whoever they
+   belong to.
 
 Everything the app stores lives in a SQLite database, `backend/data/finance.db` (`backend/data/production/finance.db`
 for production). That includes bank connections, accounts, balances, raw transactions as the banks sent them, and

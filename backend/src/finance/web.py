@@ -30,7 +30,7 @@ from finance.connections import (
 )
 from finance.enable_banking import EnableBankingClient, EnableBankingError
 from finance.overview import build_overview
-from finance.storage import CategoryError, Storage
+from finance.storage import CategoryError, PersonError, Storage
 from finance.transactions import summarize
 
 FRONTEND_DIST = BACKEND_DIR.parent / "frontend" / "dist"
@@ -55,8 +55,12 @@ class RuleRequest(BaseModel):
 
 
 class OwnerChoice(BaseModel):
-    # One of the people in FINANCE_PEOPLE, or "shared".
+    # A person's id (as text, from /api/owners), or "shared".
     owner: str
+
+
+class PersonName(BaseModel):
+    name: str
 
 
 # The owner of accounts that aren't one person's.
@@ -111,13 +115,36 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
         ]
 
     def owners_by_account() -> dict[str, str]:
-        """Account uid -> owner for every stored choice; an owner no longer in FINANCE_PEOPLE counts as shared."""
-        return {uid: owner for uid, owner in store.account_owners().items() if owner in settings.people}
+        """Account uid -> owner id (a person's id as text) for accounts that are one person's."""
+        return {uid: str(person_id) for uid, person_id in store.account_owners().items()}
+
+    @app.exception_handler(PersonError)
+    async def person_error(request: Request, error: PersonError) -> JSONResponse:
+        status = 404 if str(error) == "Unknown person" else 422
+        return JSONResponse({"detail": str(error)}, status_code=status)
+
+    @app.get("/api/people")
+    def people() -> list[dict[str, Any]]:
+        return store.people()
+
+    @app.post("/api/people")
+    def add_person(request: PersonName) -> dict[str, Any]:
+        return store.add_person(request.name)
+
+    @app.patch("/api/people/{person_id}")
+    def rename_person(person_id: int, request: PersonName) -> dict[str, Any]:
+        return store.rename_person(person_id, request.name)
+
+    @app.delete("/api/people/{person_id}")
+    def remove_person(person_id: int) -> dict[str, bool]:
+        """Remove a person; their accounts become shared."""
+        store.remove_person(person_id)
+        return {"ok": True}
 
     @app.get("/api/owners")
     def owners() -> list[dict[str, str]]:
-        """Who accounts can belong to: each person, then shared."""
-        return [{"id": person, "name": person} for person in settings.people] + [{"id": SHARED, "name": "Shared"}]
+        """Who accounts can belong to: each person (id as text), then shared."""
+        return [{"id": str(p["id"]), "name": p["name"]} for p in store.people()] + [{"id": SHARED, "name": "Shared"}]
 
     @app.get("/api/connections")
     def connections() -> list[dict[str, Any]]:
@@ -138,9 +165,12 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
     @app.put("/api/accounts/{account_uid}/owner")
     def set_owner(account_uid: str, choice: OwnerChoice) -> dict[str, str]:
         _require_account(store, account_uid)
-        if choice.owner != SHARED and choice.owner not in settings.people:
+        if choice.owner == SHARED:
+            store.set_account_owner(account_uid, None)
+        elif choice.owner.isdigit():
+            store.set_account_owner(account_uid, int(choice.owner))
+        else:
             raise HTTPException(422, f"Unknown owner {choice.owner!r}")
-        store.set_account_owner(account_uid, None if choice.owner == SHARED else choice.owner)
         return {"owner": choice.owner}
 
     @app.post("/api/connections")

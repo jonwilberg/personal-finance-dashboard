@@ -1253,3 +1253,21 @@ button.sort:focus-visible {
     min-width: 0;
   }
 }
+
+/* Accounts: the people in the household */
+
+.people-list {
+  list-style: none;
+  margin: var(--space-3) 0 var(--space-4);
+  padding: 0;
+  max-width: 520px;
+}
+
+.person {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-1) 0;
+  border-bottom: var(--rule-hair);
+}

@@ -23,17 +23,6 @@ class Settings:
     # Where the web app sends the browser after a bank login: "/" when the backend serves the built
     # frontend, or the Vite dev server (e.g. http://localhost:5173/) during frontend development.
     frontend_url: str = "/"
-    # The people accounts can belong to (FINANCE_PEOPLE, comma-separated). Every account is one person's or shared.
-    people: tuple[str, ...] = ()
-
-
-def parse_people(value: str) -> tuple[str, ...]:
-    """Names from "Alex, Sam", without blanks, repeats or "Shared" (which is always an option)."""
-    names: list[str] = []
-    for name in (part.strip() for part in value.split(",")):
-        if name and name.lower() != "shared" and name.lower() not in (n.lower() for n in names):
-            names.append(name)
-    return tuple(names)
 
 
 def load_settings(env_name: str | None = None) -> Settings:
@@ -69,5 +58,4 @@ def load_settings(env_name: str | None = None) -> Settings:
         redirect_url=os.getenv("ENABLE_BANKING_REDIRECT_URL", "").strip() or None,
         data_dir=data_dir,
         frontend_url=os.getenv("FINANCE_FRONTEND_URL", "").strip() or "/",
-        people=parse_people(os.getenv("FINANCE_PEOPLE", "")),
     )
