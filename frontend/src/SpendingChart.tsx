@@ -128,11 +128,6 @@ export function SpendingChart(props: {
                     <rect key={s.key} x={x} y={top} width={barW} height={h} fill={fill} />
                   );
                 })}
-                {isSelected && (
-                  <text x={x + barW / 2} y={y(totals[i]) - 8} textAnchor="middle" className="chart-value">
-                    {formatKr(totals[i])}
-                  </text>
-                )}
                 <text
                   x={x + barW / 2}
                   y={HEIGHT - 8}
@@ -157,6 +152,29 @@ export function SpendingChart(props: {
               pointerEvents="none"
             />
           )}
+
+          {/* Each month's total above its bar: in full for the selected month (where there's room), compact for the
+              rest so twelve labels fit. Drawn after the median line, with a halo (see .chart-total), so the line never
+              runs through them. */}
+          <g pointerEvents="none">
+            {series.map((month, i) => {
+              if (totals[i] <= 0) return null;
+              const isSelected = month.month === selected;
+              const tint = isSelected ? " is-selected" : hover === i ? " is-hovered" : "";
+              return (
+                <text
+                  key={month.month}
+                  x={PAD.left + band * i + band / 2}
+                  y={y(totals[i]) - (isSelected ? 8 : 6)}
+                  textAnchor="middle"
+                  className={`chart-total${tint}`}
+                >
+                  {/* Narrow bars (phones) have no room for the full figure; it's in Spent above the chart anyway. */}
+                  {isSelected && band >= 48 ? formatKr(totals[i]) : barTotal(totals[i], band)}
+                </text>
+              );
+            })}
+          </g>
         </svg>
 
         {hovered && hover !== null && (
@@ -234,6 +252,13 @@ function niceScale(value: number) {
   const max = Math.ceil(value / step) * step;
   const ticks = Array.from({ length: Math.round(max / step) + 1 }, (_, i) => i * step);
   return { max, ticks };
+}
+
+/** A bar's total as "38,3k", or "38k" where bars are too narrow for the decimal. */
+function barTotal(value: number, band: number) {
+  if (value < 1000) return String(Math.round(value));
+  const digits = band >= 48 ? 1 : 0;
+  return `${(value / 1000).toLocaleString("nb-NO", { maximumFractionDigits: digits })}k`;
 }
 
 function compactKr(value: number) {
