@@ -226,14 +226,47 @@ class Storage:
     def save_transactions(
         self, account_uid: str, transactions: list[dict[str, Any]], fetched_at: str | None = None
     ) -> None:
-        """Replace the account's transactions with what the bank returned (pending ones may have changed)."""
+        """Store what the bank returned, keeping history from before the period it covers.
+
+        Banks often send full history only on the first fetch after a consent, and about 90 days afterwards. So
+        the fetch replaces stored transactions from its earliest date on (pending ones may have been booked or
+        dropped since), and older stored ones are kept. A fetch with no dated transactions keeps everything.
+        """
+        dates = [d for d in map(transaction_date, transactions) if d]
+        start = min(dates) if dates else None
         with self._connect() as db:
-            db.execute("DELETE FROM transactions WHERE account_uid = ?", (account_uid,))
+            if len(dates) > 1 and dates[0] != dates[-1]:
+                newest_first = dates[0] > dates[-1]
+            else:  # one date only: follow the order already stored
+                stored = [
+                    d for (d,) in db.execute(
+                        "SELECT booking_date FROM transactions WHERE account_uid = ? AND booking_date IS NOT NULL "
+                        "ORDER BY position",
+                        (account_uid,),
+                    )
+                ]
+                newest_first = len(stored) > 1 and stored[0] > stored[-1]
+            if start is not None:
+                db.execute(
+                    "DELETE FROM transactions WHERE account_uid = ? AND (booking_date IS NULL OR booking_date >= ?)",
+                    (account_uid, start),
+                )
+            # Keep the bank's order: older history goes after the new rows if the bank sends newest first.
+            if newest_first:
+                db.execute(
+                    "UPDATE transactions SET position = position + ? WHERE account_uid = ?",
+                    (len(transactions), account_uid),
+                )
+                offset = 0
+            else:
+                offset = db.execute(
+                    "SELECT coalesce(max(position), -1) + 1 FROM transactions WHERE account_uid = ?", (account_uid,)
+                ).fetchone()[0]
             db.executemany(
-                "INSERT INTO transactions VALUES (?, ?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO transactions VALUES (?, ?, ?, ?, ?)",
                 [
-                    (account_uid, key, position, transaction_date(t) or None, json.dumps(t, ensure_ascii=False))
-                    for position, (t, key) in enumerate(zip(transactions, unique_transaction_keys(transactions)))
+                    (account_uid, key, offset + i, transaction_date(t) or None, json.dumps(t, ensure_ascii=False))
+                    for i, (t, key) in enumerate(zip(transactions, unique_transaction_keys(transactions)))
                 ],
             )
             db.execute(
