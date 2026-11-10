@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { type Account, type AppInfo, type Connection, type InspectReport, api } from "./api";
 import { CategoriesPage } from "./CategoriesPage";
 import { ConnectBank } from "./ConnectBank";
-import { formatDate, formatMoney } from "./format";
+import { formatDate, formatMoney, formatUpdated } from "./format";
 import { OverviewPage } from "./OverviewPage";
 import { TransactionsPage } from "./TransactionsPage";
 
@@ -119,6 +119,10 @@ function AccountsPage({ onError }: { onError: (e: unknown) => void }) {
 
   return (
     <>
+      {connections && connections.length > 0 && (
+        <RefreshAll connections={connections} onChanged={loadConnections} />
+      )}
+
       <ConnectBank onError={onError} />
 
       <section className="section">
@@ -134,6 +138,91 @@ function AccountsPage({ onError }: { onError: (e: unknown) => void }) {
         ))}
       </section>
     </>
+  );
+}
+
+type RefreshStatus = { state: "waiting" | "refreshing" | "done" } | { state: "failed"; message: string };
+
+/** The most recent time the account's balance or transactions were fetched from the bank. */
+function lastUpdated(account: Account) {
+  const times = [account.balances?.fetched_at, account.transactions?.fetched_at].filter((t): t is string => !!t);
+  return times.length ? times.reduce((a, b) => (new Date(a) > new Date(b) ? a : b)) : null;
+}
+
+/** Refreshes every account with a valid consent, one at a time, and lists when each was last updated. */
+function RefreshAll({ connections, onChanged }: { connections: Connection[]; onChanged: () => void }) {
+  const [status, setStatus] = useState<Record<string, RefreshStatus>>({});
+  const [running, setRunning] = useState(false);
+
+  const rows = connections.flatMap((connection) =>
+    connection.accounts.map((account) => ({ connection, account, updated: lastUpdated(account) })),
+  );
+  const refreshable = rows.filter((row) => !row.connection.expired);
+
+  const refreshAll = async () => {
+    setRunning(true);
+    setStatus(Object.fromEntries(refreshable.map((row) => [row.account.uid, { state: "waiting" }])));
+    // One at a time: banks rate-limit, and it keeps a failing bank from hiding the others' progress.
+    for (const { account } of refreshable) {
+      setStatus((s) => ({ ...s, [account.uid]: { state: "refreshing" } }));
+      try {
+        await api.refresh(account.uid);
+        setStatus((s) => ({ ...s, [account.uid]: { state: "done" } }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus((s) => ({ ...s, [account.uid]: { state: "failed", message } }));
+      }
+    }
+    setRunning(false);
+    onChanged();
+  };
+
+  const done = Object.values(status).filter((s) => s.state === "done" || s.state === "failed").length;
+  const failed = Object.values(status).filter((s) => s.state === "failed").length;
+
+  return (
+    <section className="section refresh-all">
+      <div className="refresh-all-head">
+        <button
+          onClick={refreshAll}
+          disabled={running || refreshable.length === 0}
+          title="Fetches balance and full history for every account. Many banks allow about 4 fetches per account per day."
+        >
+          {running ? `Refreshing ${Math.min(done + 1, refreshable.length)} of ${refreshable.length}…` : "Refresh all"}
+        </button>
+        {!running && done > 0 && (
+          <span className={`small ${failed ? "refresh-failed" : "muted"}`}>
+            {failed ? `${failed} of ${done} failed` : `All ${plural(done, "account")} updated`}
+          </span>
+        )}
+      </div>
+      <ul className="refresh-list small">
+        {rows.map(({ connection, account, updated }) => {
+          const s = status[account.uid];
+          return (
+            <li key={account.uid}>
+              <span>
+                {connection.aspsp.name} · {accountName(account)}
+                {accountNumber(account) && <span className="muted"> {accountNumber(account)}</span>}
+              </span>
+              <span className={s?.state === "failed" ? "refresh-failed" : "muted"}>
+                {connection.expired
+                  ? "Consent expired, reconnect"
+                  : s?.state === "refreshing"
+                    ? "Refreshing…"
+                    : s?.state === "waiting"
+                      ? "Waiting…"
+                      : s?.state === "failed"
+                        ? `Failed: ${s.message}`
+                        : updated
+                          ? `Updated ${formatUpdated(updated)}`
+                          : "Never updated"}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -196,7 +285,7 @@ function ConnectionCard(props: { connection: Connection; onChanged: () => void; 
           <span />
         </div>
         {connection.accounts.map((account) => (
-          <AccountRow key={account.uid} account={account} onError={onError} />
+          <AccountRow key={account.uid} account={account} onChanged={onChanged} onError={onError} />
         ))}
       </div>
     </article>
@@ -237,17 +326,21 @@ function monthRange(first: string | null, last: string | null) {
   return `${month(first)} – ${month(last)}`;
 }
 
-function AccountRow(props: { account: Account; onError: (e: unknown) => void }) {
+function AccountRow(props: { account: Account; onChanged: () => void; onError: (e: unknown) => void }) {
   const [account, setAccount] = useState(props.account);
   const [fetching, setFetching] = useState(false);
   const [report, setReport] = useState<InspectReport | null>(null);
   const balance = account.balances?.balances[0];
+
+  // Pick up new data when the page reloads connections, e.g. after "Refresh all".
+  useEffect(() => setAccount(props.account), [props.account]);
 
   const fetchHistory = async () => {
     setFetching(true);
     try {
       const state = await api.refresh(account.uid);
       setAccount((current) => ({ ...current, ...state }));
+      props.onChanged(); // keeps the "last updated" list at the top in step
       if (report) setReport(await api.inspect(account.uid));
     } catch (error) {
       props.onError(error);

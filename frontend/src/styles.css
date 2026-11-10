@@ -1189,3 +1189,47 @@ button.sort:focus-visible {
     display: none;
   }
 }
+
+/* Accounts: refresh all */
+
+.refresh-all-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.refresh-list {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  max-width: 640px;
+}
+
+.refresh-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-1) 0;
+  border-bottom: var(--rule-hair);
+}
+
+.refresh-list li > span:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.refresh-failed {
+  color: var(--signal);
+}
+
+@media (max-width: 600px) {
+  .refresh-list li {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .refresh-list li > span:last-child {
+    text-align: left;
+    white-space: normal;
+  }
+}
