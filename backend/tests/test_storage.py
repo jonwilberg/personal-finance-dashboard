@@ -33,7 +33,7 @@ def test_sessions_round_trip(tmp_path):
     assert storage.has_account("acc-2")
 
 
-def test_transactions_keep_order_and_are_replaced_on_refresh(tmp_path):
+def test_transactions_keep_order_and_refresh_keeps_older_history(tmp_path):
     storage = Storage(tmp_path)
     storage.add_session(SESSION)
     assert storage.load_transactions("acc-1") is None
@@ -43,12 +43,51 @@ def test_transactions_keep_order_and_are_replaced_on_refresh(tmp_path):
     assert storage.has_transaction("acc-1:t1")
     assert storage.transactions_fetched_at("acc-1") is not None
 
+    # A later fetch covering only 2 Oct leaves 1 Oct alone.
     storage.save_transactions("acc-1", TRANSACTIONS[:1])
-    assert storage.load_transactions("acc-1") == TRANSACTIONS[:1]
-    assert not storage.has_transaction("acc-1:t1")
+    assert storage.load_transactions("acc-1") == TRANSACTIONS
+    assert storage.has_transaction("acc-1:t1")
 
     storage.save_transactions("acc-2", [])
     assert storage.load_transactions("acc-2") == []
+
+
+def _tx(transaction_id, day, status="BOOK"):
+    return {"transaction_id": transaction_id, "booking_date": f"2026-{day}", "status": status,
+            "transaction_amount": {"amount": "1", "currency": "NOK"}}
+
+
+def test_refresh_replaces_its_own_period_and_keeps_older_history(tmp_path):
+    """Full history first, then a bank's usual ~90 days: old history stays, the recent period is replaced."""
+    storage = Storage(tmp_path)
+    storage.add_session(SESSION)
+    first = [_tx("pending", "11-03", "PDNG"), _tx("c", "10-20"), _tx("b", "08-10"), _tx("a", "01-05")]
+    storage.save_transactions("acc-1", first)
+
+    # The pending one was booked under a new id; "b" is outside the bank's new window.
+    later = [_tx("new", "11-09"), _tx("booked", "11-04"), _tx("c", "10-20")]
+    storage.save_transactions("acc-1", later)
+
+    ids = [t["transaction_id"] for t in storage.load_transactions("acc-1")]
+    assert ids == ["new", "booked", "c", "b", "a"]  # newest first, like the bank
+    assert not storage.has_transaction("acc-1:pending")
+
+
+def test_refresh_keeps_order_when_bank_sends_oldest_first(tmp_path):
+    storage = Storage(tmp_path)
+    storage.add_session(SESSION)
+    storage.save_transactions("acc-1", [_tx("a", "01-05"), _tx("b", "08-10"), _tx("c", "10-20")])
+    storage.save_transactions("acc-1", [_tx("c", "10-20"), _tx("d", "11-09")])
+
+    assert [t["transaction_id"] for t in storage.load_transactions("acc-1")] == ["a", "b", "c", "d"]
+
+
+def test_empty_refresh_keeps_history(tmp_path):
+    storage = Storage(tmp_path)
+    storage.add_session(SESSION)
+    storage.save_transactions("acc-1", TRANSACTIONS)
+    storage.save_transactions("acc-1", [])
+    assert storage.load_transactions("acc-1") == TRANSACTIONS
 
 
 def test_removed_connection_hides_but_keeps_transactions(tmp_path):
