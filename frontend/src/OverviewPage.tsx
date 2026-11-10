@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { type Overview, type Owner, api, overviewApi } from "./api";
 import { formatKr } from "./format";
 import { CategoryScoreboard } from "./CategoryScoreboard";
-import { OwnerPicker } from "./OwnerPicker";
+import { OwnerFilter, ownerScope } from "./OwnerPicker";
 import { SpendingChart } from "./SpendingChart";
 
 const OWNERS_KEY = "overview-owners";
@@ -46,33 +46,30 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
     overviewApi.get(month, filterKey?.split(",")).then(setOverview).catch(onError);
   }, [month, owners, filterKey, onError]);
 
-  const toggle = (id: string) => {
-    const next = selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id];
-    const ordered = (owners ?? []).map((o) => o.id).filter((o) => next.includes(o));
-    setSelected(ordered);
+  const choose = (next: string[]) => {
+    setSelected(next);
     try {
-      localStorage.setItem(OWNERS_KEY, JSON.stringify(ordered));
+      localStorage.setItem(OWNERS_KEY, JSON.stringify(next));
     } catch {
       // storage unavailable: the choice lasts until the page reloads
     }
   };
 
+  // Shown once there's someone to choose between; until then every account is shared.
   const ownerFilter = owners && owners.length > 1 && (
-    <div className="owner-filter">
-      <span className="label">Accounts</span>
-      <OwnerPicker mode="multi" label="Whose accounts to count" owners={owners} selected={selected} onToggle={toggle} />
-    </div>
+    <OwnerFilter owners={owners} selected={selected} onChange={choose} />
   );
+  const scope = owners ? ownerScope(owners, selected) : null;
 
   if (!overview) return <p className="muted">Loading…</p>;
   if (!overview.month || !overview.figures) {
     return (
       <section className="section front">
         {ownerFilter}
-        <h2>{filter ? "No transactions in these accounts" : overview.headline}</h2>
+        <h2>{filter ? `No transactions in ${scope ?? "these accounts"}` : overview.headline}</h2>
         <p className="dek">
           {filter ? (
-            "Switch in more accounts above, or choose whose each account is on the Accounts page."
+            "Tick more accounts above, or mark whose each account is on the Accounts page."
           ) : (
             <>
               Connect a bank and fetch its history on the <a href="#/accounts">Accounts</a> page.
@@ -126,7 +123,9 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
       </section>
 
       <section className="section">
-        <p className="label">Spending, last {overview.series.length} months</p>
+        <p className="label">
+          Spending, last {overview.series.length} months{scope && ` · ${scope}`}
+        </p>
         <SpendingChart
           series={overview.series}
           selected={overview.month}
@@ -141,7 +140,7 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
 
       {overview.scoreboard && overview.scoreboard.length > 0 && (
         <section className="section">
-          <p className="label">Spending by category</p>
+          <p className="label">Spending by category{scope && ` · ${scope}`}</p>
           <CategoryScoreboard
             rows={overview.scoreboard}
             months={overview.series}

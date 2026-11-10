@@ -404,11 +404,10 @@ function AccountRow(props: { account: Account; owners: Owner[]; onOwnerChange: (
       {/* Until people are added (below) every account is shared, so there's nothing to pick. */}
       {owners.length > 1 && (
         <OwnerPicker
-          mode="single"
           label={`Whose is ${name}?`}
           owners={owners}
-          selected={[account.owner]}
-          onToggle={(owner) => onOwnerChange(account.uid, owner)}
+          selected={account.owner}
+          onChange={(owner) => onOwnerChange(account.uid, owner)}
         />
       )}
       {balance ? (

@@ -1174,7 +1174,8 @@ button.sort:focus-visible {
   }
 }
 
-/* Owner picker: joined buttons, the chosen ones filled in ink */
+/* Owner picker (Accounts): whose an account is. Joined buttons, because it's one choice; the chosen one is
+   tinted like a selected row rather than filled like a primary button. */
 
 .owner-picker {
   display: inline-flex;
@@ -1188,7 +1189,7 @@ button.sort:focus-visible {
   border-radius: 0;
   padding: 3px 10px;
   font-size: var(--text-caption);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .owner-picker button + button {
@@ -1210,13 +1211,11 @@ button.sort:focus-visible {
 }
 
 .owner-picker button.is-on {
-  position: relative;
-  background: var(--ink);
+  position: relative; /* its ink border sits above the neighbours' hairlines */
+  background: var(--highlight);
   border-color: var(--ink);
-  color: var(--paper);
-}
-
-.owner-picker button[aria-disabled="true"] {
+  color: var(--ink);
+  font-weight: 500;
   cursor: default;
 }
 
@@ -1230,12 +1229,70 @@ button.sort:focus-visible {
   min-width: 10rem;
 }
 
-/* Overview: whose accounts are counted, above the month switcher */
+/* Owner filter (Overview): whose accounts are counted. Separate chips with tick boxes, because any mix can be on. */
+
 .owner-filter {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+button.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px 5px 9px;
+  background: transparent;
+  color: var(--ink-secondary);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-size: var(--text-small);
+  font-weight: 400;
+}
+
+button.chip:hover:not(.is-on) {
+  background: var(--paper-sunken);
+  color: var(--ink);
+  opacity: 1;
+}
+
+button.chip.is-on {
+  background: var(--highlight);
+  border-color: var(--ink);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.chip-box {
+  display: grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  border: 1px solid var(--ink-muted);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+}
+
+.chip-box svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: var(--paper);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  visibility: hidden;
+}
+
+.chip.is-on .chip-box {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.chip.is-on .chip-box svg {
+  visibility: visible;
 }
 
 @media (max-width: 600px) {
