@@ -486,11 +486,14 @@ button.disclosure[aria-expanded="true"] .disclosure-arrow {
   box-shadow: inset 3px 0 0 var(--signal);
 }
 
-/* All transactions: transfers between your own accounts aren’t spending or income, so their text steps back.
-   The category box keeps full strength, so it still clearly reads as something to click. */
-.ledger-row.is-transfer > :not(.category-cell),
-.ledger-row.is-transfer .source {
-  opacity: 0.6;
+/* All transactions: transfers between your own accounts aren’t spending or income. A faint grey band sets them
+   apart without making them look disabled: text and category box keep full strength. Like the uncategorized band,
+   it reaches into the margin so the columns stay aligned. */
+.ledger-row.is-transfer {
+  margin: 0 calc(-1 * var(--space-3));
+  padding-left: var(--space-3);
+  padding-right: var(--space-3);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
 }
 
 select.needs-category {
