@@ -486,16 +486,11 @@ button.disclosure[aria-expanded="true"] .disclosure-arrow {
   box-shadow: inset 3px 0 0 var(--signal);
 }
 
-/* All transactions: transfers between your own accounts aren’t spending or income, so they step back. Hovering
-   or focusing the row brings it back to full strength, for changing its category. */
-.ledger-row.is-transfer {
+/* All transactions: transfers between your own accounts aren’t spending or income, so their text steps back.
+   The category box keeps full strength, so it still clearly reads as something to click. */
+.ledger-row.is-transfer > :not(.category-cell),
+.ledger-row.is-transfer .source {
   opacity: 0.6;
-  transition: opacity 0.15s;
-}
-
-.ledger-row.is-transfer:hover,
-.ledger-row.is-transfer:focus-within {
-  opacity: 1;
 }
 
 select.needs-category {
