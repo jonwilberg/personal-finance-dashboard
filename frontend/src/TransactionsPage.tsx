@@ -4,6 +4,9 @@ import { formatDate, formatMoney } from "./format";
 
 type View = "review" | "all";
 
+/** The category filter's choice for transactions without a category. The colon can't occur in a category id. */
+const UNCATEGORIZED = ":uncategorized";
+
 export function TransactionsPage({ onError }: { onError: (e: unknown) => void }) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [summary, setSummary] = useState<CategorizationSummary | null>(null);
@@ -19,11 +22,13 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
 
   const reload = useCallback(() => {
     api.categorizationSummary().then(setSummary).catch(onError);
+    // The full list filtered to uncategorized asks the API for the same set as Needs review, shown as a list.
+    const onlyUncategorized = view === "all" && categoryFilter === UNCATEGORIZED;
     api
       .transactions({
-        view,
+        view: onlyUncategorized ? "review" : view,
         q: query.trim(),
-        category: view === "all" ? categoryFilter : undefined,
+        category: view === "all" && !onlyUncategorized ? categoryFilter : undefined,
         limit: view === "review" ? 5000 : 300,
       })
       .then((result) => {
@@ -68,6 +73,8 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
         {view === "all" && (
           <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} aria-label="Category">
             <option value="">All categories</option>
+            <option value={UNCATEGORIZED}>Uncategorized</option>
+            <option disabled>──────────</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
