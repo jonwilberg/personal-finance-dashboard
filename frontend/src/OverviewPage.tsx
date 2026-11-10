@@ -69,7 +69,7 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
         <h2>{filter ? `No transactions in ${scope ?? "these accounts"}` : overview.headline}</h2>
         <p className="dek">
           {filter ? (
-            "Choose Everyone above, or mark whose each account is on the Accounts page."
+            "Tick more accounts above, or mark whose each account is on the Accounts page."
           ) : (
             <>
               Connect a bank and fetch its history on the <a href="#/accounts">Accounts</a> page.

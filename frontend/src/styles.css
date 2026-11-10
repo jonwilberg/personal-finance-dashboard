@@ -1239,12 +1239,6 @@ button.sort:focus-visible {
   margin-bottom: var(--space-4);
 }
 
-.owner-filter-rule {
-  width: 1px;
-  height: 20px;
-  background: var(--rule);
-}
-
 button.chip {
   display: inline-flex;
   align-items: center;

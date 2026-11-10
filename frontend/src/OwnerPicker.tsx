@@ -28,29 +28,23 @@ export function OwnerPicker(props: { label: string; owners: Owner[]; selected: s
 }
 
 /**
- * Whose accounts the overview counts, as filter chips: Everyone, or any mix of people and Shared.
- * Separate chips with a tick read as "pick any". Picking a person from Everyone shows just them; switching the
- * last one off goes back to Everyone, so there's never an empty choice.
+ * Whose accounts the overview counts: a chip per person and Shared, all ticked by default (everyone's money).
+ * Separate chips with a tick read as "pick any"; each click switches one in or out. Switching off the last one
+ * ticks them all again, so there's never an empty choice.
  */
 export function OwnerFilter(props: { owners: Owner[]; selected: string[]; onChange: (selected: string[]) => void }) {
   const { owners, selected, onChange } = props;
   const all = owners.map((o) => o.id);
-  const everyone = selected.length === all.length;
 
   const toggle = (id: string) => {
-    if (everyone) return onChange([id]);
     const next = selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id];
     onChange(next.length === 0 ? all : all.filter((o) => next.includes(o)));
   };
 
   return (
     <div className="owner-filter" role="group" aria-label="Whose accounts to count">
-      <Chip on={everyone} onClick={() => !everyone && onChange(all)}>
-        Everyone
-      </Chip>
-      <span className="owner-filter-rule" aria-hidden="true" />
       {owners.map((owner) => (
-        <Chip key={owner.id} on={!everyone && selected.includes(owner.id)} onClick={() => toggle(owner.id)}>
+        <Chip key={owner.id} on={selected.includes(owner.id)} onClick={() => toggle(owner.id)}>
           {owner.name}
         </Chip>
       ))}
