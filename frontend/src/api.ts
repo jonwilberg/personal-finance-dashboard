@@ -48,16 +48,6 @@ export interface Connection {
   accounts: Account[];
 }
 
-export interface InspectReport {
-  count: number;
-  first_date: string | null;
-  last_date: string | null;
-  statuses: Record<string, number>;
-  directions: Record<string, number>;
-  currencies: Record<string, number>;
-  coverage: { field: string; share: number }[];
-}
-
 export type CategoryKind = "expense" | "income" | "saving" | "loan" | "transfer";
 
 export interface Category {
@@ -143,7 +133,6 @@ export const api = {
       `/api/accounts/${encodeURIComponent(uid)}/refresh?longest=true`,
       { method: "POST" },
     ),
-  inspect: (uid: string) => request<InspectReport>(`/api/accounts/${encodeURIComponent(uid)}/inspect`),
   categories: () => request<Category[]>("/api/categories"),
   addCategory: (name: string, kind: CategoryKind, fixed: boolean) =>
     request<Category>("/api/categories", { method: "POST", body: JSON.stringify({ name, kind, fixed }) }),

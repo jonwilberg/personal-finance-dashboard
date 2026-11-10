@@ -114,19 +114,13 @@ def test_callback_passes_bank_errors_to_frontend(api, bank):
     assert response.headers["location"].startswith("/?error=access_denied")
 
 
-def test_refresh_and_inspect(api, bank):
+def test_refresh(api, bank):
     connect(api, bank)
 
     refreshed = api.post("/api/accounts/acc-1/refresh", params={"longest": True}).json()
     assert refreshed["balances"]["balances"][0]["balance_amount"]["amount"] == "100"
     assert refreshed["transactions"]["count"] == 2
     assert refreshed["transactions"]["first_date"] == "2026-10-01"
-
-    report = api.get("/api/accounts/acc-1/inspect").json()
-    assert report["directions"] == {"DBIT": 1, "CRDT": 1}
-    coverage = {item["field"]: item["share"] for item in report["coverage"]}
-    assert coverage["creditor.name"] == 0.5
-    assert "Rema" not in json.dumps(report)
 
 
 def test_unknown_account_is_rejected(api):

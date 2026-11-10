@@ -275,33 +275,26 @@ label {
 }
 
 .account-list {
+  list-style: none;
+  margin: 0;
   padding: 0 var(--space-4);
 }
 
-.account-head {
-  padding: var(--space-2) 0;
-  font-size: var(--text-label);
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
-  border-bottom: var(--rule-hair);
-}
-
 .account {
-  border-bottom: var(--rule-hair);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
   padding: var(--space-3) 0;
+  border-bottom: var(--rule-hair);
 }
 
 .account:last-child {
   border-bottom: none;
 }
 
-.account-grid {
-  display: grid;
-  grid-template-columns: minmax(180px, 1.4fr) minmax(120px, 1fr) minmax(150px, 1fr) 230px;
-  gap: var(--space-3);
-  align-items: center;
+.account-main {
+  min-width: 0;
 }
 
 .account-name {
@@ -309,12 +302,23 @@ label {
 }
 
 .account-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
   margin-top: 2px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
 }
+
+.account-balance {
+  flex: none;
+  text-align: right;
+}
+
+.amount {
+  font-family: var(--font-display);
+  font-size: var(--text-subhead);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Small outlined tag, e.g. FIXED in the category scoreboard */
 
 .account-type {
   font-size: var(--text-label);
@@ -325,104 +329,6 @@ label {
   border: var(--rule-hair);
   border-radius: var(--radius);
   padding: 0 5px;
-}
-
-.account-balance {
-  text-align: right;
-}
-
-.amount {
-  font-family: var(--font-display);
-  font-size: var(--text-subhead);
-  font-variant-numeric: tabular-nums lining-nums;
-}
-
-.account-transactions {
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.account-actions {
-  display: flex;
-  gap: var(--space-2);
-  justify-content: flex-end;
-}
-
-/* Field coverage (inspect) */
-
-.inspect {
-  margin-top: var(--space-3);
-  padding: var(--space-4);
-  background: var(--paper-sunken);
-}
-
-.coverage {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--text-small);
-  font-variant-numeric: tabular-nums;
-}
-
-.coverage th {
-  text-align: left;
-  font-size: var(--text-label);
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-secondary);
-  padding: var(--space-1) 0;
-  border-bottom: 1px solid var(--ink);
-}
-
-.coverage td {
-  padding: 3px 0;
-  border-bottom: 1px dotted var(--rule);
-}
-
-.coverage td:first-child {
-  width: 50%;
-  padding-right: var(--space-3);
-}
-
-.coverage code {
-  font-size: var(--text-caption);
-}
-
-.bar {
-  position: relative;
-  height: 16px;
-  background: var(--paper);
-}
-
-.bar-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: var(--cat-other);
-}
-
-.bar span {
-  position: relative;
-  padding-left: 6px;
-  font-size: var(--text-caption);
-}
-
-@media (max-width: 640px) {
-  .account-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .account-head {
-    display: none;
-  }
-
-  .account-balance {
-    text-align: left;
-  }
-
-  .account-actions {
-    grid-column: 1 / -1;
-    justify-content: flex-start;
-  }
 }
 
 /* Navigation */

@@ -31,7 +31,7 @@ from finance.connections import (
 from finance.enable_banking import EnableBankingClient, EnableBankingError
 from finance.overview import build_overview
 from finance.storage import CategoryError, Storage
-from finance.transactions import inspect, summarize
+from finance.transactions import summarize
 
 FRONTEND_DIST = BACKEND_DIR.parent / "frontend" / "dist"
 # A bank login that hasn't come back within this time is forgotten.
@@ -144,14 +144,6 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
             transactions = client.iter_transactions(account_uid, date_from=date.today() - timedelta(days=days))
         store.save_transactions(account_uid, list(transactions))
         return _account_state(store, account_uid)
-
-    @app.get("/api/accounts/{account_uid}/inspect")
-    def inspect_account(account_uid: str) -> dict[str, Any]:
-        _require_account(store, account_uid)
-        transactions = store.load_transactions(account_uid)
-        if transactions is None:
-            raise HTTPException(404, "No transactions fetched for this account yet")
-        return inspect(transactions)
 
     def all_transactions() -> list[dict[str, Any]]:
         return categorized_transactions(store.sessions(), store.raw_transactions_by_account(), store.categorization())
