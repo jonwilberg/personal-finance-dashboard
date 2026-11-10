@@ -477,7 +477,7 @@ button.disclosure[aria-expanded="true"] .disclosure-arrow {
 }
 
 /* All transactions: rows still without a category stand out while scrolling. A signal-red bar at the edge and a
-   faint tint reaching into the margin (so the columns stay aligned), plus "Needs a category" in the box itself. */
+   faint tint reaching into the margin (so the columns stay aligned), plus a red dashed category box. */
 .ledger-row.is-uncategorized {
   margin: 0 calc(-1 * var(--space-3));
   padding-left: var(--space-3);

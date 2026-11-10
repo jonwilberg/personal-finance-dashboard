@@ -258,7 +258,7 @@ function TransactionTable(props: {
               categories={props.categories}
               value={t.category ?? ""}
               onChange={(value) => change(t, value)}
-              placeholder="Needs a category"
+              placeholder="Uncategorized"
               needsCategory={!t.category}
             />
             <span className={`source source-${t.category_source ?? "none"}`}>{sourceLabel(t.category_source)}</span>
