@@ -236,6 +236,8 @@ def categorize(transactions: list[dict[str, Any]], settings: CategorizationSetti
     for t in transactions:
         category, source = _decide(t, settings.overrides, rules, transfers, kinds)
         t["category"], t["category_source"], t["kind"] = category, source, kinds.get(category)
+        # Which of your rules decided it: the first match in the same longest-first order _decide used.
+        t["rule"] = next(r.pattern for r in rules if r.matches(t["text"])) if source == "rule" else None
 
 
 def _decide(t, overrides, rules, transfers, kinds) -> tuple[str | None, str | None]:

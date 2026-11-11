@@ -101,6 +101,17 @@ export interface Transaction {
   category_source: CategorySource;
   /** The kind of its category ("transfer" for money between your own accounts); null when uncategorized. */
   kind: CategoryKind | null;
+  /** The pattern of your rule that decided the category, when a rule did. */
+  rule: string | null;
+}
+
+/** One of your rules: transactions whose text contains `pattern` get `category`. */
+export interface CategoryRule {
+  pattern: string;
+  category: string;
+  created_at: string;
+  /** How many transactions it categorizes now; a longer rule or your own choice can win over it. */
+  matched: number;
 }
 
 export interface CategorizationSummary {
@@ -181,11 +192,19 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ category }),
     }),
+  rules: () => request<CategoryRule[]>("/api/rules"),
   addRule: (pattern: string, category: string) =>
     request<{ pattern: string; category: string; matched: number }>("/api/rules", {
       method: "POST",
       body: JSON.stringify({ pattern, category }),
     }),
+  retargetRule: (pattern: string, category: string) =>
+    request<{ pattern: string; category: string; matched: number }>(
+      `/api/rules?pattern=${encodeURIComponent(pattern)}`,
+      { method: "PATCH", body: JSON.stringify({ category }) },
+    ),
+  deleteRule: (pattern: string) =>
+    request<{ ok: boolean }>(`/api/rules?pattern=${encodeURIComponent(pattern)}`, { method: "DELETE" }),
   categorizationSummary: () => request<CategorizationSummary>("/api/categorization/summary"),
 };
 
