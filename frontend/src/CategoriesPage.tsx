@@ -135,10 +135,8 @@ function CategoryRow(props: {
     }
   };
 
-  const usage = [
-    `${category.transactions ?? 0} transaction${category.transactions === 1 ? "" : "s"}`,
-    `${category.rules ?? 0} rule${category.rules === 1 ? "" : "s"}`,
-  ].join(" · ");
+  // Rules live in Transactions > Rules; the delete panel still says how many would move.
+  const usage = `${category.transactions ?? 0} transaction${category.transactions === 1 ? "" : "s"}`;
 
   return (
     <div className="category-row">
