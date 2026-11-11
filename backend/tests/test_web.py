@@ -292,3 +292,29 @@ def test_overview_counts_only_the_chosen_owners_and_never_transfers(household):
     assert spent(household, ids["Sam"]) == (200, 0)
     assert spent(household, "shared") == (50, 0)
     assert spent(household, ids["Alex"], "shared") == (350, 0)
+
+
+def test_rules_can_be_listed_retargeted_and_deleted(api, bank):
+    connect(api, bank)
+    api.post("/api/accounts/acc-1/refresh", params={"longest": True})
+    api.post("/api/rules", json={"pattern": "rema", "category": "shopping"})
+    api.post("/api/rules", json={"pattern": "rema 1000", "category": "eating_out"})  # longer, so it wins
+    api.post("/api/rules", json={"pattern": "kiwi", "category": "groceries"})  # matches nothing
+
+    listed = {r["pattern"]: r for r in api.get("/api/rules").json()}
+    assert [r["pattern"] for r in api.get("/api/rules").json()] == ["KIWI", "REMA", "REMA 1000"]
+    assert {p: (r["category"], r["matched"]) for p, r in listed.items()} == {
+        "KIWI": ("groceries", 0), "REMA": ("shopping", 0), "REMA 1000": ("eating_out", 1),
+    }
+    assert listed["KIWI"]["created_at"]
+    rema = next(t for t in api.get("/api/transactions").json()["items"] if t["description"] == "Rema 1000")
+    assert (rema["category"], rema["rule"]) == ("eating_out", "REMA 1000")
+
+    moved = api.patch("/api/rules", params={"pattern": "rema 1000"}, json={"category": "groceries"})
+    assert moved.json() == {"pattern": "REMA 1000", "category": "groceries", "matched": 1}
+    assert api.get("/api/transactions", params={"category": "groceries"}).json()["total"] == 1
+    assert api.patch("/api/rules", params={"pattern": "REMA 1000"}, json={"category": "nope"}).status_code == 422
+    assert api.patch("/api/rules", params={"pattern": "missing"}, json={"category": "groceries"}).status_code == 404
+
+    assert api.delete("/api/rules", params={"pattern": "REMA 1000"}).status_code == 200
+    assert {r["pattern"]: r["matched"] for r in api.get("/api/rules").json()} == {"KIWI": 0, "REMA": 1}

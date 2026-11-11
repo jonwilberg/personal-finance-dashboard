@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from finance.categories import KINDS
-from finance.categorize import Rule, categorized_transactions, summarize_categorization
+from finance.categorize import categorized_transactions, summarize_categorization
 from finance.config import BACKEND_DIR, Settings
 from finance.connections import (
     BankNotFound,
@@ -65,6 +65,10 @@ class PersonName(BaseModel):
 
 # The owner of accounts that aren't one person's.
 SHARED = "shared"
+
+
+class RuleCategory(BaseModel):
+    category: str
 
 
 class NewCategory(BaseModel):
@@ -274,9 +278,15 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
         store.set_override(transaction_id, choice.category)
         return _public(next(t for t in all_transactions() if t["id"] == transaction_id))
 
+    def rule_matches() -> Counter[str]:
+        """How many transactions each rule decides now (a longer rule or your own choice can win over it)."""
+        return Counter(t["rule"] for t in all_transactions() if t["rule"])
+
     @app.get("/api/rules")
-    def rules() -> list[dict[str, str]]:
-        return store.categorization().to_json()["rules"]
+    def rules() -> list[dict[str, Any]]:
+        """Your rules in pattern order, each with how many transactions it categorizes now."""
+        matches = rule_matches()
+        return [rule | {"matched": matches.get(rule["pattern"], 0)} for rule in store.rules()]
 
     @app.post("/api/rules")
     def add_rule(request: RuleRequest) -> dict[str, Any]:
@@ -284,9 +294,16 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
         require_category(request.category)
         pattern = request.pattern.strip().upper()
         store.add_rule(pattern, request.category)
-        rule = Rule(pattern, request.category)
-        matched = sum(1 for t in all_transactions() if t["category_source"] == "rule" and rule.matches(t["text"]))
-        return {"pattern": pattern, "category": request.category, "matched": matched}
+        return {"pattern": pattern, "category": request.category, "matched": rule_matches().get(pattern, 0)}
+
+    @app.patch("/api/rules")
+    def retarget_rule(pattern: str, choice: RuleCategory) -> dict[str, Any]:
+        """Point a rule at another category."""
+        require_category(choice.category)
+        if not store.set_rule_category(pattern, choice.category):
+            raise HTTPException(404, "Unknown rule")
+        pattern = pattern.upper()
+        return {"pattern": pattern, "category": choice.category, "matched": rule_matches().get(pattern, 0)}
 
     @app.delete("/api/rules")
     def delete_rule(pattern: str) -> dict[str, bool]:

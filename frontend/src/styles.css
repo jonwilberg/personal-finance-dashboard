@@ -1376,3 +1376,72 @@ button.chip.is-on {
   padding: var(--space-1) 0;
   border-bottom: var(--rule-hair);
 }
+
+/* Transactions > Rules: one row per rule, in the same ledger style as the transaction list. */
+
+.rules-summary {
+  margin: 0 0 var(--space-3);
+  max-width: 72ch;
+}
+
+.rules-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) 150px minmax(0, 1.2fr) 72px;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.rule-pattern {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+button.rule-matches {
+  padding: 0;
+  color: var(--compare);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  font-weight: 400;
+}
+
+.rule-actions {
+  text-align: right;
+}
+
+/* A deleted rule keeps its place with an Undo, so nothing shifts and a slip costs one click. */
+.ledger-row.is-deleted {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  color: var(--ink-muted);
+}
+
+.ledger-row.is-deleted .rule-pattern {
+  color: var(--ink-secondary);
+  text-decoration: line-through;
+}
+
+@media (max-width: 640px) {
+  .rules-grid {
+    grid-template-columns: minmax(0, 1fr) 112px;
+    gap: var(--space-2) var(--space-3);
+  }
+
+  .rules-grid > :nth-child(2) {
+    text-align: right;
+  }
+
+  /* Two by two: the text and its count on top, the category box and Delete below. The transaction list
+     makes its category box full width on phones; rules keep theirs in the first column. */
+  .rules-grid {
+    align-items: start;
+  }
+
+  .rules-grid .category-cell {
+    grid-column: auto;
+  }
+
+  .ledger-head.rules-grid {
+    display: none;
+  }
+}

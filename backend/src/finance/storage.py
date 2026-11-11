@@ -465,6 +465,22 @@ class Storage:
         with self._connect() as db:
             db.execute("INSERT OR REPLACE INTO category_rules VALUES (?, ?, ?)", (pattern.upper(), category, _now()))
 
+    def rules(self) -> list[dict[str, str]]:
+        """Your rules with when each was saved, in pattern order."""
+        with self._connect() as db:
+            rows = db.execute("SELECT * FROM category_rules ORDER BY pattern").fetchall()
+        return [{"pattern": r["pattern"], "category": r["category"], "created_at": r["created_at"]} for r in rows]
+
+    def set_rule_category(self, pattern: str, category: str) -> bool:
+        """Point an existing rule at another category; False if there's no such rule."""
+        with self._connect() as db:
+            return (
+                db.execute(
+                    "UPDATE category_rules SET category = ? WHERE pattern = ?", (category, pattern.upper())
+                ).rowcount
+                > 0
+            )
+
     def delete_rule(self, pattern: str) -> bool:
         with self._connect() as db:
             return db.execute("DELETE FROM category_rules WHERE pattern = ?", (pattern.upper(),)).rowcount > 0

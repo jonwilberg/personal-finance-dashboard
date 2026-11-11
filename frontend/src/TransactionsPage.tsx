@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type CategorizationSummary, type Category, type Transaction, api } from "./api";
+import { CategorySelect } from "./CategorySelect";
+import { RulesView } from "./RulesView";
 import { formatDate, formatMoney } from "./format";
 
-type View = "review" | "all";
+type View = "review" | "all" | "rules";
 
 /** The category filter's choice for transactions without a category. The colon can't occur in a category id. */
 const UNCATEGORIZED = ":uncategorized";
@@ -13,6 +15,8 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
   const [view, setView] = useState<View>("review");
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  // Rules have their own category filter: "Uncategorized" means nothing for a rule.
+  const [ruleCategory, setRuleCategory] = useState("");
   const [items, setItems] = useState<Transaction[] | null>(null);
   const [total, setTotal] = useState(0);
 
@@ -20,8 +24,13 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
     api.categories().then(setCategories).catch(onError);
   }, [onError]);
 
-  const reload = useCallback(() => {
+  const reloadSummary = useCallback(() => {
     api.categorizationSummary().then(setSummary).catch(onError);
+  }, [onError]);
+
+  const reload = useCallback(() => {
+    reloadSummary();
+    if (view === "rules") return; // the rules view loads its own list
     // The full list filtered to uncategorized asks the API for the same set as Needs review, shown as a list.
     const onlyUncategorized = view === "all" && categoryFilter === UNCATEGORIZED;
     api
@@ -36,7 +45,14 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
         setTotal(result.total);
       })
       .catch(onError);
-  }, [view, query, categoryFilter, onError]);
+  }, [view, query, categoryFilter, onError, reloadSummary]);
+
+  /** From a rule to the transactions containing its text. */
+  const showTransactionsFor = (pattern: string) => {
+    setCategoryFilter("");
+    setQuery(pattern);
+    setView("all");
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(reload, query ? 250 : 0);
@@ -62,11 +78,14 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
           <button role="tab" aria-selected={view === "all"} onClick={() => setView("all")}>
             All transactions
           </button>
+          <button role="tab" aria-selected={view === "rules"} onClick={() => setView("rules")}>
+            Rules
+          </button>
         </div>
         <input
           className="search"
           type="search"
-          placeholder="Search payee or text"
+          placeholder={view === "rules" ? "Search rules" : "Search payee or text"}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -82,9 +101,29 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
             ))}
           </select>
         )}
+        {view === "rules" && (
+          <select value={ruleCategory} onChange={(e) => setRuleCategory(e.target.value)} aria-label="Category">
+            <option value="">All categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
-      {items === null && <p className="muted">Loading…</p>}
+      {view === "rules" && (
+        <RulesView
+          categories={categories}
+          query={query}
+          categoryFilter={ruleCategory}
+          onShowTransactions={showTransactionsFor}
+          onChanged={reloadSummary}
+          onError={onError}
+        />
+      )}
+      {view !== "rules" && items === null && <p className="muted">Loading…</p>}
       {items && view === "review" && (
         <ReviewGroups items={items} categories={categories} onSaved={reload} onError={onError} />
       )}
@@ -279,44 +318,6 @@ function TransactionTable(props: {
         </p>
       )}
     </div>
-  );
-}
-
-function CategorySelect(props: {
-  categories: Category[];
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  /** Marks the box as still to be chosen (in the full list, where most rows have a category). */
-  needsCategory?: boolean;
-}) {
-  const groups: [string, Category["kind"]][] = [
-    ["Spending", "expense"],
-    ["Income", "income"],
-    ["Saving", "saving"],
-    ["Loans", "loan"],
-    ["Other", "transfer"],
-  ];
-  return (
-    <select
-      className={props.needsCategory ? "needs-category" : undefined}
-      value={props.value}
-      onChange={(e) => props.onChange(e.target.value)}
-      aria-label="Category"
-    >
-      <option value="">{props.placeholder ?? "Choose category"}</option>
-      {groups.map(([label, kind]) => (
-        <optgroup key={kind} label={label}>
-          {props.categories
-            .filter((c) => c.kind === kind)
-            .map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-        </optgroup>
-      ))}
-    </select>
   );
 }
 
