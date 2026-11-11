@@ -258,3 +258,13 @@ def test_bank_codes_are_not_merchant_categories():
 def test_interest_code_wins_over_category_hints():
     raw = {"checking": [tx("a", "40", "DBIT", text="Gebyrfritt", code="INTR", description="BANK SERVICES")]}
     assert run(raw)["a"] == ("fees", "bank")
+
+
+def test_regex_rules_match_the_shown_text_ignoring_case_after_text_rules():
+    raw = {"checking": [tx("a", "250.00", "CRDT", text="BF2601010000103 ABCDEFGH1234"),
+                        tx("b", "100", "CRDT", text="BF2601010000103 ABCDEFGH1234 KIWI")]}
+    settings = CategorizationSettings(rules=[Rule(r"^bf\d{13} [a-z0-9]{12}", "other_income", regex=True),
+                                             Rule("KIWI", "groceries")])
+    result = run(raw, settings)
+    assert result["a"] == ("other_income", "rule")
+    assert result["b"] == ("groceries", "rule")  # a matching text rule comes first

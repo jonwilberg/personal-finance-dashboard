@@ -1,21 +1,23 @@
-import { useEffect, useState } from "react";
-import { type Category, type CategoryRule, api } from "./api";
+import { type FormEvent, useEffect, useState } from "react";
+import { type Category, type CategoryRule, type RulePreview, api } from "./api";
 import { CategorySelect } from "./CategorySelect";
+import { formatDate, formatMoney } from "./format";
 
 /** What's happening to a row: a category being saved, just saved, or the rule deleted (kept for Undo). */
 type RowState = "saving" | "saved" | "deleted";
 
 /**
- * Your rules, one per row in pattern order: the text it looks for, how many transactions it decides, and its
- * category, which can be changed in place. Deleting leaves an Undo in the row instead of asking first, and rows
- * never move while you work (re-targeting keeps the pattern order).
+ * Your rules, one per row in pattern order: what it looks for, how many transactions it decides, and its category,
+ * which can be changed in place. Deleting leaves an Undo in the row instead of asking first, and rows never move
+ * while you work (re-targeting keeps the pattern order). New rules, including regex rules, are added at the top
+ * with a preview of what they'd catch.
  */
 export function RulesView(props: {
   categories: Category[];
   query: string;
   categoryFilter: string;
-  /** Opens All transactions searched for the rule's text. */
-  onShowTransactions: (pattern: string) => void;
+  /** Opens All transactions showing just the transactions this rule categorizes. */
+  onShowTransactions: (rule: CategoryRule) => void;
   /** Rules changed, so the categorization summary should reload. */
   onChanged: () => void;
   onError: (e: unknown) => void;
@@ -29,14 +31,14 @@ export function RulesView(props: {
   }, [onError]);
 
   const setState = (pattern: string, state: RowState | null) =>
-    setStates((current) => {
-      const next = { ...current };
-      if (state) next[pattern] = state;
-      else delete next[pattern];
-      return next;
-    });
+    setStates((current) => (state ? { ...current, [pattern]: state } : omit(current, pattern)));
   const update = (pattern: string, changes: Partial<CategoryRule>) =>
     setRules((current) => current?.map((r) => (r.pattern === pattern ? { ...r, ...changes } : r)) ?? null);
+
+  const added = async () => {
+    setRules(await api.rules());
+    onChanged();
+  };
 
   const retarget = async (rule: CategoryRule, category: string) => {
     if (!category || category === rule.category) return;
@@ -67,7 +69,7 @@ export function RulesView(props: {
 
   const undo = async (rule: CategoryRule) => {
     try {
-      const restored = await api.addRule(rule.pattern, rule.category);
+      const restored = await api.addRule(rule.pattern, rule.category, rule.regex);
       update(rule.pattern, { matched: restored.matched });
       setState(rule.pattern, null);
       onChanged();
@@ -77,18 +79,10 @@ export function RulesView(props: {
   };
 
   if (rules === null) return <p className="muted">Loading…</p>;
-  if (rules.length === 0) {
-    return (
-      <p className="empty">
-        No rules yet. Under Needs review, choose a category for a payee and save it as a rule; it then applies to
-        every transaction with that text.
-      </p>
-    );
-  }
 
   const needle = query.trim().toUpperCase();
   const shown = rules.filter(
-    (r) => (!needle || r.pattern.includes(needle)) && (!categoryFilter || r.category === categoryFilter),
+    (r) => (!needle || r.pattern.toUpperCase().includes(needle)) && (!categoryFilter || r.category === categoryFilter),
   );
   const live = rules.filter((r) => states[r.pattern] !== "deleted");
   const decided = live.reduce((sum, r) => sum + r.matched, 0);
@@ -96,18 +90,25 @@ export function RulesView(props: {
 
   return (
     <>
+      <AddRule categories={categories} onAdded={added} onError={onError} />
+
       <p className="meta small rules-summary">
         {plural(live.length, "rule")} · {plural(decided, "transaction")} categorized by them
         {unused > 0 && ` · ${unused} match${unused === 1 ? "es" : ""} nothing`}
-        <br />A rule applies to transactions whose text contains it. When several match, the longest wins, and
-        categories you set by hand always win.
+        <br />
+        Text rules apply to transactions whose text contains them, and the longest wins. Regex rules come after them, in
+        the order you saved them. Categories you set by hand always win.
       </p>
-      {shown.length === 0 ? (
+      {rules.length === 0 ? (
+        <p className="empty">
+          No rules yet. Add one above, or under Needs review choose a category for a payee and save it as a rule.
+        </p>
+      ) : shown.length === 0 ? (
         <p className="empty">No rules match.</p>
       ) : (
         <div className="ledger">
           <div className="ledger-head rules-grid">
-            <span>Text contains</span>
+            <span>Matches</span>
             <span>Categorizes</span>
             <span>Category</span>
             <span />
@@ -116,7 +117,7 @@ export function RulesView(props: {
             states[rule.pattern] === "deleted" ? (
               <div key={rule.pattern} className="ledger-row rules-grid is-deleted">
                 <span className="rule-deleted small">
-                  Rule <span className="rule-pattern">“{rule.pattern}”</span> deleted.
+                  Rule <RulePattern rule={rule} /> deleted.
                 </span>
                 <button className="text" onClick={() => undo(rule)}>
                   Undo
@@ -124,20 +125,20 @@ export function RulesView(props: {
               </div>
             ) : (
               <div key={rule.pattern} className="ledger-row rules-grid">
-                <span className="rule-pattern">“{rule.pattern}”</span>
+                <RulePattern rule={rule} />
                 <span className="small">
                   {rule.matched > 0 ? (
                     <button
                       className="link rule-matches"
-                      onClick={() => props.onShowTransactions(rule.pattern)}
-                      title="Show every transaction containing this text in All transactions"
+                      onClick={() => props.onShowTransactions(rule)}
+                      title="Show the transactions this rule categorizes, in All transactions"
                     >
                       {plural(rule.matched, "transaction")}
                     </button>
                   ) : (
                     <span
                       className="muted"
-                      title="It decides no transaction now: none contain this text, or a longer rule or your own choice wins"
+                      title="It decides no transaction now: nothing matches, or another rule or your own choice wins"
                     >
                       No matches
                     </span>
@@ -164,6 +165,126 @@ export function RulesView(props: {
         </div>
       )}
     </>
+  );
+}
+
+/** A text rule in quotes; a regex between slashes in a code face, with a tag, so the two never look alike. */
+export function RulePattern({ rule }: { rule: Pick<CategoryRule, "pattern" | "regex"> }) {
+  return rule.regex ? (
+    <span className="rule-pattern">
+      <code className="rule-regex">/{rule.pattern}/</code> <span className="account-type">Regex</span>
+    </span>
+  ) : (
+    <span className="rule-pattern">“{rule.pattern}”</span>
+  );
+}
+
+/**
+ * New rule: what to look for (text, or a regex), the category, and, before saving, a preview of what it would
+ * catch, since a regex is easy to get subtly wrong.
+ */
+function AddRule(props: { categories: Category[]; onAdded: () => Promise<void>; onError: (e: unknown) => void }) {
+  const [regex, setRegex] = useState(false);
+  const [pattern, setPattern] = useState("");
+  const [category, setCategory] = useState("");
+  const [preview, setPreview] = useState<RulePreview | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const ready = pattern.trim().length >= 2;
+
+  // Preview as you type, a moment after you stop.
+  useEffect(() => {
+    setPreview(null);
+    setProblem(null);
+    if (!ready) return;
+    let current = true;
+    const timer = window.setTimeout(() => {
+      api
+        .previewRule(pattern, regex)
+        .then((result) => current && setPreview(result))
+        .catch((error) => current && setProblem(error instanceof Error ? error.message : String(error)));
+    }, 300);
+    return () => {
+      current = false;
+      window.clearTimeout(timer);
+    };
+  }, [pattern, regex, ready]);
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!ready || !category || problem) return;
+    setSaving(true);
+    try {
+      await api.addRule(pattern, category, regex);
+      setPattern("");
+      setCategory("");
+      await props.onAdded();
+    } catch (error) {
+      props.onError(error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form className="add-rule" onSubmit={save}>
+      <div className="add-rule-fields">
+        <div className="segmented segmented-small" role="radiogroup" aria-label="Kind of rule">
+          <button type="button" role="radio" aria-checked={!regex} onClick={() => setRegex(false)}>
+            Text contains
+          </button>
+          <button type="button" role="radio" aria-checked={regex} onClick={() => setRegex(true)}>
+            Regex
+          </button>
+        </div>
+        <input
+          className={`grow${regex ? " rule-regex" : ""}`}
+          aria-label={regex ? "Regular expression" : "Text the transaction contains"}
+          placeholder={regex ? "e.g. ^BF\\d{13} [A-Z0-9]{12}$" : "e.g. REMA 1000"}
+          value={pattern}
+          onChange={(e) => setPattern(e.target.value)}
+          spellCheck={false}
+        />
+        <CategorySelect categories={props.categories} value={category} onChange={setCategory} />
+        <button type="submit" disabled={saving || !ready || !category || !!problem}>
+          {saving ? "Adding…" : "Add rule"}
+        </button>
+      </div>
+      <div className="add-rule-preview small" aria-live="polite">
+        {!ready ? (
+          <span className="muted">
+            {regex
+              ? "A regex is matched against the text as shown in the list, ignoring upper and lower case."
+              : "Matches transactions whose text contains this, ignoring upper and lower case."}
+          </span>
+        ) : problem ? (
+          <span className="rule-problem">{problem}</span>
+        ) : !preview ? (
+          <span className="muted">Checking…</span>
+        ) : preview.matches === 0 ? (
+          <span className="muted">Matches no transactions yet.</span>
+        ) : (
+          <>
+            <span>
+              Matches {plural(preview.matches, "transaction")}
+              {preview.uncategorized > 0 && `, ${preview.uncategorized} of them uncategorized`}.
+            </span>
+            <ul className="add-rule-examples">
+              {preview.examples.map((t) => (
+                <li key={t.id}>
+                  <span className="muted nowrap">{formatDate(t.date)}</span>
+                  <span className="add-rule-example-text">{t.description || "No description"}</span>
+                  <span className="num nowrap">{formatMoney(t.amount, t.currency ?? "NOK")}</span>
+                </li>
+              ))}
+              {preview.matches > preview.examples.length && (
+                <li className="muted">and {preview.matches - preview.examples.length} more</li>
+              )}
+            </ul>
+          </>
+        )}
+      </div>
+    </form>
   );
 }
 

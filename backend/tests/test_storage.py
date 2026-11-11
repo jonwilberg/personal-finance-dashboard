@@ -272,3 +272,24 @@ def test_account_owners_survive_reconnecting_and_follow_their_person(tmp_path):
     assert storage.account_owners() == {}
     with pytest.raises(PersonError):
         storage.set_account_owner("acc-1", alex)
+
+
+def test_rules_from_before_regex_become_text_rules(tmp_path):
+    import sqlite3
+
+    db = sqlite3.connect(tmp_path / "finance.db")
+    db.execute("CREATE TABLE category_rules (pattern TEXT PRIMARY KEY, category TEXT NOT NULL, created_at TEXT NOT NULL)")
+    db.execute("INSERT INTO category_rules VALUES ('KIWI', 'groceries', '2026-01-01T00:00:00+00:00')")
+    db.commit()
+    db.close()
+
+    storage = Storage(tmp_path)
+    assert storage.rules()[0] | {"created_at": None} == {"pattern": "KIWI", "category": "groceries", "created_at": None, "regex": False}
+    assert storage.categorization().rules == [Rule("KIWI", "groceries")]
+
+
+def test_a_stored_regex_that_no_longer_compiles_is_skipped(tmp_path):
+    storage = Storage(tmp_path)
+    storage.add_rule("KIWI", "groceries")
+    storage.add_rule("(", "shopping", regex=True)  # only possible by writing the database directly
+    assert storage.categorization().rules == [Rule("KIWI", "groceries")]

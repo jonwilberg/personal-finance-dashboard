@@ -105,11 +105,20 @@ export interface Transaction {
   rule: string | null;
 }
 
+/** What a rule would catch before it is saved. */
+export interface RulePreview {
+  matches: number;
+  uncategorized: number;
+  examples: Transaction[];
+}
+
 /** One of your rules: transactions whose text contains `pattern` get `category`. */
 export interface CategoryRule {
   pattern: string;
   category: string;
   created_at: string;
+  /** True when pattern is a regular expression (matched against the text as shown, ignoring case). */
+  regex: boolean;
   /** How many transactions it categorizes now; a longer rule or your own choice can win over it. */
   matched: number;
 }
@@ -127,6 +136,8 @@ export interface TransactionQuery {
   view?: "all" | "review";
   category?: string;
   account?: string;
+  /** Only the transactions this rule (its stored pattern) categorizes. */
+  rule?: string;
   q?: string;
   limit?: number;
 }
@@ -193,11 +204,13 @@ export const api = {
       body: JSON.stringify({ category }),
     }),
   rules: () => request<CategoryRule[]>("/api/rules"),
-  addRule: (pattern: string, category: string) =>
-    request<{ pattern: string; category: string; matched: number }>("/api/rules", {
+  addRule: (pattern: string, category: string, regex = false) =>
+    request<{ pattern: string; category: string; regex: boolean; matched: number }>("/api/rules", {
       method: "POST",
-      body: JSON.stringify({ pattern, category }),
+      body: JSON.stringify({ pattern, category, regex }),
     }),
+  previewRule: (pattern: string, regex: boolean) =>
+    request<RulePreview>("/api/rules/preview", { method: "POST", body: JSON.stringify({ pattern, regex }) }),
   retargetRule: (pattern: string, category: string) =>
     request<{ pattern: string; category: string; matched: number }>(
       `/api/rules?pattern=${encodeURIComponent(pattern)}`,

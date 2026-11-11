@@ -94,11 +94,13 @@ CREATE TABLE IF NOT EXISTS category_overrides (
     updated_at TEXT NOT NULL
 );
 
--- Your rules: transactions whose text contains the pattern get the category.
+-- Your rules: transactions whose text contains the pattern get the category. With regex = 1 the pattern is a
+-- regular expression, kept as written; text patterns are stored in upper case.
 CREATE TABLE IF NOT EXISTS category_rules (
     pattern TEXT PRIMARY KEY,
     category TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    regex INTEGER NOT NULL DEFAULT 0
 );
 
 -- Categories you can rename, change, add and delete. Seeded from categories.DEFAULT_CATEGORIES.
@@ -128,6 +130,9 @@ class Storage:
         data_dir.mkdir(parents=True, exist_ok=True)
         with self._connect() as db:
             db.executescript(SCHEMA)
+            # Databases from before regex rules: their rules are all text rules.
+            if "regex" not in {row["name"] for row in db.execute("PRAGMA table_info(category_rules)")}:
+                db.execute("ALTER TABLE category_rules ADD COLUMN regex INTEGER NOT NULL DEFAULT 0")
         _import_json_files(self)
         _seed_categories(self)
 
@@ -379,7 +384,8 @@ class Storage:
     def categorization(self) -> CategorizationSettings:
         with self._connect() as db:
             overrides = {row["transaction_id"]: row["category"] for row in db.execute("SELECT * FROM category_overrides")}
-            rules = [Rule(row["pattern"], row["category"]) for row in db.execute("SELECT * FROM category_rules ORDER BY created_at")]
+            rows = db.execute("SELECT * FROM category_rules ORDER BY created_at").fetchall()
+        rules = [rule for row in rows if (rule := _rule(row)) is not None]
         return CategorizationSettings(overrides=overrides, rules=rules, categories=self.categories())
 
     # Categories
@@ -461,29 +467,37 @@ class Storage:
                     "INSERT OR REPLACE INTO category_overrides VALUES (?, ?, ?)", (transaction_id, category, _now())
                 )
 
-    def add_rule(self, pattern: str, category: str) -> None:
+    def add_rule(self, pattern: str, category: str, regex: bool = False) -> str:
+        """Save a rule and return its pattern as stored: text patterns in upper case, regexes as written."""
+        stored = pattern if regex else pattern.upper()
         with self._connect() as db:
-            db.execute("INSERT OR REPLACE INTO category_rules VALUES (?, ?, ?)", (pattern.upper(), category, _now()))
+            db.execute(
+                "INSERT OR REPLACE INTO category_rules (pattern, category, created_at, regex) VALUES (?, ?, ?, ?)",
+                (stored, category, _now(), int(regex)),
+            )
+        return stored
 
-    def rules(self) -> list[dict[str, str]]:
+    def rules(self) -> list[dict[str, Any]]:
         """Your rules with when each was saved, in pattern order."""
         with self._connect() as db:
             rows = db.execute("SELECT * FROM category_rules ORDER BY pattern").fetchall()
-        return [{"pattern": r["pattern"], "category": r["category"], "created_at": r["created_at"]} for r in rows]
+        return [
+            {"pattern": r["pattern"], "category": r["category"], "created_at": r["created_at"], "regex": bool(r["regex"])}
+            for r in rows
+        ]
 
     def set_rule_category(self, pattern: str, category: str) -> bool:
         """Point an existing rule at another category; False if there's no such rule."""
         with self._connect() as db:
-            return (
-                db.execute(
-                    "UPDATE category_rules SET category = ? WHERE pattern = ?", (category, pattern.upper())
-                ).rowcount
-                > 0
-            )
+            key = _rule_key(db, pattern)
+            return key is not None and db.execute(
+                "UPDATE category_rules SET category = ? WHERE pattern = ?", (category, key)
+            ).rowcount > 0
 
     def delete_rule(self, pattern: str) -> bool:
         with self._connect() as db:
-            return db.execute("DELETE FROM category_rules WHERE pattern = ?", (pattern.upper(),)).rowcount > 0
+            key = _rule_key(db, pattern)
+            return key is not None and db.execute("DELETE FROM category_rules WHERE pattern = ?", (key,)).rowcount > 0
 
     # Meta
 
@@ -554,6 +568,22 @@ def _check_name_free(db: sqlite3.Connection, name: str, except_id: int | None = 
     row = db.execute("SELECT id FROM people WHERE name = ?", (name,)).fetchone()  # NOCASE column
     if row and row["id"] != except_id:
         raise PersonError(f"There's already someone called {name}")
+
+
+def _rule(row: sqlite3.Row) -> Rule | None:
+    """A stored rule, or None for a regex that no longer compiles (so one bad rule can’t stop categorization)."""
+    try:
+        return Rule(row["pattern"], row["category"], bool(row["regex"]))
+    except re.error:
+        return None
+
+
+def _rule_key(db: sqlite3.Connection, pattern: str) -> str | None:
+    """The stored pattern a request means: regexes are kept as written, text patterns in upper case."""
+    for key in dict.fromkeys([pattern, pattern.upper()]):
+        if db.execute("SELECT 1 FROM category_rules WHERE pattern = ?", (key,)).fetchone():
+            return key
+    return None
 
 
 def _now() -> str:
