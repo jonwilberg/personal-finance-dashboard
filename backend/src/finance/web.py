@@ -5,6 +5,7 @@ Start it with `uv run finance serve` (add `--env production` for real banks).
 
 from __future__ import annotations
 
+import re
 import time
 from collections import Counter
 from dataclasses import asdict
@@ -19,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from finance.categories import KINDS
-from finance.categorize import categorized_transactions, summarize_categorization
+from finance.categorize import Rule, categorized_transactions, summarize_categorization
 from finance.config import BACKEND_DIR, Settings
 from finance.connections import (
     BankNotFound,
@@ -49,8 +50,13 @@ class CategoryChoice(BaseModel):
     category: str | None
 
 
-class RuleRequest(BaseModel):
+class RulePattern(BaseModel):
     pattern: str = Field(min_length=2)
+    # True: pattern is a regular expression, searched case-insensitively in the text shown in the app.
+    regex: bool = False
+
+
+class RuleRequest(RulePattern):
     category: str
 
 
@@ -252,6 +258,7 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
         view: str = "all",
         category: str | None = None,
         account: str | None = None,
+        rule: str | None = None,
         q: str | None = None,
         limit: int = Query(default=200, ge=1, le=5000),
         offset: int = 0,
@@ -264,6 +271,8 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
             items = [t for t in items if t["category"] == category]
         if account:
             items = [t for t in items if t["account_uid"] == account]
+        if rule:
+            items = [t for t in items if t["rule"] == rule]  # the transactions this rule categorizes
         if q:
             needle = q.upper()
             items = [t for t in items if needle in t["text"] or needle in t["description"].upper()]
@@ -288,13 +297,40 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
         matches = rule_matches()
         return [rule | {"matched": matches.get(rule["pattern"], 0)} for rule in store.rules()]
 
+    def checked_rule(request: RulePattern) -> Rule:
+        """The rule a request describes, with a 422 for a regex that doesn't compile."""
+        pattern = request.pattern.strip()
+        if not request.regex:
+            pattern = pattern.upper()
+        try:
+            return Rule(pattern, "", request.regex)
+        except re.error as error:
+            raise HTTPException(422, f"Not a valid regex: {error}") from None
+
+    @app.post("/api/rules/preview")
+    def preview_rule(request: RulePattern) -> dict[str, Any]:
+        """What a rule would catch before you save it: how many transactions match, how many of those have no
+        category yet, and a few of them. Your own choices and longer rules may still win for some."""
+        rule = checked_rule(request)
+        matching = [t for t in all_transactions() if rule.matches(t["text"], t["description"])]
+        return {
+            "matches": len(matching),
+            "uncategorized": sum(1 for t in matching if t["category"] is None),
+            "examples": [_public(t) for t in matching[:5]],
+        }
+
     @app.post("/api/rules")
     def add_rule(request: RuleRequest) -> dict[str, Any]:
-        """Save a rule: transactions whose text contains the pattern get the category (unless set by hand)."""
+        """Save a rule: transactions whose text contains the pattern (or matches the regex) get the category,
+        unless you set theirs by hand."""
         require_category(request.category)
-        pattern = request.pattern.strip().upper()
-        store.add_rule(pattern, request.category)
-        return {"pattern": pattern, "category": request.category, "matched": rule_matches().get(pattern, 0)}
+        pattern = store.add_rule(checked_rule(request).pattern, request.category, request.regex)
+        return {
+            "pattern": pattern,
+            "category": request.category,
+            "regex": request.regex,
+            "matched": rule_matches().get(pattern, 0),
+        }
 
     @app.patch("/api/rules")
     def retarget_rule(pattern: str, choice: RuleCategory) -> dict[str, Any]:
@@ -302,7 +338,8 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
         require_category(choice.category)
         if not store.set_rule_category(pattern, choice.category):
             raise HTTPException(404, "Unknown rule")
-        pattern = pattern.upper()
+        stored = {r["pattern"] for r in store.rules()}
+        pattern = pattern if pattern in stored else pattern.upper()  # regexes are kept as written
         return {"pattern": pattern, "category": choice.category, "matched": rule_matches().get(pattern, 0)}
 
     @app.delete("/api/rules")

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { type CategorizationSummary, type Category, type Transaction, api } from "./api";
+import { type CategorizationSummary, type Category, type CategoryRule, type Transaction, api } from "./api";
 import { CategorySelect } from "./CategorySelect";
-import { RulesView } from "./RulesView";
+import { RulePattern, RulesView } from "./RulesView";
 import { formatDate, formatMoney } from "./format";
 
 type View = "review" | "all" | "rules";
@@ -17,6 +17,8 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
   const [categoryFilter, setCategoryFilter] = useState("");
   // Rules have their own category filter: "Uncategorized" means nothing for a rule.
   const [ruleCategory, setRuleCategory] = useState("");
+  // All transactions narrowed to what one rule categorizes, opened from that rule's count.
+  const [ruleFilter, setRuleFilter] = useState<CategoryRule | null>(null);
   const [items, setItems] = useState<Transaction[] | null>(null);
   const [total, setTotal] = useState(0);
 
@@ -38,6 +40,7 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
         view: onlyUncategorized ? "review" : view,
         q: query.trim(),
         category: view === "all" && !onlyUncategorized ? categoryFilter : undefined,
+        rule: view === "all" ? ruleFilter?.pattern : undefined,
         limit: view === "review" ? 5000 : 300,
       })
       .then((result) => {
@@ -45,13 +48,18 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
         setTotal(result.total);
       })
       .catch(onError);
-  }, [view, query, categoryFilter, onError, reloadSummary]);
+  }, [view, query, categoryFilter, ruleFilter, onError, reloadSummary]);
 
-  /** From a rule to the transactions containing its text. */
-  const showTransactionsFor = (pattern: string) => {
+  /** From a rule's count to exactly the transactions it categorizes. */
+  const showTransactionsFor = (rule: CategoryRule) => {
     setCategoryFilter("");
-    setQuery(pattern);
+    setQuery("");
+    setRuleFilter(rule);
     setView("all");
+  };
+  const switchTo = (next: View) => {
+    if (next !== "all") setRuleFilter(null);
+    setView(next);
   };
 
   useEffect(() => {
@@ -72,13 +80,13 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
 
       <div className="toolbar">
         <div className="segmented" role="tablist">
-          <button role="tab" aria-selected={view === "review"} onClick={() => setView("review")}>
+          <button role="tab" aria-selected={view === "review"} onClick={() => switchTo("review")}>
             Needs review
           </button>
-          <button role="tab" aria-selected={view === "all"} onClick={() => setView("all")}>
+          <button role="tab" aria-selected={view === "all"} onClick={() => switchTo("all")}>
             All transactions
           </button>
-          <button role="tab" aria-selected={view === "rules"} onClick={() => setView("rules")}>
+          <button role="tab" aria-selected={view === "rules"} onClick={() => switchTo("rules")}>
             Rules
           </button>
         </div>
@@ -122,6 +130,16 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
           onChanged={reloadSummary}
           onError={onError}
         />
+      )}
+      {view === "all" && ruleFilter && (
+        <div className="rule-filter small">
+          <span>
+            Categorized by the rule <RulePattern rule={ruleFilter} />
+          </span>
+          <button className="text" onClick={() => setRuleFilter(null)}>
+            Show all transactions
+          </button>
+        </div>
       )}
       {view !== "rules" && items === null && <p className="muted">Loading…</p>}
       {items && view === "review" && (

@@ -161,7 +161,7 @@ def test_transactions_categories_and_rules(api, bank):
     assert reset["category_source"] == "keyword"
 
     rule = api.post("/api/rules", json={"pattern": "rema", "category": "shopping"}).json()
-    assert rule == {"pattern": "REMA", "category": "shopping", "matched": 1}
+    assert rule == {"pattern": "REMA", "category": "shopping", "regex": False, "matched": 1}
     assert api.get("/api/transactions", params={"category": "shopping"}).json()["total"] == 1
     assert api.delete("/api/rules", params={"pattern": "REMA"}).json() == {"ok": True}
 
@@ -318,3 +318,42 @@ def test_rules_can_be_listed_retargeted_and_deleted(api, bank):
 
     assert api.delete("/api/rules", params={"pattern": "REMA 1000"}).status_code == 200
     assert {r["pattern"]: r["matched"] for r in api.get("/api/rules").json()} == {"KIWI": 0, "REMA": 1}
+
+
+def test_regex_rules_match_a_format_and_come_after_text_rules(api, bank):
+    connect(api, bank)
+    api.post("/api/accounts/acc-1/refresh", params={"longest": True})
+
+    bad = api.post("/api/rules/preview", json={"pattern": "L[ønn", "regex": True})
+    assert bad.status_code == 422 and "Not a valid regex" in bad.json()["detail"]
+    assert api.post("/api/rules", json={"pattern": "L[ønn", "category": "salary", "regex": True}).status_code == 422
+
+    # Case-insensitive, against the text as shown ("Lønn"); kept as written, not upper-cased.
+    preview = api.post("/api/rules/preview", json={"pattern": r"^l\wnn$", "regex": True}).json()
+    assert (preview["matches"], preview["uncategorized"]) == (1, 0)
+    assert preview["examples"][0]["description"] == "Lønn"
+    saved = api.post("/api/rules", json={"pattern": r"^l\wnn$", "category": "other_income", "regex": True}).json()
+    assert saved == {"pattern": r"^l\wnn$", "category": "other_income", "regex": True, "matched": 1}
+
+    listed = {r["pattern"]: r for r in api.get("/api/rules").json()}
+    assert listed[r"^l\wnn$"]["regex"] is True and listed[r"^l\wnn$"]["matched"] == 1
+
+    # A text rule that also matches wins over the regex.
+    api.post("/api/rules", json={"pattern": "lønn", "category": "salary"})
+    assert {r["pattern"]: r["matched"] for r in api.get("/api/rules").json()} == {"LØNN": 1, r"^l\wnn$": 0}
+    api.delete("/api/rules", params={"pattern": "LØNN"})
+
+    # Re-target and delete find the regex as written.
+    assert api.patch("/api/rules", params={"pattern": r"^l\wnn$"}, json={"category": "salary"}).json()["pattern"] == r"^l\wnn$"
+    assert api.delete("/api/rules", params={"pattern": r"^l\wnn$"}).status_code == 200
+    assert api.get("/api/rules").json() == []
+
+
+def test_transactions_can_be_filtered_to_the_ones_a_rule_categorizes(api, bank):
+    connect(api, bank)
+    api.post("/api/accounts/acc-1/refresh", params={"longest": True})
+    api.post("/api/rules", json={"pattern": "rema", "category": "shopping"})
+    api.post("/api/rules", json={"pattern": "rema 1000", "category": "eating_out"})
+
+    assert api.get("/api/transactions", params={"rule": "REMA 1000"}).json()["total"] == 1
+    assert api.get("/api/transactions", params={"rule": "REMA"}).json()["total"] == 0  # the longer rule wins

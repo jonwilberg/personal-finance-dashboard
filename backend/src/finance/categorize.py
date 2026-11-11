@@ -5,7 +5,7 @@ For each transaction, the first of these that applies decides its category:
 1. Your manual choice for that transaction.
 2. Transfer between your own accounts: the other party's account number is one of yours, or it's a card bill
    payment, or a matching amount leaves one of your accounts and arrives in another within a few days.
-3. Your own rules: the transaction text contains a pattern you saved.
+3. Your own rules: the transaction text contains a pattern you saved (longest first), then your regex rules.
 4. Built-in keywords: income keywords (money in only), then merchant keywords (see categories.py).
 5. The bank's own merchant category, where the bank sends one.
 6. Interest, by bank transaction code.
@@ -83,11 +83,29 @@ def keyword_category(text: str, allowed: list[str]) -> str | None:
 
 @dataclass
 class Rule:
+    """A text rule matches when the cleaned text contains the pattern. A regex rule searches the text as shown in
+    the app (and the cleaned text), ignoring case, so it can match a format such as a payment reference."""
+
     pattern: str
     category: str
+    regex: bool = False
+    _compiled: re.Pattern[str] | None = field(default=None, init=False, repr=False, compare=False)
 
-    def matches(self, text: str) -> bool:
+    def __post_init__(self) -> None:
+        if self.regex:
+            self._compiled = re.compile(self.pattern, re.IGNORECASE)
+
+    def matches(self, text: str, description: str = "") -> bool:
+        if self._compiled is not None:
+            return bool(self._compiled.search(description) or self._compiled.search(text))
         return self.pattern.upper() in text
+
+
+def rule_order(rules: list[Rule]) -> list[Rule]:
+    """The order rules are tried in: text rules longest first (the most specific wins), then regex rules in the
+    order they were saved, since a regex's length says nothing about how specific it is."""
+    text = sorted((r for r in rules if not r.regex), key=lambda r: len(r.pattern), reverse=True)
+    return text + [r for r in rules if r.regex]
 
 
 @dataclass
@@ -232,12 +250,12 @@ def _pair(credit, transactions, transfers, window_days, exclude_accounts, mark_s
 def categorize(transactions: list[dict[str, Any]], settings: CategorizationSettings, transfers: set[str]) -> None:
     kinds = {c.id: c.kind for c in settings.categories}
     # Rules and built-in keywords for categories that no longer exist are skipped.
-    rules = sorted((r for r in settings.rules if r.category in kinds), key=lambda r: len(r.pattern), reverse=True)
+    rules = rule_order([r for r in settings.rules if r.category in kinds])
     for t in transactions:
         category, source = _decide(t, settings.overrides, rules, transfers, kinds)
         t["category"], t["category_source"], t["kind"] = category, source, kinds.get(category)
-        # Which of your rules decided it: the first match in the same longest-first order _decide used.
-        t["rule"] = next(r.pattern for r in rules if r.matches(t["text"])) if source == "rule" else None
+        # Which of your rules decided it: the first match in the same order _decide used.
+        t["rule"] = next(r.pattern for r in rules if r.matches(t["text"], t["description"])) if source == "rule" else None
 
 
 def _decide(t, overrides, rules, transfers, kinds) -> tuple[str | None, str | None]:
@@ -246,7 +264,7 @@ def _decide(t, overrides, rules, transfers, kinds) -> tuple[str | None, str | No
     if t["id"] in transfers and "transfer" in kinds:
         return "transfer", "transfer"
     for rule in rules:
-        if rule.matches(t["text"]):
+        if rule.matches(t["text"], t["description"]):
             return rule.category, "rule"
     if t["direction"] == "CRDT":
         for category, pattern in _INCOME_PATTERNS:
