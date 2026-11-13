@@ -7,15 +7,13 @@ import { formatKr } from "./format";
 // - A block wide enough for its label carries it inside.
 // - The others get a label just above or below the bar (alternating), starting at the block's centre and spread
 //   only as far as needed to stop labels touching. Order is kept on each side, so leader lines never cross.
-// - A bracket under the bar names the fixed and adjustable groups with their share.
+// - A legend line above the bar says what the colours mean, with each group’s total and share.
 // - Clicking a block or label jumps to its row in the table below.
 
 const UNCATEGORIZED = "uncategorized";
 const BAR_H = 38; // room for a two-line label inside a block
 const LABEL_H = 30; // two lines: name, then "amount · share"
 const LEADER = 16; // leader length above the bar
-const BRACKET_H = 30; // tick line and group caption under the bar
-const LEADER_BELOW = BRACKET_H + 10; // leaders below the bar pass the bracket
 const GAP = 2; // surface gap between blocks
 const LABEL_GAP = 12; // space between neighbouring labels
 const LIST_BELOW = 480; // narrower than this (phones): a list instead of placed labels
@@ -96,8 +94,8 @@ export function SpendingSplit({ rows }: { rows: ScoreboardRow[] }) {
   const hasBelow = !!placed?.some((p) => !p.above);
   const barTop = hasAbove ? LABEL_H + LEADER : 0;
   const barBottom = barTop + BAR_H;
-  const belowTop = barBottom + LEADER_BELOW;
-  const height = list ? BAR_H : hasBelow ? belowTop + LABEL_H : barBottom + BRACKET_H;
+  const belowTop = barBottom + LEADER;
+  const height = list || !hasBelow ? barBottom : belowTop + LABEL_H;
   const leaders = (placed ?? []).map((p) => ({
     p,
     x1: p.part.x + p.part.w / 2,
@@ -106,23 +104,20 @@ export function SpendingSplit({ rows }: { rows: ScoreboardRow[] }) {
     y2: p.above ? LABEL_H : belowTop,
   }));
 
-  // The two groups, named under the bar. A caption moves out of a leader line's way where it can.
-  const groups = list
-    ? []
-    : (["fixed", "adjustable"] as const).flatMap((kind) => {
-        const members = parts.filter((p) => p.row.category !== UNCATEGORIZED && (kind === "fixed") === p.row.fixed);
-        if (!members.length) return [];
-        const start = members[0].x;
-        const end = members[members.length - 1].x + members[members.length - 1].w;
-        const share = members.reduce((sum, p) => sum + p.row.amount, 0) / total;
-        const text = `${kind === "fixed" ? "Fixed" : "Adjustable"} · ${shareText(share)}`;
-        const textW = textWidth(text, 500);
-        const y = barBottom + 24;
-        const clear = (x: number) =>
-          leaders.every((l) => l.y1 !== barBottom || !segmentHitsBox(l, { left: x - 2, right: x + textW + 2, top: y - 12, bottom: y + 3 }));
-        const options = [start, end - textW, (start + end - textW) / 2].map((x) => Math.min(Math.max(x, 0), width - textW));
-        return [{ kind, start, end, text, y, x: options.find(clear) ?? options[0] }];
-      });
+  // The groups, with their totals, for the legend line above the bar.
+  const groups = (
+    [
+      { key: "fixed", name: "Fixed", swatch: "var(--chart-fixed)", has: (r: ScoreboardRow) => r.fixed },
+      { key: "adjustable", name: "Adjustable", swatch: "var(--chart-adjustable)", has: (r: ScoreboardRow) => !r.fixed },
+      { key: UNCATEGORIZED, name: "Not categorized", swatch: null, has: () => true },
+    ] as const
+  ).flatMap((group) => {
+    const members = ordered.filter((r) =>
+      group.key === UNCATEGORIZED ? r.category === UNCATEGORIZED : r.category !== UNCATEGORIZED && group.has(r),
+    );
+    const amount = members.reduce((sum, r) => sum + r.amount, 0);
+    return amount > 0 ? [{ ...group, amount, share: amount / total }] : [];
+  });
 
   const fill = (row: ScoreboardRow) =>
     row.category === UNCATEGORIZED ? `url(#${hatchId})` : row.fixed ? "var(--chart-fixed)" : "var(--chart-adjustable)";
@@ -143,6 +138,22 @@ export function SpendingSplit({ rows }: { rows: ScoreboardRow[] }) {
 
   return (
     <div className="split" ref={frameRef}>
+      {/* What the colours mean, with each group's total: the same legend style as the 12-month chart above. */}
+      <div className="chart-legend split-legend">
+        {groups.map((g) => (
+          <span key={g.key} className="legend-item">
+            <span
+              className={`legend-swatch${g.swatch ? "" : " legend-hatch"}`}
+              style={g.swatch ? { background: g.swatch } : undefined}
+              aria-hidden="true"
+            />
+            <span className="split-legend-name">{g.name}</span>
+            <span className="split-figures">
+              {formatKr(g.amount)} · <span className="split-share">{shareText(g.share)}</span>
+            </span>
+          </span>
+        ))}
+      </div>
       <div className="split-frame" style={{ height }}>
         <svg
           width={width}
@@ -161,15 +172,6 @@ export function SpendingSplit({ rows }: { rows: ScoreboardRow[] }) {
               <rect x={0} y={barTop} width={width} height={BAR_H} rx={4} />
             </clipPath>
           </defs>
-
-          {groups.map((g) => (
-            <g key={g.kind} className="split-bracket">
-              <path d={`M${g.start + 1},${barBottom + 4} V${barBottom + 9} H${g.end - 1} V${barBottom + 4}`} />
-              <text x={g.x} y={g.y}>
-                {g.text}
-              </text>
-            </g>
-          ))}
 
           {leaders.map(({ p, x1, y1, x2, y2 }) => (
             <line
@@ -273,18 +275,6 @@ function placeLabels(parts: Part[], width: number): Placed[] | null {
     members.forEach((part, i) => placed.push({ part, above: side === 0, lx: centre[i] }));
   }
   return placed;
-}
-
-type Box = { left: number; right: number; top: number; bottom: number };
-
-function segmentHitsBox(s: { x1: number; y1: number; x2: number; y2: number }, b: Box): boolean {
-  const steps = Math.max(8, Math.ceil(Math.hypot(s.x2 - s.x1, s.y2 - s.y1) / 2));
-  for (let i = 0; i <= steps; i++) {
-    const x = s.x1 + ((s.x2 - s.x1) * i) / steps;
-    const y = s.y1 + ((s.y2 - s.y1) * i) / steps;
-    if (x > b.left && x < b.right && y > b.top && y < b.bottom) return true;
-  }
-  return false;
 }
 
 /** Scroll to the category's row in the table below and flash it briefly. */
