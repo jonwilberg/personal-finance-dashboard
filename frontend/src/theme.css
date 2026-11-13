@@ -30,6 +30,7 @@
      colour-blind separation and contrast on --paper. Other is a neutral grey, so the named groups carry the colour. */
   --group-fixed: #2a63b0;
   --group-groceries: #b8862a;
+  --group-health: #e2699a;
   --group-dining: #9c3d5c;
   --group-travel: #9a6ad0;
   --group-other: #b9b0a0;
@@ -90,6 +91,7 @@
   /* Not yet validated for the dark surface: travel sits close to the lighter fixed blue here. */
   --group-fixed: #4f86cc;
   --group-groceries: #b8862a;
+  --group-health: #d0739a;
   --group-dining: #b8566f;
   --group-travel: #b07ad8;
   --group-other: #6b6458;

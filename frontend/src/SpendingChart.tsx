@@ -30,10 +30,9 @@ export function SpendingChart(props: {
   /** The spending groups, in stacking order (bottom first). */
   groups: SpendingGroup[];
   selected: string;
-  usual: number | null;
   onSelect: (month: string) => void;
 }) {
-  const { series, selected, usual } = props;
+  const { series, selected } = props;
   const [hover, setHover] = useState<number | null>(null);
   const segmentsOf = props.groups.map((g) => ({ key: g.id, label: g.name, fill: groupFill(g.id) }));
   // Draw at the frame's real width so text and marks keep their pixel sizes.
@@ -49,9 +48,9 @@ export function SpendingChart(props: {
 
   const totals = series.map((m) => m.fixed + m.adjustable + m.uncategorized);
   const incomes = series.map((m) => Math.max(m.income, 0));
-  const outliers = incomeOutliers(incomes, Math.max(usual ?? 0, ...totals));
+  const outliers = incomeOutliers(incomes, Math.max(...totals));
   const { max, ticks } = niceScale(
-    Math.max(usual ?? 0, ...totals, ...incomes.filter((_, i) => !outliers.has(i)), 1),
+    Math.max(...totals, ...incomes.filter((_, i) => !outliers.has(i)), 1),
   );
   // An outlier can still fit under the rounded-up scale; then it's drawn in full after all.
   const cut = incomes.map((income) => income > max);
@@ -131,12 +130,6 @@ export function SpendingChart(props: {
           <span className="legend-swatch" style={{ background: INCOME_FILL }} />
           Income
         </span>
-        {usual !== null && (
-          <span className="legend-item">
-            <span className="legend-line" />
-            Median spend LTM
-          </span>
-        )}
       </div>
 
       <div className="chart-frame" ref={frameRef}>
@@ -216,21 +209,8 @@ export function SpendingChart(props: {
             );
           })}
 
-          {usual !== null && (
-            <line
-              x1={PAD.left}
-              x2={WIDTH - PAD.right}
-              y1={y(usual)}
-              y2={y(usual)}
-              stroke="var(--ink)"
-              strokeWidth="1.5"
-              strokeDasharray="6 4"
-              pointerEvents="none"
-            />
-          )}
-
-          {/* The figures above the bars (see placeLabels). Drawn after the median line, with a halo (see .chart-total),
-              so the line never runs through them. */}
+          {/* The figures above the bars (see placeLabels), with a halo (see .chart-total) so gridlines never run
+              through them. */}
           <g pointerEvents="none">
             {labels.map((label) => {
               const isSelected = series[label.i].month === selected;

@@ -453,7 +453,7 @@ def test_a_hand_added_account_file_must_be_complete(change):
 
 def test_spending_groups_are_listed_and_a_category_can_move_between_them(api):
     groups = api.get("/api/spending-groups").json()
-    assert [g["id"] for g in groups] == ["fixed", "groceries", "dining", "travel", "other"]
+    assert [g["id"] for g in groups] == ["fixed", "groceries", "health", "dining", "travel", "other"]
     moved = api.patch("/api/categories/shopping", json={"group": "fixed"}).json()
     assert (moved["group"], moved["fixed"]) == ("fixed", True)
     added = api.post("/api/categories", json={"name": "Gym", "kind": "expense", "group": "dining"}).json()

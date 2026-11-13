@@ -316,6 +316,7 @@ def test_spending_categories_from_before_groups_get_their_default_group(tmp_path
     assert (groups["groceries"], groups["subscriptions"], groups["memberships"]) == ("groceries", "other", "fixed")
     assert (groups["eating_out"], groups["leisure"], groups["travel"], groups["housing"]) == (
         "dining", "dining", "travel", "fixed")
+    assert groups["health"] == "health"
     assert groups["salary"] is None
 
 
