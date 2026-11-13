@@ -1101,8 +1101,11 @@ button.sort:focus-visible {
 }
 
 @media (max-width: 720px) {
+  /* Median month, total LTM and the sparkline: phones keep this month and its difference. */
   .scoreboard th:nth-child(3),
   .scoreboard td:nth-child(3),
+  .scoreboard th:nth-child(5),
+  .scoreboard td:nth-child(5),
   .scoreboard th:last-child,
   .scoreboard td:last-child {
     display: none;

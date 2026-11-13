@@ -117,6 +117,7 @@ def test_scoreboard_lists_spending_categories_with_history():
     assert housing["fixed"] is True and housing["delta"] == 0
     assert (groceries["amount"], groceries["usual"], groceries["delta"]) == (2800, 3000, -200)
     assert groceries["history"] == [3000, 3000, 3000, 3000, 3000, 2800]
+    assert (groceries["ltm"], eating_out["ltm"]) == (17800, 5000)  # the months shown, this one included
     assert round(groceries["share"], 3) == round(2800 / 13100, 3)
     assert (uncategorized["name"], uncategorized["delta"]) == ("Not categorized", 300)
     assert (eating_out["amount"], eating_out["usual"]) == (0, 1000)

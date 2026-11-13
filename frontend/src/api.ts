@@ -263,6 +263,8 @@ export interface ScoreboardRow {
   usual: number | null;
   delta: number | null;
   history: number[];
+  /** Total of `history`: the months in the chart, up to and including this month. */
+  ltm: number;
 }
 
 export interface Overview {

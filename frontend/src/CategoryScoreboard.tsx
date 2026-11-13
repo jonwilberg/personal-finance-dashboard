@@ -3,13 +3,14 @@ import type { OverviewMonth, ScoreboardRow } from "./api";
 import { formatKr } from "./format";
 import { monthTitle } from "./SpendingChart";
 
-type SortKey = "name" | "amount" | "usual" | "delta";
+type SortKey = "name" | "amount" | "usual" | "delta" | "ltm";
 
 const COLUMNS: { key: SortKey | null; label: string; numeric: boolean }[] = [
   { key: "name", label: "Category", numeric: false },
   { key: "amount", label: "This month", numeric: true },
   { key: "usual", label: "Median month", numeric: true },
   { key: "delta", label: "Difference", numeric: true },
+  { key: "ltm", label: "Total LTM", numeric: true },
   { key: null, label: "Last 12 months", numeric: false },
 ];
 
@@ -25,6 +26,9 @@ export function CategoryScoreboard(props: { rows: ScoreboardRow[]; months: Overv
       return sort.descending ? -order : order;
     });
   }, [props.rows, sort]);
+
+  // Every spending category is a row (uncategorized included), so together they make the period's total spending.
+  const ltmTotal = props.rows.reduce((sum, row) => sum + row.ltm, 0);
 
   const toggle = (key: SortKey) =>
     setSort((current) =>
@@ -77,6 +81,7 @@ export function CategoryScoreboard(props: { rows: ScoreboardRow[]; months: Overv
             <td className="num">
               <Difference delta={row.delta} />
             </td>
+            <td className="num">{formatKr(row.ltm)}</td>
             <td>
               <Sparkline values={row.history} months={props.months} name={row.name} />
             </td>
@@ -93,6 +98,7 @@ export function CategoryScoreboard(props: { rows: ScoreboardRow[]; months: Overv
           <td className="num">
             <Difference delta={props.usual !== null ? props.total - props.usual : null} />
           </td>
+          <td className="num">{formatKr(ltmTotal)}</td>
           <td />
         </tr>
       </tfoot>
