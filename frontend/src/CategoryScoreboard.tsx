@@ -59,7 +59,8 @@ export function CategoryScoreboard(props: { rows: ScoreboardRow[]; months: Overv
       </thead>
       <tbody>
         {rows.map((row) => (
-          <tr key={row.category}>
+          // The id lets the spending split above jump to a category's row.
+          <tr key={row.category} id={`scoreboard-${row.category}`}>
             <td>
               <span className="score-name">
                 {row.name}

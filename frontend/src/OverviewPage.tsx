@@ -4,6 +4,7 @@ import { formatKr } from "./format";
 import { CategoryScoreboard } from "./CategoryScoreboard";
 import { OwnerFilter, ownerScope } from "./OwnerPicker";
 import { SpendingChart } from "./SpendingChart";
+import { SpendingSplit } from "./SpendingSplit";
 
 const OWNERS_KEY = "overview-owners";
 
@@ -141,6 +142,7 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
       {overview.scoreboard && overview.scoreboard.length > 0 && (
         <section className="section">
           <p className="label">Spending by category{scope && ` · ${scope}`}</p>
+          <SpendingSplit rows={overview.scoreboard} />
           <CategoryScoreboard
             rows={overview.scoreboard}
             months={overview.series}
