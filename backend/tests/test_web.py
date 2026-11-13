@@ -459,3 +459,18 @@ def test_spending_groups_are_listed_and_a_category_can_move_between_them(api):
     added = api.post("/api/categories", json={"name": "Gym", "kind": "expense", "group": "dining"}).json()
     assert (added["group"], added["fixed"]) == ("dining", False)
     assert api.patch("/api/categories/shopping", json={"group": "nonsense"}).status_code == 422
+
+
+def test_transactions_can_be_narrowed_to_a_month_owner_and_category(api, bank):
+    connect(api, bank)
+    api.post("/api/accounts/acc-1/refresh", params={"longest": True})
+
+    def ids(**params):
+        return len(api.get("/api/transactions", params=params).json()["items"])
+
+    assert ids(month="2026-10") == 2 and ids(month="2026-09") == 0
+    assert ids(month="2026-10", category="groceries") == 1
+    assert ids(owner="shared") == 2 and ids(owner="999") == 0  # accounts are shared until given to someone
+    api.put("/api/transactions/categories", json={"changes": [
+        {"id": t["id"], "category": None} for t in api.get("/api/transactions").json()["items"]]})
+    assert ids(category="uncategorized") == ids(view="review")

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { type Overview, type Owner, api, overviewApi } from "./api";
 import { CategoryScoreboard } from "./CategoryScoreboard";
 import { OwnerFilter, ownerScope } from "./OwnerPicker";
@@ -28,6 +28,9 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [owners, setOwners] = useState<Owner[] | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
+  // Bumped when a transaction's category changes here, so the figures are counted again.
+  const [version, setVersion] = useState(0);
+  const recount = useCallback(() => setVersion((v) => v + 1), []);
 
   useEffect(() => {
     api
@@ -48,7 +51,7 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
   useEffect(() => {
     if (owners === null) return; // wait for the remembered choice
     overviewApi.get(month, filterKey?.split(",")).then(setOverview).catch(onError);
-  }, [month, owners, filterKey, onError]);
+  }, [month, owners, filterKey, version, onError]);
 
   const choose = (next: string[]) => {
     setSelected(next);
@@ -152,6 +155,10 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
             months={overview.series}
             total={f.spent}
             usual={f.usual_spent}
+            month={overview.month}
+            owners={filter}
+            onChanged={recount}
+            onError={onError}
           />
           <p className="meta small">Select a column heading to sort.</p>
         </section>

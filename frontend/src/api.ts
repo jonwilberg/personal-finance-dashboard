@@ -143,6 +143,10 @@ export interface TransactionQuery {
   /** Only the transactions this rule (its stored pattern) categorizes. */
   rule?: string;
   q?: string;
+  /** YYYY-MM */
+  month?: string;
+  /** Only these owners' accounts (people's ids or "shared"), as on the overview. */
+  owner?: string[];
   limit?: number;
 }
 
@@ -200,7 +204,8 @@ export const api = {
   transactions: (query: TransactionQuery) => {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
-      if (value !== undefined && value !== "") params.set(key, String(value));
+      if (Array.isArray(value)) value.forEach((v) => params.append(key, String(v)));
+      else if (value !== undefined && value !== "") params.set(key, String(value));
     }
     return request<{ total: number; items: Transaction[] }>(`/api/transactions?${params}`);
   },

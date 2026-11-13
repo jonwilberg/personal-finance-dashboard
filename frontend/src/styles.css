@@ -1139,6 +1139,94 @@ button.sort:focus-visible {
   font-weight: 500;
 }
 
+/* A category row opens to its transactions: the whole row is clickable, the name is the button. */
+.score-row {
+  cursor: pointer;
+}
+
+.score-row:hover > td,
+.score-row.is-open > td {
+  background: var(--paper-sunken);
+}
+
+button.score-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.score-chevron {
+  display: inline-block;
+  width: 0.8em;
+  color: var(--ink-muted);
+  font-size: 1.1em;
+  transition: transform 120ms ease;
+}
+
+.score-row.is-open .score-chevron {
+  transform: rotate(90deg);
+}
+
+.scoreboard .score-detail > td {
+  padding: 0 0 var(--space-3) calc(0.8em + var(--space-2));
+  background: var(--paper-sunken);
+}
+
+.drill-note {
+  margin: 0;
+  padding: var(--space-2) 0;
+}
+
+.drill-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.drill-row {
+  display: grid;
+  grid-template-columns: 4.5em minmax(0, 1fr) auto minmax(150px, 200px);
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-2) var(--space-3) var(--space-2) 0;
+  border-top: var(--rule-hair);
+}
+
+.drill-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.drill-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Moved somewhere else: faded, but still here to undo or change again. */
+.drill-row.is-moved .drill-date,
+.drill-row.is-moved .drill-description,
+.drill-row.is-moved .drill-amount {
+  color: var(--ink-muted);
+}
+
+@media (max-width: 720px) {
+  .drill-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .drill-date {
+    grid-column: 1 / -1;
+  }
+}
+
 .score-share {
   display: inline-block;
   min-width: 3.2em;
