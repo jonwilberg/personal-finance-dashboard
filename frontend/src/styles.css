@@ -872,6 +872,20 @@ button.danger {
   gap: var(--space-3);
 }
 
+/* The month title holds every month name, stacked and hidden, so it is always as wide as the longest one. */
+.month-title {
+  display: inline-grid;
+}
+
+.month-title > span {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+}
+
+.month-title-sizer {
+  visibility: hidden;
+}
+
 .month-steps {
   display: inline-flex;
   gap: var(--space-1);
