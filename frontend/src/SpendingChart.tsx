@@ -91,8 +91,13 @@ export function SpendingChart(props: {
       const centre = kind === "spent" ? pairX(i) + barW / 2 : incomeX(i) + barW / 2;
       const text = barTotal(value, band);
       const half = (text.length * size * 0.58 + 4) / 2; // estimated width (tabular figures), plus the halo
-      // Above the bar, or sideways off the other bar of the pair: spending to the left, income to the right.
-      const xs = [centre, kind === "spent" ? incomeX(i) - 2 - half : incomeX(i) - 1 + half];
+      // Above the bar, or sideways off the other bar of the pair: spending to the left, income to the right. When the
+      // pair's bars are about as tall, the two labels would meet above the gap, so spending starts out to the left,
+      // leaving room for income beside it.
+      const sideways = kind === "spent" ? incomeX(i) - 2 - half : incomeX(i) - 1 + half;
+      const otherTop = kind === "spent" ? (incomes[i] > 0 ? incomeTop(i) : null) : y(totals[i]);
+      const level = otherTop !== null && Math.abs(otherTop - top) < size + 8;
+      const xs = kind === "spent" && level ? [sideways, centre] : [centre, sideways];
       const baseline = top - (isSelected ? 8 : 6);
       for (const lift of [0, size + 3]) {
         for (const cx of xs) {
