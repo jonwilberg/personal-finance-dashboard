@@ -190,7 +190,8 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
           total={total}
           categories={categories}
           onChanged={(updated) => {
-            setItems((current) => current?.map((t) => (t.id === updated.id ? updated : t)) ?? null);
+            const byId = new Map(updated.map((t) => [t.id, t]));
+            setItems((current) => current?.map((t) => byId.get(t.id) ?? t) ?? null);
             api.categorizationSummary().then(setSummary).catch(onError);
           }}
           onError={onError}
@@ -328,34 +329,135 @@ function ReviewGroup(props: {
   );
 }
 
+/** What a bulk change replaced, so Undo can put each transaction back: its own category if you had set one,
+ * otherwise none, which lets the automatic category apply again. */
+interface BulkChange {
+  count: number;
+  categoryName: string;
+  previous: { id: string; category: string | null }[];
+}
+
 function TransactionTable(props: {
   items: Transaction[];
   total: number;
   categories: Category[];
-  onChanged: (t: Transaction) => void;
+  onChanged: (updated: Transaction[]) => void;
   onError: (e: unknown) => void;
 }) {
+  const { items } = props;
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [anchor, setAnchor] = useState<number | null>(null); // the last row clicked, for shift-click ranges
+  const [bulkCategory, setBulkCategory] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [lastChange, setLastChange] = useState<BulkChange | null>(null);
+
+  // A different list (another filter or search) starts with nothing selected.
+  const listKey = useMemo(() => items.map((t) => t.id).join("|"), [items]);
+  useEffect(() => {
+    setSelected(new Set());
+    setAnchor(null);
+  }, [listKey]);
+
+  const apply = async (changes: { id: string; category: string | null }[]) => {
+    const { items: updated } = await api.setCategories(changes);
+    props.onChanged(updated);
+  };
+
   const change = async (t: Transaction, category: string) => {
     try {
-      props.onChanged(await api.setCategory(t.id, category || null));
+      await apply([{ id: t.id, category: category || null }]);
     } catch (error) {
       props.onError(error);
     }
   };
 
-  if (props.items.length === 0) return <p className="empty">No transactions match.</p>;
+  const toggle = (index: number, on: boolean, range: boolean) => {
+    const from = range && anchor !== null ? Math.min(anchor, index) : index;
+    const to = range && anchor !== null ? Math.max(anchor, index) : index;
+    setSelected((current) => {
+      const next = new Set(current);
+      for (const t of items.slice(from, to + 1)) {
+        if (on) next.add(t.id);
+        else next.delete(t.id);
+      }
+      return next;
+    });
+    setAnchor(index);
+  };
+
+  const allOn = items.length > 0 && items.every((t) => selected.has(t.id));
+  const someOn = !allOn && items.some((t) => selected.has(t.id));
+
+  const setForSelected = async () => {
+    if (!bulkCategory || selected.size === 0) return;
+    const chosen = items.filter((t) => selected.has(t.id));
+    setSaving(true);
+    try {
+      await apply(chosen.map((t) => ({ id: t.id, category: bulkCategory })));
+      setLastChange({
+        count: chosen.length,
+        categoryName: props.categories.find((c) => c.id === bulkCategory)?.name ?? bulkCategory,
+        previous: chosen.map((t) => ({ id: t.id, category: t.category_source === "manual" ? t.category : null })),
+      });
+      setSelected(new Set());
+      setAnchor(null);
+    } catch (error) {
+      props.onError(error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const undo = async () => {
+    if (!lastChange) return;
+    try {
+      await apply(lastChange.previous);
+      setLastChange(null);
+    } catch (error) {
+      props.onError(error);
+    }
+  };
+
+  if (items.length === 0) return <p className="empty">No transactions match.</p>;
   return (
     <div className="ledger">
       <div className="ledger-head table-grid">
+        <span className="select-cell">
+          <input
+            type="checkbox"
+            aria-label={allOn ? "Clear the selection" : "Select every transaction listed"}
+            checked={allOn}
+            ref={(box) => {
+              if (box) box.indeterminate = someOn;
+            }}
+            onChange={() => {
+              setSelected(allOn ? new Set() : new Set(items.map((t) => t.id)));
+              setAnchor(null);
+            }}
+          />
+        </span>
         <span>Date</span>
         <span>Description</span>
         <span className="num">Amount</span>
         <span>Category</span>
       </div>
-      {props.items.map((t) => (
+      {items.map((t, index) => (
         // Rows without a category stand out while scrolling; transfers between your own accounts, which aren't
-        // spending or income, step back (see .is-uncategorized and .is-transfer).
-        <div key={t.id} className={`ledger-row table-grid${rowMark(t)}`}>
+        // spending or income, step back (see .is-uncategorized and .is-transfer). Selected rows are tinted.
+        <div
+          key={t.id}
+          className={`ledger-row table-grid${selected.has(t.id) ? " is-selected" : rowMark(t)}`}
+        >
+          <span className="select-cell">
+            <input
+              type="checkbox"
+              aria-label={`Select ${t.description || "transaction"} on ${formatDate(t.date)}`}
+              checked={selected.has(t.id)}
+              // Click, not change: only the click knows whether Shift was held (to select a range).
+              onClick={(e) => toggle(index, e.currentTarget.checked, e.shiftKey)}
+              onChange={() => {}}
+            />
+          </span>
           <span className="small nowrap">{formatDate(t.date)}</span>
           <span>
             {t.description || "No description"}
@@ -377,10 +479,39 @@ function TransactionTable(props: {
           </span>
         </div>
       ))}
-      {props.total > props.items.length && (
+      {props.total > items.length && (
         <p className="meta small">
-          Showing {props.items.length} of {props.total}. Search or filter to narrow down.
+          Showing {items.length} of {props.total}. Search or filter to narrow down.
         </p>
+      )}
+
+      {/* Stays in view at the bottom while anything is selected, or right after a change, for Undo. */}
+      {selected.size > 0 ? (
+        <div className="bulk-bar" role="region" aria-label="Change the selected transactions">
+          <strong>{selected.size} selected</strong>
+          <CategorySelect categories={props.categories} value={bulkCategory} onChange={setBulkCategory} />
+          <button onClick={setForSelected} disabled={!bulkCategory || saving}>
+            {saving ? "Saving…" : "Set category"}
+          </button>
+          <button className="text" onClick={() => setSelected(new Set())}>
+            Clear
+          </button>
+        </div>
+      ) : (
+        lastChange && (
+          <div className="bulk-bar" role="status">
+            <span>
+              Set {lastChange.count} transaction{lastChange.count === 1 ? "" : "s"} to{" "}
+              <strong>{lastChange.categoryName}</strong>.
+            </span>
+            <button className="text" onClick={undo}>
+              Undo
+            </button>
+            <button className="text" onClick={() => setLastChange(null)} aria-label="Dismiss">
+              ✕
+            </button>
+          </div>
+        )
       )}
     </div>
   );

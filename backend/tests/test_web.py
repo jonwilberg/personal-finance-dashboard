@@ -357,3 +357,31 @@ def test_transactions_can_be_filtered_to_the_ones_a_rule_categorizes(api, bank):
 
     assert api.get("/api/transactions", params={"rule": "REMA 1000"}).json()["total"] == 1
     assert api.get("/api/transactions", params={"rule": "REMA"}).json()["total"] == 0  # the longer rule wins
+
+
+def test_many_transactions_can_get_a_category_at_once_and_be_undone(api, bank):
+    connect(api, bank)
+    api.post("/api/accounts/acc-1/refresh", params={"longest": True})
+    items = {t["description"]: t for t in api.get("/api/transactions").json()["items"]}
+    rema, salary = items["Rema 1000"], items["Lønn"]
+    assert (rema["category"], rema["category_source"]) == ("groceries", "keyword")
+
+    changed = api.put("/api/transactions/categories", json={"changes": [
+        {"id": rema["id"], "category": "eating_out"}, {"id": salary["id"], "category": "eating_out"},
+    ]}).json()["items"]
+    assert {(t["category"], t["category_source"]) for t in changed} == {("eating_out", "manual")}
+
+    # Undo: back to how each one was, which for both means the automatic category.
+    undone = api.put("/api/transactions/categories", json={"changes": [
+        {"id": rema["id"], "category": None}, {"id": salary["id"], "category": None},
+    ]}).json()["items"]
+    assert {t["description"]: t["category"] for t in undone} == {"Rema 1000": "groceries", "Lønn": "salary"}
+
+    # All or nothing: one unknown id or category changes none of them.
+    assert api.put("/api/transactions/categories", json={"changes": [
+        {"id": rema["id"], "category": "shopping"}, {"id": "acc-1:nope", "category": "shopping"},
+    ]}).status_code == 404
+    assert api.put("/api/transactions/categories", json={"changes": [
+        {"id": rema["id"], "category": "nope"},
+    ]}).status_code == 422
+    assert next(t for t in api.get("/api/transactions").json()["items"] if t["id"] == rema["id"])["category"] == "groceries"

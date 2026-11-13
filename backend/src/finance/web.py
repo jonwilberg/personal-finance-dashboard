@@ -50,6 +50,16 @@ class CategoryChoice(BaseModel):
     category: str | None
 
 
+class CategoryChange(BaseModel):
+    id: str
+    # None removes your manual choice, so the automatic category applies again.
+    category: str | None
+
+
+class TransactionCategoryChanges(BaseModel):
+    changes: list[CategoryChange] = Field(max_length=5000)
+
+
 class RulePattern(BaseModel):
     pattern: str = Field(min_length=2)
     # True: pattern is a regular expression, searched case-insensitively in the text shown in the app.
@@ -277,6 +287,20 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
             needle = q.upper()
             items = [t for t in items if needle in t["text"] or needle in t["description"].upper()]
         return {"total": len(items), "items": [_public(t) for t in items[offset : offset + limit]]}
+
+    @app.put("/api/transactions/categories")
+    def set_categories(request: TransactionCategoryChanges) -> dict[str, Any]:
+        """Set (or, with null, remove) your category on many transactions at once, all or nothing. Returns them
+        as they are now, so the caller can show them and undo the change."""
+        if not request.changes:
+            return {"items": []}
+        if missing := store.missing_transactions([c.id for c in request.changes]):
+            raise HTTPException(404, f"Unknown transaction{'s' if len(missing) > 1 else ''}: {', '.join(missing[:5])}")
+        for category in {c.category for c in request.changes if c.category is not None}:
+            require_category(category)
+        store.set_overrides([(c.id, c.category) for c in request.changes])
+        wanted = {c.id for c in request.changes}
+        return {"items": [_public(t) for t in all_transactions() if t["id"] in wanted]}
 
     @app.put("/api/transactions/{transaction_id:path}/category")
     def set_category(transaction_id: str, choice: CategoryChoice) -> dict[str, Any]:
