@@ -1528,7 +1528,7 @@ input.rule-regex {
 }
 
 /* Overview: this month's spending as one bar split by category. Wide blocks carry their label inside; the rest get
-   a label just above, joined by a short leader line. A bracket under the bar names the fixed and adjustable groups. */
+   a label just above or below, joined by a short leader line. A legend line above says what the colours mean. */
 
 .split {
   margin: var(--space-3) 0 var(--space-5);
@@ -1622,17 +1622,17 @@ input.rule-regex {
   color: color-mix(in srgb, var(--ink) 75%, transparent);
 }
 
-.split-bracket path {
-  fill: none;
-  stroke: var(--ink-muted);
-  stroke-width: 1;
+.split-legend {
+  margin-bottom: var(--space-3);
 }
 
-.split-bracket text {
-  font-family: var(--font-ui);
-  font-size: var(--text-caption);
+.split-legend .split-legend-name {
+  color: var(--ink);
   font-weight: 500;
-  fill: var(--ink-secondary);
+}
+
+.split-legend .split-figures {
+  color: var(--ink-secondary);
 }
 
 /* A table row reached from the bar flashes briefly. */
