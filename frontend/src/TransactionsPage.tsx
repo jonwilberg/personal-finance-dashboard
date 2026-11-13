@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { type CategorizationSummary, type Category, type CategoryRule, type Transaction, api } from "./api";
+import { accountName, accountNumber } from "./accounts";
+import {
+  type CategorizationSummary,
+  type Category,
+  type CategoryRule,
+  type Connection,
+  type Transaction,
+  api,
+} from "./api";
 import { CategorySelect } from "./CategorySelect";
 import { RulePattern, RulesView } from "./RulesView";
 import { formatDate, formatMoney } from "./format";
@@ -19,11 +27,15 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
   const [ruleCategory, setRuleCategory] = useState("");
   // All transactions narrowed to what one rule categorizes, opened from that rule's count.
   const [ruleFilter, setRuleFilter] = useState<CategoryRule | null>(null);
+  // One account's transactions (its uid), in both Needs review and All transactions.
+  const [accountFilter, setAccountFilter] = useState("");
+  const [connections, setConnections] = useState<Connection[]>([]);
   const [items, setItems] = useState<Transaction[] | null>(null);
   const [total, setTotal] = useState(0);
 
   useEffect(() => {
     api.categories().then(setCategories).catch(onError);
+    api.connections().then(setConnections).catch(onError);
   }, [onError]);
 
   const reloadSummary = useCallback(() => {
@@ -41,6 +53,7 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
         q: query.trim(),
         category: view === "all" && !onlyUncategorized ? categoryFilter : undefined,
         rule: view === "all" ? ruleFilter?.pattern : undefined,
+        account: accountFilter || undefined,
         limit: view === "review" ? 5000 : 300,
       })
       .then((result) => {
@@ -48,11 +61,12 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
         setTotal(result.total);
       })
       .catch(onError);
-  }, [view, query, categoryFilter, ruleFilter, onError, reloadSummary]);
+  }, [view, query, categoryFilter, ruleFilter, accountFilter, onError, reloadSummary]);
 
   /** From a rule's count to exactly the transactions it categorizes. */
   const showTransactionsFor = (rule: CategoryRule) => {
     setCategoryFilter("");
+    setAccountFilter("");
     setQuery("");
     setRuleFilter(rule);
     setView("all");
@@ -109,6 +123,25 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
             ))}
           </select>
         )}
+        {view !== "rules" && connections.length > 0 && (
+          <select
+            className={accountFilter ? "is-filtering" : undefined}
+            value={accountFilter}
+            onChange={(e) => setAccountFilter(e.target.value)}
+            aria-label="Account"
+          >
+            <option value="">All accounts</option>
+            {connections.map((connection) => (
+              <optgroup key={connection.session_id} label={connection.aspsp.name}>
+                {connection.accounts.map((account) => (
+                  <option key={account.uid} value={account.uid}>
+                    {[accountName(account), accountNumber(account)].filter(Boolean).join(" ")}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        )}
         {view === "rules" && (
           <select value={ruleCategory} onChange={(e) => setRuleCategory(e.target.value)} aria-label="Category">
             <option value="">All categories</option>
@@ -143,7 +176,13 @@ export function TransactionsPage({ onError }: { onError: (e: unknown) => void })
       )}
       {view !== "rules" && items === null && <p className="muted">Loading…</p>}
       {items && view === "review" && (
-        <ReviewGroups items={items} categories={categories} onSaved={reload} onError={onError} />
+        <ReviewGroups
+          items={items}
+          categories={categories}
+          onSaved={reload}
+          onError={onError}
+          narrowed={!!accountFilter || !!query.trim()}
+        />
       )}
       {items && view === "all" && (
         <TransactionTable
@@ -175,10 +214,18 @@ function ReviewGroups(props: {
   categories: Category[];
   onSaved: () => void;
   onError: (e: unknown) => void;
+  /** True when a search or the account filter narrows the list, so "nothing" doesn't mean everywhere. */
+  narrowed?: boolean;
 }) {
   const groups = useMemo(() => groupByMerchant(props.items), [props.items]);
   if (groups.length === 0) {
-    return <p className="empty">Nothing to review. Every transaction has a category.</p>;
+    return (
+      <p className="empty">
+        {props.narrowed
+          ? "Nothing to review here. Every matching transaction has a category."
+          : "Nothing to review. Every transaction has a category."}
+      </p>
+    );
   }
   return (
     <div className="ledger">

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { ACCOUNT_TYPES, accountName, accountNumber } from "./accounts";
 import { type Account, type AppInfo, type Connection, type Owner, api } from "./api";
 import { OwnerPicker } from "./OwnerPicker";
 import { PeopleSection } from "./PeopleSection";
@@ -354,26 +355,6 @@ function initials(bankName: string) {
     .slice(0, 2)
     .map((w) => w[0].toUpperCase())
     .join("");
-}
-
-const ACCOUNT_TYPES: Record<string, string> = {
-  CACC: "Current account",
-  SVGS: "Savings",
-  CARD: "Credit card",
-  LOAN: "Loan",
-};
-
-/** Bank product names arrive as "BRUKSKONTO PLUSS" or "SavingsAccountPlus"; make them readable. */
-function accountName(account: Account) {
-  const raw = account.product || account.name || ACCOUNT_TYPES[account.cash_account_type ?? ""] || "Account";
-  const spaced = raw.replace(/([a-z])([A-Z])/g, "$1 $2");
-  if (spaced !== spaced.toUpperCase()) return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-  return spaced.toLowerCase().replace(/(^|\s)(\p{L})/gu, (_, space, letter) => space + letter.toUpperCase());
-}
-
-function accountNumber(account: Account) {
-  const number = account.iban ?? account.identifiers?.[0];
-  return number ? `••${number.replace(/\D/g, "").slice(-4)}` : null;
 }
 
 function sinceMonth(iso: string) {
