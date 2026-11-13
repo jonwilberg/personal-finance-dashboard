@@ -243,6 +243,14 @@ export interface OverviewMonth {
   adjustable: number;
   uncategorized: number;
   income: number;
+  /** Spending per group (see SpendingGroup), in stacking order. */
+  groups: Record<string, number>;
+}
+
+/** A group spending is shown in on the charts: fixed costs, a few large categories, and Other. */
+export interface SpendingGroup {
+  id: string;
+  name: string;
 }
 
 export interface OverviewChange {
@@ -258,6 +266,8 @@ export interface ScoreboardRow {
   category: string;
   name: string;
   fixed: boolean;
+  /** Its spending group's id. */
+  group: string;
   amount: number;
   share: number | null;
   usual: number | null;
@@ -276,6 +286,8 @@ export interface Overview {
   figures?: OverviewFigures;
   usual_months?: number;
   series: OverviewMonth[];
+  /** The spending groups, in stacking order (bottom first). */
+  groups?: SpendingGroup[];
   changes?: OverviewChange[];
   scoreboard?: ScoreboardRow[];
 }

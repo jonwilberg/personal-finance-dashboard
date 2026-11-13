@@ -56,6 +56,27 @@ DEFAULT_CATEGORIES = [
     Category("transfer", "Transfers", "transfer", system=True),
 ]
 
+# The groups spending is shown in on the overview's charts, in stacking order (bottom to top). Fixed costs are
+# the categories marked fixed; a few large categories get a group of their own, and the rest (uncategorized
+# spending included) is Other.
+SPENDING_GROUPS: list[tuple[str, str]] = [
+    ("fixed", "Fixed"),
+    ("groceries", "Groceries"),
+    ("dining", "Dining and leisure"),
+    ("travel", "Travel"),
+    ("other", "Other"),
+]
+_GROUP_OF_CATEGORY = {"groceries": "groceries", "eating_out": "dining", "leisure": "dining", "travel": "travel"}
+
+
+def spending_group(category: Category | None) -> str:
+    """The chart group of a spending category; None (uncategorized spending) is Other."""
+    if category is None:
+        return "other"
+    if category.fixed:
+        return "fixed"
+    return _GROUP_OF_CATEGORY.get(category.id, "other")
+
 # Merchant keywords per category, checked in this order (first match wins). Norwegian merchants first.
 # Order matters where names overlap: "OBS BYGG" (home) is checked before "OBS" (groceries).
 MERCHANT_KEYWORDS: dict[str, list[str]] = {

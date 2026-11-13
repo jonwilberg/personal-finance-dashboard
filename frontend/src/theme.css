@@ -26,10 +26,13 @@
   --cat-8: #a8653d;
   --cat-other: #b9b0a0;
 
-  /* Fixed vs adjustable spending, and income beside them (validated together: lightness band, chroma, CVD and
-     contrast on --paper). */
-  --chart-fixed: #2a63b0;
-  --chart-adjustable: #b8862a;
+  /* Spending groups (see spendingGroups.ts) and income beside them, validated together: lightness band, chroma,
+     colour-blind separation and contrast on --paper. Other is a neutral grey, so the named groups carry the colour. */
+  --group-fixed: #2a63b0;
+  --group-groceries: #b8862a;
+  --group-dining: #9c3d5c;
+  --group-travel: #9a6ad0;
+  --group-other: #b9b0a0;
   --chart-income: #1a8a70;
 
   --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
@@ -84,7 +87,11 @@
   --cat-8: #d08e66;
   --cat-other: #6b6458;
 
-  --chart-fixed: #4f86cc;
-  --chart-adjustable: #b8862a;
+  /* Not yet validated for the dark surface: travel sits close to the lighter fixed blue here. */
+  --group-fixed: #4f86cc;
+  --group-groceries: #b8862a;
+  --group-dining: #b8566f;
+  --group-travel: #b07ad8;
+  --group-other: #6b6458;
   --chart-income: #1a8a70;
 }

@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { ScoreboardRow } from "./api";
+import type { ScoreboardRow, SpendingGroup } from "./api";
 import { formatKr } from "./format";
+import { LIGHT_TEXT_GROUPS, groupFill } from "./spendingGroups";
 
-// The month's spending as one bar, split by category: fixed costs first, then adjustable, each largest first, then
-// what isn't categorized (hatched). Colours match the 12-month chart above it.
+// The month's spending as one bar, split by category and coloured by spending group, as in the 12-month chart above
+// it: the groups in their order, each group's categories largest first, and what isn't categorized (hatched) last.
 // - A block wide enough for its label carries it inside.
 // - The others get a label just above or below the bar (alternating), starting at the block's centre and spread
 //   only as far as needed to stop labels touching. Order is kept on each side, so leader lines never cross.
@@ -47,7 +48,7 @@ export function shareText(share: number) {
   return share > 0 && share < 0.005 ? "<1 %" : `${Math.round(share * 100)} %`;
 }
 
-export function SpendingSplit({ rows }: { rows: ScoreboardRow[] }) {
+export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups: SpendingGroup[] }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(720);
   const [hover, setHover] = useState<string | null>(null);
@@ -66,11 +67,16 @@ export function SpendingSplit({ rows }: { rows: ScoreboardRow[] }) {
 
   const spent = rows.filter((r) => r.amount > 0); // refunds larger than the spending leave nothing to show
   if (spent.length === 0) return null;
-  const ordered = [
-    ...spent.filter((r) => r.fixed && r.category !== UNCATEGORIZED).sort((a, b) => b.amount - a.amount),
-    ...spent.filter((r) => !r.fixed && r.category !== UNCATEGORIZED).sort((a, b) => b.amount - a.amount),
-    ...spent.filter((r) => r.category === UNCATEGORIZED),
-  ];
+  const rank = (row: ScoreboardRow) => {
+    const index = groups.findIndex((g) => g.id === row.group);
+    return index < 0 ? groups.length : index;
+  };
+  const ordered = [...spent].sort(
+    (a, b) =>
+      rank(a) - rank(b) ||
+      Number(a.category === UNCATEGORIZED) - Number(b.category === UNCATEGORIZED) ||
+      b.amount - a.amount,
+  );
   const total = ordered.reduce((sum, r) => sum + r.amount, 0);
   const figures = (row: ScoreboardRow, share: number) => `${formatKr(row.amount)} · ${shareText(share)}`;
 
@@ -105,22 +111,13 @@ export function SpendingSplit({ rows }: { rows: ScoreboardRow[] }) {
   }));
 
   // The groups, with their totals, for the legend line above the bar.
-  const groups = (
-    [
-      { key: "fixed", name: "Fixed", swatch: "var(--chart-fixed)", has: (r: ScoreboardRow) => r.fixed },
-      { key: "adjustable", name: "Adjustable", swatch: "var(--chart-adjustable)", has: (r: ScoreboardRow) => !r.fixed },
-      { key: UNCATEGORIZED, name: "Not categorized", swatch: null, has: () => true },
-    ] as const
-  ).flatMap((group) => {
-    const members = ordered.filter((r) =>
-      group.key === UNCATEGORIZED ? r.category === UNCATEGORIZED : r.category !== UNCATEGORIZED && group.has(r),
-    );
-    const amount = members.reduce((sum, r) => sum + r.amount, 0);
-    return amount > 0 ? [{ ...group, amount, share: amount / total }] : [];
+  const legend = groups.flatMap((group) => {
+    const amount = ordered.filter((r) => r.group === group.id).reduce((sum, r) => sum + r.amount, 0);
+    return amount > 0 ? [{ key: group.id, name: group.name, swatch: groupFill(group.id), amount, share: amount / total }] : [];
   });
 
   const fill = (row: ScoreboardRow) =>
-    row.category === UNCATEGORIZED ? `url(#${hatchId})` : row.fixed ? "var(--chart-fixed)" : "var(--chart-adjustable)";
+    row.category === UNCATEGORIZED ? `url(#${hatchId})` : groupFill(row.group);
   const isHover = (p: Part) => hover === p.row.category;
   const events = (p: Part) => ({
     onMouseEnter: () => setHover(p.row.category),
@@ -140,13 +137,9 @@ export function SpendingSplit({ rows }: { rows: ScoreboardRow[] }) {
     <div className="split" ref={frameRef}>
       {/* What the colours mean, with each group's total: the same legend style as the 12-month chart above. */}
       <div className="chart-legend split-legend">
-        {groups.map((g) => (
+        {legend.map((g) => (
           <span key={g.key} className="legend-item">
-            <span
-              className={`legend-swatch${g.swatch ? "" : " legend-hatch"}`}
-              style={g.swatch ? { background: g.swatch } : undefined}
-              aria-hidden="true"
-            />
+            <span className="legend-swatch" style={{ background: g.swatch }} aria-hidden="true" />
             <span className="split-legend-name">{g.name}</span>
             <span className="split-figures">
               {formatKr(g.amount)} · <span className="split-share">{shareText(g.share)}</span>
@@ -206,7 +199,7 @@ export function SpendingSplit({ rows }: { rows: ScoreboardRow[] }) {
           parts.filter(inside).map((part) => (
             <div
               key={part.row.category}
-              className={`split-label split-inside ${part.row.fixed ? "on-fixed" : "on-adjustable"}${isHover(part) ? " is-hover" : ""}`}
+              className={`split-label split-inside ${LIGHT_TEXT_GROUPS.has(part.row.group) ? "on-dark" : "on-light"}${isHover(part) ? " is-hover" : ""}`}
               style={{ left: part.x, width: part.w, top: barTop, height: BAR_H }}
               title={`${part.row.name}: ${figures(part.row, part.share)}`}
               {...events(part)}

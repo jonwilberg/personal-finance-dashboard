@@ -1,14 +1,10 @@
-import { useEffect, useId, useRef, useState } from "react";
-import type { OverviewMonth } from "./api";
+import { useEffect, useRef, useState } from "react";
+import type { OverviewMonth, SpendingGroup } from "./api";
 import { formatKr } from "./format";
+import { groupFill } from "./spendingGroups";
 
-// Each month is a pair of bars: spending stacked on the left (fixed at the bottom, adjustable, then uncategorized,
-// hatched so it never relies on colour), and income on the right.
-const SEGMENTS = [
-  { key: "fixed", label: "Fixed", fill: "var(--chart-fixed)" },
-  { key: "adjustable", label: "Adjustable", fill: "var(--chart-adjustable)" },
-  { key: "uncategorized", label: "Not categorized", fill: "hatch" },
-] as const;
+// Each month is a pair of bars: spending stacked on the left by group (fixed costs at the bottom, Other on top), and
+// income on the right.
 const INCOME_FILL = "var(--chart-income)";
 
 const HEIGHT = 240;
@@ -31,13 +27,15 @@ const overlaps = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 &
 
 export function SpendingChart(props: {
   series: OverviewMonth[];
+  /** The spending groups, in stacking order (bottom first). */
+  groups: SpendingGroup[];
   selected: string;
   usual: number | null;
   onSelect: (month: string) => void;
 }) {
   const { series, selected, usual } = props;
   const [hover, setHover] = useState<number | null>(null);
-  const hatchId = useId().replace(/:/g, "");
+  const segmentsOf = props.groups.map((g) => ({ key: g.id, label: g.name, fill: groupFill(g.id) }));
   // Draw at the frame's real width so text and marks keep their pixel sizes.
   const frameRef = useRef<HTMLDivElement>(null);
   const [WIDTH, setWidth] = useState(720);
@@ -123,12 +121,9 @@ export function SpendingChart(props: {
   return (
     <div className="chart">
       <div className="chart-legend" aria-hidden="true">
-        {SEGMENTS.map((s) => (
+        {segmentsOf.map((s) => (
           <span key={s.key} className="legend-item">
-            <span
-              className={`legend-swatch ${s.fill === "hatch" ? "legend-hatch" : ""}`}
-              style={s.fill === "hatch" ? undefined : { background: s.fill }}
-            />
+            <span className="legend-swatch" style={{ background: s.fill }} />
             {s.label}
           </span>
         ))}
@@ -146,13 +141,6 @@ export function SpendingChart(props: {
 
       <div className="chart-frame" ref={frameRef}>
         <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label="Spending and income per month">
-          <defs>
-            <pattern id={hatchId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <rect width="6" height="6" fill="var(--paper-sunken)" />
-              <line x1="0" y1="0" x2="0" y2="6" stroke="var(--ink-muted)" strokeWidth="2" />
-            </pattern>
-          </defs>
-
           {ticks.map((tick) => (
             <g key={tick}>
               <line
@@ -173,8 +161,8 @@ export function SpendingChart(props: {
             const x = pairX(i);
             const isSelected = month.month === selected;
             let base = 0;
-            const segments = SEGMENTS.map((s) => {
-              const value = month[s.key];
+            const segments = segmentsOf.map((s) => {
+              const value = month.groups[s.key] ?? 0;
               const segment = { ...s, value, from: base, to: base + value };
               base += value;
               return segment;
@@ -201,11 +189,10 @@ export function SpendingChart(props: {
                   const top = y(s.to);
                   const bottom = y(s.from) - (j > 0 ? GAP : 0);
                   const h = Math.max(bottom - top, 0.5);
-                  const fill = s.fill === "hatch" ? `url(#${hatchId})` : s.fill;
                   return j === segments.length - 1 ? (
-                    <path key={s.key} d={roundedTop(x, top, barW, h, RADIUS)} fill={fill} />
+                    <path key={s.key} d={roundedTop(x, top, barW, h, RADIUS)} fill={s.fill} />
                   ) : (
-                    <rect key={s.key} x={x} y={top} width={barW} height={h} fill={fill} />
+                    <rect key={s.key} x={x} y={top} width={barW} height={h} fill={s.fill} />
                   );
                 })}
                 {incomes[i] > 0 &&
@@ -270,10 +257,10 @@ export function SpendingChart(props: {
             role="status"
           >
             <strong>{monthTitle(hovered.month)}</strong>
-            {SEGMENTS.map((s) => (
+            {segmentsOf.map((s) => (
               <div key={s.key} className="tooltip-row">
                 <span>{s.label}</span>
-                <span>{formatKr(hovered[s.key])}</span>
+                <span>{formatKr(hovered.groups[s.key] ?? 0)}</span>
               </div>
             ))}
             <div className="tooltip-row tooltip-total">
@@ -293,7 +280,7 @@ export function SpendingChart(props: {
         <thead>
           <tr>
             <th>Month</th>
-            {SEGMENTS.map((s) => (
+            {segmentsOf.map((s) => (
               <th key={s.key}>{s.label}</th>
             ))}
             <th>Income</th>
@@ -303,8 +290,8 @@ export function SpendingChart(props: {
           {series.map((m) => (
             <tr key={m.month}>
               <td>{monthTitle(m.month)}</td>
-              {SEGMENTS.map((s) => (
-                <td key={s.key}>{formatKr(m[s.key])}</td>
+              {segmentsOf.map((s) => (
+                <td key={s.key}>{formatKr(m.groups[s.key] ?? 0)}</td>
               ))}
               <td>{formatKr(m.income)}</td>
             </tr>

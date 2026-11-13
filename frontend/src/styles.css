@@ -1566,26 +1566,26 @@ input.rule-regex {
   font-weight: 500;
 }
 
-/* Labels inside a block: light text on the fixed blue, ink on the adjustable ochre (both >= 5:1). */
+/* Labels inside a block: light text on the dark group colours, ink on the light ones (see spendingGroups.ts). */
 .split-inside {
   pointer-events: auto;
 }
 
-.split-inside.on-fixed .split-name,
-.split-inside.on-fixed .split-figures {
+.split-inside.on-dark .split-name,
+.split-inside.on-dark .split-figures {
   color: var(--paper-raised);
 }
 
-.split-inside.on-fixed .split-share {
+.split-inside.on-dark .split-share {
   color: color-mix(in srgb, var(--paper-raised) 80%, transparent);
 }
 
-.split-inside.on-adjustable .split-name,
-.split-inside.on-adjustable .split-figures {
+.split-inside.on-light .split-name,
+.split-inside.on-light .split-figures {
   color: var(--ink);
 }
 
-.split-inside.on-adjustable .split-share {
+.split-inside.on-light .split-share {
   color: color-mix(in srgb, var(--ink) 75%, transparent);
 }
 
