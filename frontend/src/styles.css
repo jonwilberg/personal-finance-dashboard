@@ -1672,3 +1672,8 @@ tr.is-flash > td {
   border-bottom: var(--rule-hair);
   cursor: pointer;
 }
+
+/* A filter that is narrowing the list gets an ink outline, so it’s clear the list isn’t everything. */
+select.is-filtering {
+  border-color: var(--ink);
+}
