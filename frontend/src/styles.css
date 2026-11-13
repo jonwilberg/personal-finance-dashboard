@@ -1526,3 +1526,149 @@ input.rule-regex {
   background: var(--highlight);
   border-radius: var(--radius);
 }
+
+/* Overview: this month's spending as one bar split by category. Wide blocks carry their label inside; the rest get
+   a label just above, joined by a short leader line. A bracket under the bar names the fixed and adjustable groups. */
+
+.split {
+  margin: var(--space-3) 0 var(--space-5);
+}
+
+.split-frame {
+  position: relative;
+}
+
+.split-frame svg {
+  display: block;
+  overflow: visible;
+}
+
+.split-block {
+  cursor: pointer;
+  transition: opacity 120ms ease-out;
+}
+
+.split-block.is-dimmed {
+  opacity: 0.45;
+}
+
+.split-leader {
+  stroke: var(--ink-muted);
+  stroke-width: 1;
+}
+
+.split-leader.is-hover {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+.split-label {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  font-size: var(--text-caption);
+  line-height: 1.25;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.split-label > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.split-name {
+  color: var(--ink);
+}
+
+.split-figures {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.split-share {
+  color: var(--ink-muted);
+}
+
+.split-label.is-hover .split-name {
+  font-weight: 500;
+}
+
+/* Labels inside a block: light text on the fixed blue, ink on the adjustable ochre (both >= 5:1). */
+.split-inside {
+  pointer-events: auto;
+}
+
+.split-inside.on-fixed .split-name,
+.split-inside.on-fixed .split-figures {
+  color: var(--paper-raised);
+}
+
+.split-inside.on-fixed .split-share {
+  color: color-mix(in srgb, var(--paper-raised) 80%, transparent);
+}
+
+.split-inside.on-adjustable .split-name,
+.split-inside.on-adjustable .split-figures {
+  color: var(--ink);
+}
+
+.split-inside.on-adjustable .split-share {
+  color: color-mix(in srgb, var(--ink) 75%, transparent);
+}
+
+.split-bracket path {
+  fill: none;
+  stroke: var(--ink-muted);
+  stroke-width: 1;
+}
+
+.split-bracket text {
+  font-family: var(--font-ui);
+  font-size: var(--text-caption);
+  font-weight: 500;
+  fill: var(--ink-secondary);
+}
+
+/* A table row reached from the bar flashes briefly. */
+@keyframes split-flash {
+  from {
+    background: var(--highlight);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+tr.is-flash > td {
+  animation: split-flash 1.6s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  tr.is-flash > td {
+    animation: none;
+    background: var(--highlight);
+  }
+}
+
+/* Phones: the bar, then a list with a swatch per category instead of placed labels. */
+.split-list {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+}
+
+.split-list li {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px 0;
+  border-bottom: var(--rule-hair);
+  cursor: pointer;
+}
