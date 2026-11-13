@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import Counter
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -42,7 +44,43 @@ def signed_amount(transaction: dict[str, Any]) -> Decimal:
 
 
 def transaction_date(transaction: dict[str, Any]) -> str:
+    """The booking date (or the best the bank gave): how stored transactions are ordered and replaced."""
     return transaction.get("booking_date") or transaction.get("transaction_date") or transaction.get("value_date") or ""
+
+
+# "Betalt: 28.02.26" in a payment's text: the day it was paid, which the bank may book on the next weekday.
+_PAID_RE = re.compile(r"\bBetalt:?\s*(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})\b", re.IGNORECASE)
+# Earlier dates further back than this aren't trusted as the day the money moved.
+_MAX_DAYS_BEFORE_BOOKING = 31
+
+
+def payment_date(transaction: dict[str, Any]) -> str:
+    """The day the money moved, which is the date transactions are counted by.
+
+    The earliest of the booking date, the bank's transaction date (a card purchase's day), an earlier value date
+    and a payment date in the text ("Betalt: 28.02.26"), within a month before booking. Banks book a payment made
+    on a Saturday on the next weekday, so a bill paid on the last day of a month would otherwise count in the next.
+    Later dates are ignored: on some cards the value date is the bill's due date.
+    """
+    booked = transaction_date(transaction)
+    try:
+        booked_day = date.fromisoformat(booked)
+    except ValueError:
+        return booked
+    candidates = [booked_day]
+    for key in ("transaction_date", "value_date"):
+        try:
+            candidates.append(date.fromisoformat(transaction.get(key) or ""))
+        except ValueError:
+            pass
+    for line in transaction.get("remittance_information") or []:
+        for day, month, year in _PAID_RE.findall(line or ""):
+            try:
+                candidates.append(date(int(year) + (2000 if len(year) == 2 else 0), int(month), int(day)))
+            except ValueError:
+                pass
+    earliest = booked_day - timedelta(days=_MAX_DAYS_BEFORE_BOOKING)
+    return min(d for d in candidates if earliest <= d <= booked_day).isoformat()
 
 
 def description(transaction: dict[str, Any]) -> str:
