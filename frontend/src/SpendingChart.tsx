@@ -2,17 +2,20 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { OverviewMonth } from "./api";
 import { formatKr } from "./format";
 
-// Stacked monthly spending: fixed (bottom), adjustable, then uncategorized (hatched, so it never relies on colour).
+// Each month is a pair of bars: spending stacked on the left (fixed at the bottom, adjustable, then uncategorized,
+// hatched so it never relies on colour), and income on the right.
 const SEGMENTS = [
   { key: "fixed", label: "Fixed", fill: "var(--chart-fixed)" },
   { key: "adjustable", label: "Adjustable", fill: "var(--chart-adjustable)" },
   { key: "uncategorized", label: "Not categorized", fill: "hatch" },
 ] as const;
+const INCOME_FILL = "var(--chart-income)";
 
 const HEIGHT = 240;
 const PAD = { top: 28, right: 8, bottom: 28, left: 52 }; // top leaves room for the selected month's total
 const GAP = 2; // surface gap between stacked segments
 const RADIUS = 4; // rounded data-end on the top of each bar
+const PAIR_GAP = 3; // between a month's spending and income bars
 
 export function SpendingChart(props: {
   series: OverviewMonth[];
@@ -35,12 +38,34 @@ export function SpendingChart(props: {
   }, []);
 
   const totals = series.map((m) => m.fixed + m.adjustable + m.uncategorized);
-  const { max, ticks } = niceScale(Math.max(usual ?? 0, ...totals, 1));
+  const { max, ticks } = niceScale(Math.max(usual ?? 0, ...totals, ...series.map((m) => m.income), 1));
   const plotW = WIDTH - PAD.left - PAD.right;
   const plotH = HEIGHT - PAD.top - PAD.bottom;
   const band = plotW / Math.max(series.length, 1);
-  const barW = Math.min(36, band * 0.62);
+  const barW = Math.min(26, band * 0.34);
+  const pairW = barW * 2 + PAIR_GAP;
   const y = (value: number) => PAD.top + plotH - (value / max) * plotH;
+  const pairX = (i: number) => PAD.left + band * i + (band - pairW) / 2; // left edge of a month's spending bar
+
+  /**
+   * Where a month's spending total goes: above its spending bar. When the income bar beside it is taller, the label is
+   * nudged left so it doesn't run into it. Returns null when there's no room for that either (narrow bars on phones):
+   * lifted above the income bar, the figure would read as income.
+   */
+  const totalSpot = (i: number, text: string, size: number) => {
+    const half = (text.length * size * 0.58 + 4) / 2; // estimated width (tabular figures), plus the halo
+    const offset = size > 11 ? 8 : 6;
+    const incomeX = pairX(i) + barW + PAIR_GAP;
+    let cx = pairX(i) + barW / 2;
+    const baseline = y(totals[i]) - offset;
+    const income = series[i].income;
+    if (income > 0 && y(income) < baseline + 2 && cx + half > incomeX - 2) {
+      cx = incomeX - 2 - half;
+      const limit = i === 0 ? PAD.left : pairX(i - 1) + pairW + 2; // the previous month's income bar
+      if (cx - half < limit) return null;
+    }
+    return { cx, baseline };
+  };
 
   const hovered = hover !== null ? series[hover] : null;
 
@@ -56,16 +81,20 @@ export function SpendingChart(props: {
             {s.label}
           </span>
         ))}
+        <span className="legend-item">
+          <span className="legend-swatch" style={{ background: INCOME_FILL }} />
+          Income
+        </span>
         {usual !== null && (
           <span className="legend-item">
             <span className="legend-line" />
-            Median month
+            Median spending
           </span>
         )}
       </div>
 
       <div className="chart-frame" ref={frameRef}>
-        <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label="Spending per month, fixed and adjustable">
+        <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label="Spending and income per month">
           <defs>
             <pattern id={hatchId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
               <rect width="6" height="6" fill="var(--paper-sunken)" />
@@ -90,7 +119,7 @@ export function SpendingChart(props: {
           ))}
 
           {series.map((month, i) => {
-            const x = PAD.left + band * i + (band - barW) / 2;
+            const x = pairX(i);
             const isSelected = month.month === selected;
             let base = 0;
             const segments = SEGMENTS.map((s) => {
@@ -128,8 +157,14 @@ export function SpendingChart(props: {
                     <rect key={s.key} x={x} y={top} width={barW} height={h} fill={fill} />
                   );
                 })}
+                {month.income > 0 && (
+                  <path
+                    d={roundedTop(x + barW + PAIR_GAP, y(month.income), barW, Math.max(y(0) - y(month.income), 0.5), RADIUS)}
+                    fill={INCOME_FILL}
+                  />
+                )}
                 <text
-                  x={x + barW / 2}
+                  x={x + pairW / 2}
                   y={HEIGHT - 8}
                   textAnchor="middle"
                   className={`chart-axis ${isSelected ? "chart-axis-strong" : ""}`}
@@ -153,24 +188,29 @@ export function SpendingChart(props: {
             />
           )}
 
-          {/* Each month's total above its bar: in full for the selected month (where there's room), compact for the
-              rest so twelve labels fit. Drawn after the median line, with a halo (see .chart-total), so the line never
-              runs through them. */}
+          {/* Each month's spending total above its bar: in full for the selected month (where there's room), compact
+              for the rest so twelve labels fit. Income is in the tooltip. Drawn after the median line, with a halo
+              (see .chart-total), so the line never runs through them. */}
           <g pointerEvents="none">
             {series.map((month, i) => {
               if (totals[i] <= 0) return null;
               const isSelected = month.month === selected;
               const tint = isSelected ? " is-selected" : hover === i ? " is-hovered" : "";
+              const size = isSelected ? 12 : 11;
+              const full = formatKr(totals[i]);
+              const short = barTotal(totals[i], band);
+              const fullSpot = isSelected ? totalSpot(i, full, size) : null;
+              const spot = fullSpot ?? totalSpot(i, short, size);
+              if (!spot) return null; // every figure is in the tooltip and the table
               return (
                 <text
                   key={month.month}
-                  x={PAD.left + band * i + band / 2}
-                  y={y(totals[i]) - (isSelected ? 8 : 6)}
+                  x={spot.cx}
+                  y={spot.baseline}
                   textAnchor="middle"
                   className={`chart-total${tint}`}
                 >
-                  {/* Narrow bars (phones) have no room for the full figure; it's in Spent above the chart anyway. */}
-                  {isSelected && band >= 48 ? formatKr(totals[i]) : barTotal(totals[i], band)}
+                  {fullSpot ? full : short}
                 </text>
               );
             })}
@@ -191,21 +231,26 @@ export function SpendingChart(props: {
               </div>
             ))}
             <div className="tooltip-row tooltip-total">
-              <span>Total</span>
+              <span>Spent</span>
               <span>{formatKr(totals[hover])}</span>
+            </div>
+            <div className="tooltip-row">
+              <span>Income</span>
+              <span>{formatKr(hovered.income)}</span>
             </div>
           </div>
         )}
       </div>
 
       <table className="sr-only">
-        <caption>Spending per month</caption>
+        <caption>Spending and income per month</caption>
         <thead>
           <tr>
             <th>Month</th>
             {SEGMENTS.map((s) => (
               <th key={s.key}>{s.label}</th>
             ))}
+            <th>Income</th>
           </tr>
         </thead>
         <tbody>
@@ -215,6 +260,7 @@ export function SpendingChart(props: {
               {SEGMENTS.map((s) => (
                 <td key={s.key}>{formatKr(m[s.key])}</td>
               ))}
+              <td>{formatKr(m.income)}</td>
             </tr>
           ))}
         </tbody>

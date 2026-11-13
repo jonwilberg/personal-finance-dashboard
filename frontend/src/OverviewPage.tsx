@@ -119,7 +119,7 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
 
       <section className="section">
         <p className="label">
-          Spending, last {overview.series.length} months{scope && ` · ${scope}`}
+          Spending and income, last {overview.series.length} months{scope && ` · ${scope}`}
         </p>
         <SpendingChart
           series={overview.series}
@@ -128,7 +128,7 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
           onSelect={setMonth}
         />
         <p className="meta small">
-          Median month: the median of the {overview.usual_months || "previous"} months before. Select a bar to open that
+          Median spending: the median of the {overview.usual_months || "previous"} months before. Select a bar to open that
           month.
         </p>
       </section>

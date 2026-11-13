@@ -26,9 +26,11 @@
   --cat-8: #a8653d;
   --cat-other: #b9b0a0;
 
-  /* Fixed vs adjustable spending (validated: lightness band, chroma, CVD and contrast on --paper). */
+  /* Fixed vs adjustable spending, and income beside them (validated together: lightness band, chroma, CVD and
+     contrast on --paper). */
   --chart-fixed: #2a63b0;
   --chart-adjustable: #b8862a;
+  --chart-income: #1a8a70;
 
   --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
   --font-ui: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -84,4 +86,5 @@
 
   --chart-fixed: #4f86cc;
   --chart-adjustable: #b8862a;
+  --chart-income: #1a8a70;
 }
