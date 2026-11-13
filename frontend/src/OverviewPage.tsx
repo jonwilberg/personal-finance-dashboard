@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { type Overview, type Owner, api, overviewApi } from "./api";
-import { formatKr } from "./format";
 import { CategoryScoreboard } from "./CategoryScoreboard";
 import { OwnerFilter, ownerScope } from "./OwnerPicker";
 import { SpendingChart } from "./SpendingChart";
@@ -102,25 +101,6 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
             {next ? shortMonth(next) : ""} ›
           </button>
         </div>
-
-        {/* --chars lets CSS size the headline to fit on one line (see .front-headline). */}
-        <h2 className="front-headline" style={{ ["--chars" as string]: overview.headline.length }}>
-          {overview.headline}
-        </h2>
-
-        <div className="figures">
-          <Figure
-            label="Spent"
-            value={formatKr(f.spent)}
-            note={f.usual_spent !== null ? `median month ${formatKr(f.usual_spent)}` : undefined}
-          />
-          <Figure label="Income" value={formatKr(f.income)} />
-          <Figure
-            label="Saved"
-            value={formatKr(f.saved)}
-            note={f.savings_rate !== null ? `${Math.round(f.savings_rate * 100)} % of income` : undefined}
-          />
-        </div>
       </section>
 
       <section className="section">
@@ -153,16 +133,6 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
         </section>
       )}
     </>
-  );
-}
-
-function Figure(props: { label: string; value: string; note?: string }) {
-  return (
-    <div className="figure">
-      <span className="label">{props.label}</span>
-      <span className="figure-value">{props.value}</span>
-      {props.note && <span className="meta small">{props.note}</span>}
-    </div>
   );
 }
 
