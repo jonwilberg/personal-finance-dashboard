@@ -6,6 +6,10 @@ import { SpendingChart, monthTitle } from "./SpendingChart";
 import { SpendingSplit } from "./SpendingSplit";
 
 const OWNERS_KEY = "overview-owners";
+// Month names as the title shows them (the backend's labels are English, e.g. "August 2026").
+const MONTH_NAMES = Array.from({ length: 12 }, (_, i) =>
+  new Date(2000, i, 1).toLocaleDateString("en-GB", { month: "long" }),
+);
 
 /** The owners chosen last time in this browser, if they still exist; otherwise everyone. */
 function rememberedOwners(owners: Owner[]): string[] {
@@ -84,6 +88,7 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
   const previous = overview.months[index - 1];
   const next = overview.months[index + 1];
   const f = overview.figures;
+  const year = overview.month.slice(0, 4);
 
   return (
     <>
@@ -91,7 +96,15 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
           arrows to step through months, and on the right whose accounts are counted. */}
       <header className="overview-header">
         <div className="overview-title">
-          <h1>{overview.month_label}</h1>
+          {/* As wide as the longest month name, so the arrows beside it stay put when stepping through months. */}
+          <h1 className="month-title">
+            <span>{overview.month_label}</span>
+            {MONTH_NAMES.map((name) => (
+              <span key={name} className="month-title-sizer" aria-hidden="true">
+                {name} {year}
+              </span>
+            ))}
+          </h1>
           <span className="month-steps">
             <button
               className="month-step"
