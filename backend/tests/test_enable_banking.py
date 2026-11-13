@@ -118,40 +118,87 @@ def test_transactions_pass_strategy(key_pair):
     assert seen == [{"strategy": "longest"}]
 
 
-def capped_bank(transactions, requests):
-    """Mimics a bank that returns at most 100 transactions, newest first, and never a continuation_key."""
+def capped_bank(transactions, requests, keep="newest", longest=None):
+    """Mimics a bank that returns at most 100 transactions and never a continuation_key. `keep` is which end of
+    the requested range it returns; `longest`, if given, picks what a strategy=longest request returns."""
 
     def handler(request):
         params = dict(request.url.params)
         requests.append(params)
+        if "strategy" in params and longest:
+            return httpx.Response(200, json={"transactions": longest(transactions)})
         selected = [
             t
             for t in transactions
             if params.get("date_from", "0000") <= t["booking_date"] <= params.get("date_to", "9999")
         ]
-        selected.sort(key=lambda t: t["booking_date"], reverse=True)
-        return httpx.Response(200, json={"transactions": selected[:100]})
+        selected.sort(key=lambda t: t["booking_date"], reverse=keep == "newest")
+        return httpx.Response(200, json={"transactions": sorted(selected[:100], key=lambda t: t["booking_date"])})
 
     return handler
 
 
-def test_capped_responses_are_split_by_date(key_pair):
+def two_a_day(count, newest=date(2026, 10, 30)):
+    return [{"transaction_id": f"t{i}", "booking_date": (newest - timedelta(days=i // 2)).isoformat()} for i in range(count)]
+
+
+def ids(transactions):
+    return sorted(t["transaction_id"] for t in transactions)
+
+
+def test_capped_responses_are_completed_when_the_bank_keeps_the_newest(key_pair):
     private_pem, _ = key_pair
-    # 130 transactions, two per day, the newest on 2026-10-30.
-    transactions = [
-        {"transaction_id": f"t{i}", "booking_date": (date(2026, 10, 30) - timedelta(days=i // 2)).isoformat()}
-        for i in range(130)
-    ]
+    transactions = two_a_day(250)
     requests = []
-    client = make_client(private_pem, capped_bank(transactions, requests))
+    client = make_client(private_pem, capped_bank(transactions, requests, keep="newest"))
 
-    fetched = list(client.iter_transactions("acc-1", strategy="longest"))
+    assert ids(client.iter_transactions("acc-1", strategy="longest")) == ids(transactions)
+    assert len(requests) <= 12  # the range is halved until no window is full
 
-    assert sorted(t["transaction_id"] for t in fetched) == sorted(t["transaction_id"] for t in transactions)
-    assert requests == [
-        {"strategy": "longest"},
-        {"date_from": "2024-09-11", "date_to": "2026-09-11"},
-    ]
+
+def test_capped_responses_are_completed_when_the_bank_keeps_the_oldest(key_pair):
+    private_pem, _ = key_pair
+    transactions = two_a_day(250)
+    requests = []
+    client = make_client(private_pem, capped_bank(transactions, requests, keep="oldest"))
+
+    assert ids(client.iter_transactions("acc-1", strategy="longest")) == ids(transactions)
+    assert len(requests) <= 12
+
+
+def test_a_capped_longest_response_with_a_gap_in_the_middle_is_filled(key_pair):
+    """Like SEB Kort: "longest" returns 100 rows (the oldest purchases and a few recent ones) with months
+    missing in between, and no continuation_key."""
+    private_pem, _ = key_pair
+    transactions = two_a_day(300)
+    requests = []
+    by_date = sorted(transactions, key=lambda t: t["booking_date"])
+    client = make_client(
+        private_pem,
+        capped_bank(transactions, requests, keep="newest", longest=lambda _: by_date[:95] + by_date[-5:]),
+    )
+
+    assert ids(client.iter_transactions("acc-1", strategy="longest")) == ids(transactions)
+
+
+def test_capped_windows_with_gaps_are_still_completed(key_pair):
+    """The worst case: every full response, windowed or not, leaves months out in the middle."""
+    private_pem, _ = key_pair
+    transactions = two_a_day(300)
+    requests = []
+
+    def gappy(request):
+        params = dict(request.url.params)
+        requests.append(params)
+        selected = sorted(
+            (t for t in transactions if params.get("date_from", "0000") <= t["booking_date"] <= params.get("date_to", "9999")),
+            key=lambda t: t["booking_date"],
+        )
+        page = selected if len(selected) <= 100 else selected[:95] + selected[-5:]
+        return httpx.Response(200, json={"transactions": page})
+
+    client = make_client(private_pem, gappy)
+    assert ids(client.iter_transactions("acc-1", strategy="longest")) == ids(transactions)
 
 
 def test_full_page_on_a_single_day_stops(key_pair):
@@ -162,8 +209,8 @@ def test_full_page_on_a_single_day_stops(key_pair):
 
     fetched = list(client.iter_transactions("acc-1", date_from=date(2026, 1, 1)))
 
-    assert len(fetched) == 100
-    assert len(requests) == 2
+    assert len(fetched) == 100  # one day can't be split any further
+    assert len(requests) <= 20
 
 
 def test_field_coverage_counts_nested_non_empty_fields():

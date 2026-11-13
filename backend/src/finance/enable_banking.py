@@ -25,6 +25,8 @@ TOKEN_TTL_SECONDS = 3600
 CAPPED_PAGE_SIZE = 100
 # How far back to ask when splitting a capped request that had no date_from.
 CAPPED_LOOKBACK_DAYS = 730
+# A safety net for banks that cap: at most this many extra requests per account and fetch.
+CAPPED_MAX_REQUESTS = 40
 
 
 class EnableBankingError(Exception):
@@ -143,9 +145,11 @@ class EnableBankingClient:
 
         `strategy="longest"` asks the bank for as much history as it allows (recommended for a first fetch).
 
-        When the last page is full (CAPPED_PAGE_SIZE) the bank may have cut the response off, so the range is
-        requested again up to the oldest date received, until a page comes back short. That costs one extra
-        request per capped page, and only at banks that cap.
+        Some banks return at most CAPPED_PAGE_SIZE transactions and no continuation_key, and they differ in what
+        they return then: the newest, the oldest, or (SEB Kort, for "longest") old purchases plus a few recent
+        rows with months missing in between. So when a response is full, its date range is asked for again in
+        two halves, and so on, until every window comes back short of full. That makes no assumption about what
+        the bank kept; it costs a few extra requests, and only for fetches that hit the cap.
         """
         params: dict[str, str] = {}
         if date_from:
@@ -155,32 +159,55 @@ class EnableBankingClient:
         if strategy:
             params["strategy"] = strategy
 
-        # Keys from earlier (overlapping) date windows. Within one window every transaction is kept, even if two
+        # Keys from earlier (overlapping) requests. Within one response every transaction is kept, even if two
         # look the same, since they can be separate purchases.
         seen: set[str] = set()
-        while True:
-            last_page: list[dict[str, Any]] = []
-            window_keys: set[str] = set()
+
+        def fetch(request: dict[str, str]) -> tuple[list[dict[str, Any]], list[str], bool]:
+            """One request, following continuation keys: the transactions not seen before, the dates of all it
+            returned (sorted), and whether the last page was full."""
+            new: list[dict[str, Any]] = []
+            keys: set[str] = set()
+            dates: list[str] = []
             while True:
-                page = self._request("GET", f"/accounts/{account_uid}/transactions", params=params)
-                last_page = page.get("transactions", [])
-                for transaction in last_page:
+                page = self._request("GET", f"/accounts/{account_uid}/transactions", params=request)
+                rows = page.get("transactions", [])
+                for transaction in rows:
                     key = transaction_key(transaction)
-                    window_keys.add(key)
+                    keys.add(key)
+                    if day := transaction_date(transaction):
+                        dates.append(day)
                     if key not in seen:
-                        yield transaction
+                        new.append(transaction)
                 continuation_key = page.get("continuation_key")
                 if not continuation_key:
-                    break
-                params["continuation_key"] = continuation_key
-            seen |= window_keys
+                    seen.update(keys)
+                    return new, sorted(dates), len(rows) >= CAPPED_PAGE_SIZE
+                request = {**request, "continuation_key": continuation_key}
 
-            if len(last_page) < CAPPED_PAGE_SIZE:
-                return
-            oldest = min((d for t in last_page if (d := transaction_date(t))), default=None)
-            if oldest is None or oldest == params.get("date_to"):
-                return  # no dates to split on, or a full page within a single day: no way to go further back
-            # The oldest day is requested again because it may be only partly included; duplicates are skipped.
-            lookback = date.fromisoformat(oldest) - timedelta(days=CAPPED_LOOKBACK_DAYS)
-            params = {"date_from": params.get("date_from", lookback.isoformat()), "date_to": oldest}
+        first, dates, capped = fetch(params)
+        yield from first
+        if not capped:
+            return
+
+        # Ask again in explicit windows, from the earliest date the bank might hold to the end of the range.
+        today = date.today().isoformat()
+        lookback = (date.today() - timedelta(days=CAPPED_LOOKBACK_DAYS)).isoformat()
+        start = params.get("date_from") or min([lookback, *dates[:1]])
+        end = params.get("date_to") or max([today, *dates[-1:]])
+        windows = [(start, end)]
+        requests = 0
+        while windows and requests < CAPPED_MAX_REQUESTS:
+            low, high = windows.pop()
+            rows, got, capped = fetch({"date_from": low, "date_to": high})
+            requests += 1
+            yield from rows
+            if not capped:
+                continue
+            days = (date.fromisoformat(high) - date.fromisoformat(low)).days
+            if days < 1:
+                continue  # a full page within one day: there's no smaller window to ask for
+            # Split the window in two and ask for both halves, whatever part the bank chose to return.
+            middle = date.fromisoformat(low) + timedelta(days=days // 2)
+            windows += [(low, middle.isoformat()), ((middle + timedelta(days=1)).isoformat(), high)]
 
