@@ -2,17 +2,32 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { OverviewMonth } from "./api";
 import { formatKr } from "./format";
 
-// Stacked monthly spending: fixed (bottom), adjustable, then uncategorized (hatched, so it never relies on colour).
+// Each month is a pair of bars: spending stacked on the left (fixed at the bottom, adjustable, then uncategorized,
+// hatched so it never relies on colour), and income on the right.
 const SEGMENTS = [
   { key: "fixed", label: "Fixed", fill: "var(--chart-fixed)" },
   { key: "adjustable", label: "Adjustable", fill: "var(--chart-adjustable)" },
   { key: "uncategorized", label: "Not categorized", fill: "hatch" },
 ] as const;
+const INCOME_FILL = "var(--chart-income)";
 
 const HEIGHT = 240;
-const PAD = { top: 28, right: 8, bottom: 28, left: 52 }; // top leaves room for the selected month's total
+const PAD = { top: 28, right: 8, bottom: 28, left: 52 }; // top leaves room for the labels and broken bars
 const GAP = 2; // surface gap between stacked segments
 const RADIUS = 4; // rounded data-end on the top of each bar
+const PAIR_GAP = 3; // between a month's spending and income bars
+
+// Income far above a typical month (a bonus, a tax refund) would squash every other bar, so it's left out of the
+// scale and its bar is cut short with a break. "Far above": more than BREAK_FACTOR times the median month's income,
+// and well above every other bar.
+const BREAK_FACTOR = 1.5;
+const OVERSHOOT = 6; // a broken bar reaches this far above the top gridline, to show it carries on
+const BREAK_AT = 14; // the break's distance below the top gridline
+const BREAK_GAP = 4;
+const BREAK_SLANT = 3;
+
+type Box = { x0: number; x1: number; y0: number; y1: number };
+const overlaps = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
 export function SpendingChart(props: {
   series: OverviewMonth[];
@@ -35,14 +50,77 @@ export function SpendingChart(props: {
   }, []);
 
   const totals = series.map((m) => m.fixed + m.adjustable + m.uncategorized);
-  const { max, ticks } = niceScale(Math.max(usual ?? 0, ...totals, 1));
+  const incomes = series.map((m) => Math.max(m.income, 0));
+  const outliers = incomeOutliers(incomes, Math.max(usual ?? 0, ...totals));
+  const { max, ticks } = niceScale(
+    Math.max(usual ?? 0, ...totals, ...incomes.filter((_, i) => !outliers.has(i)), 1),
+  );
+  // An outlier can still fit under the rounded-up scale; then it's drawn in full after all.
+  const cut = incomes.map((income) => income > max);
   const plotW = WIDTH - PAD.left - PAD.right;
   const plotH = HEIGHT - PAD.top - PAD.bottom;
   const band = plotW / Math.max(series.length, 1);
-  const barW = Math.min(36, band * 0.62);
+  const barW = Math.min(26, band * 0.34);
+  const pairW = barW * 2 + PAIR_GAP;
   const y = (value: number) => PAD.top + plotH - (value / max) * plotH;
+  const pairX = (i: number) => PAD.left + band * i + (band - pairW) / 2; // left edge of a month's spending bar
+  const incomeX = (i: number) => pairX(i) + barW + PAIR_GAP;
+  const incomeTop = (i: number) => (cut[i] ? PAD.top - OVERSHOOT : y(incomes[i]));
 
+  const labels = placeLabels();
   const hovered = hover !== null ? series[hover] : null;
+
+  /**
+   * The figures above the bars: each month's spending and income, in full for the selected month where there's room,
+   * compact for the rest so twelve months fit. A label sits above its own bar, nudged sideways off the bar beside it
+   * or lifted a line when that's what it takes, and is left out when it would still touch a bar or another label
+   * (narrow bars on phones): the tooltip and the table have every figure. The selected month goes first, then
+   * spending, then income.
+   */
+  function placeLabels() {
+    const bars: Box[] = series.flatMap((_, i) => [
+      { x0: pairX(i), x1: pairX(i) + barW, y0: y(totals[i]), y1: y(0) },
+      ...(incomes[i] > 0 ? [{ x0: incomeX(i), x1: incomeX(i) + barW, y0: incomeTop(i), y1: y(0) }] : []),
+    ]);
+    const placed: Box[] = [];
+    const out: { key: string; i: number; text: string; cx: number; baseline: number }[] = [];
+
+    const place = (i: number, kind: "spent" | "income") => {
+      const value = kind === "spent" ? totals[i] : incomes[i];
+      if (value <= 0) return;
+      const isSelected = series[i].month === selected;
+      const size = isSelected ? 12 : 11;
+      const top = kind === "spent" ? y(totals[i]) : incomeTop(i);
+      const centre = kind === "spent" ? pairX(i) + barW / 2 : incomeX(i) + barW / 2;
+      const texts = isSelected ? [formatKr(value), barTotal(value, band)] : [barTotal(value, band)];
+      for (const text of texts) {
+        const half = (text.length * size * 0.58 + 4) / 2; // estimated width (tabular figures), plus the halo
+        // Above the bar, or sideways off the other bar of the pair: spending to the left, income to the right.
+        const xs = [centre, kind === "spent" ? incomeX(i) - 2 - half : incomeX(i) - 1 + half];
+        const baseline = top - (isSelected ? 8 : 6);
+        for (const lift of [0, size + 3]) {
+          for (const cx of xs) {
+            const box = { x0: cx - half, x1: cx + half, y0: baseline - lift - size * 0.75 - 2, y1: baseline - lift + 2 };
+            const inside = box.x0 >= PAD.left - 4 && box.x1 <= WIDTH - 2 && box.y0 >= 0;
+            if (inside && !bars.some((b) => overlaps(box, b)) && !placed.some((p) => overlaps(box, p))) {
+              placed.push(box);
+              out.push({ key: `${kind}-${i}`, i, text, cx, baseline: baseline - lift });
+              return;
+            }
+          }
+        }
+      }
+    };
+
+    const chosen = series.findIndex((m) => m.month === selected);
+    if (chosen >= 0) {
+      place(chosen, "spent");
+      place(chosen, "income");
+    }
+    series.forEach((_, i) => i !== chosen && place(i, "spent"));
+    series.forEach((_, i) => i !== chosen && place(i, "income"));
+    return out;
+  }
 
   return (
     <div className="chart">
@@ -56,16 +134,28 @@ export function SpendingChart(props: {
             {s.label}
           </span>
         ))}
+        <span className="legend-item">
+          <span className="legend-swatch" style={{ background: INCOME_FILL }} />
+          Income
+        </span>
+        {cut.some(Boolean) && (
+          <span className="legend-item">
+            <svg className="legend-break" width="10" height="16" viewBox="0 0 10 16">
+              <path d={brokenBar(0, 0, 10, 16, 9)} fill={INCOME_FILL} />
+            </svg>
+            Income far above a typical month, cut short
+          </span>
+        )}
         {usual !== null && (
           <span className="legend-item">
             <span className="legend-line" />
-            Median month
+            Median spending
           </span>
         )}
       </div>
 
       <div className="chart-frame" ref={frameRef}>
-        <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label="Spending per month, fixed and adjustable">
+        <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label="Spending and income per month">
           <defs>
             <pattern id={hatchId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
               <rect width="6" height="6" fill="var(--paper-sunken)" />
@@ -90,7 +180,7 @@ export function SpendingChart(props: {
           ))}
 
           {series.map((month, i) => {
-            const x = PAD.left + band * i + (band - barW) / 2;
+            const x = pairX(i);
             const isSelected = month.month === selected;
             let base = 0;
             const segments = SEGMENTS.map((s) => {
@@ -128,8 +218,17 @@ export function SpendingChart(props: {
                     <rect key={s.key} x={x} y={top} width={barW} height={h} fill={fill} />
                   );
                 })}
+                {incomes[i] > 0 &&
+                  (cut[i] ? (
+                    <path d={brokenBar(incomeX(i), incomeTop(i), barW, y(0), PAD.top + BREAK_AT)} fill={INCOME_FILL} />
+                  ) : (
+                    <path
+                      d={roundedTop(incomeX(i), y(incomes[i]), barW, Math.max(y(0) - y(incomes[i]), 0.5), RADIUS)}
+                      fill={INCOME_FILL}
+                    />
+                  ))}
                 <text
-                  x={x + barW / 2}
+                  x={x + pairW / 2}
                   y={HEIGHT - 8}
                   textAnchor="middle"
                   className={`chart-axis ${isSelected ? "chart-axis-strong" : ""}`}
@@ -153,24 +252,21 @@ export function SpendingChart(props: {
             />
           )}
 
-          {/* Each month's total above its bar: in full for the selected month (where there's room), compact for the
-              rest so twelve labels fit. Drawn after the median line, with a halo (see .chart-total), so the line never
-              runs through them. */}
+          {/* The figures above the bars (see placeLabels). Drawn after the median line, with a halo (see .chart-total),
+              so the line never runs through them. */}
           <g pointerEvents="none">
-            {series.map((month, i) => {
-              if (totals[i] <= 0) return null;
-              const isSelected = month.month === selected;
-              const tint = isSelected ? " is-selected" : hover === i ? " is-hovered" : "";
+            {labels.map((label) => {
+              const isSelected = series[label.i].month === selected;
+              const tint = isSelected ? " is-selected" : hover === label.i ? " is-hovered" : "";
               return (
                 <text
-                  key={month.month}
-                  x={PAD.left + band * i + band / 2}
-                  y={y(totals[i]) - (isSelected ? 8 : 6)}
+                  key={label.key}
+                  x={label.cx}
+                  y={label.baseline}
                   textAnchor="middle"
                   className={`chart-total${tint}`}
                 >
-                  {/* Narrow bars (phones) have no room for the full figure; it's in Spent above the chart anyway. */}
-                  {isSelected && band >= 48 ? formatKr(totals[i]) : barTotal(totals[i], band)}
+                  {label.text}
                 </text>
               );
             })}
@@ -191,21 +287,26 @@ export function SpendingChart(props: {
               </div>
             ))}
             <div className="tooltip-row tooltip-total">
-              <span>Total</span>
+              <span>Spent</span>
               <span>{formatKr(totals[hover])}</span>
+            </div>
+            <div className="tooltip-row">
+              <span>Income</span>
+              <span>{formatKr(hovered.income)}</span>
             </div>
           </div>
         )}
       </div>
 
       <table className="sr-only">
-        <caption>Spending per month</caption>
+        <caption>Spending and income per month</caption>
         <thead>
           <tr>
             <th>Month</th>
             {SEGMENTS.map((s) => (
               <th key={s.key}>{s.label}</th>
             ))}
+            <th>Income</th>
           </tr>
         </thead>
         <tbody>
@@ -215,6 +316,7 @@ export function SpendingChart(props: {
               {SEGMENTS.map((s) => (
                 <td key={s.key}>{formatKr(m[s.key])}</td>
               ))}
+              <td>{formatKr(m.income)}</td>
             </tr>
           ))}
         </tbody>
@@ -226,6 +328,43 @@ export function SpendingChart(props: {
 export function monthTitle(month: string) {
   const [year, number] = month.split("-").map(Number);
   return new Date(year, number - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+}
+
+/**
+ * The months whose income is far above a typical month's (see BREAK_FACTOR): more than that factor times the median
+ * month with income, and more than a quarter above everything else on the chart (`floor` is the tallest spending or
+ * median line). Needs three months with income to say what's typical.
+ */
+function incomeOutliers(incomes: number[], floor: number): Set<number> {
+  const paid = incomes.filter((v) => v > 0).sort((a, b) => a - b);
+  if (paid.length < 3) return new Set();
+  const middle = (paid.length - 1) / 2;
+  const median = (paid[Math.floor(middle)] + paid[Math.ceil(middle)]) / 2;
+  const limit = median * BREAK_FACTOR;
+  const rest = Math.max(floor, ...incomes.filter((v) => v <= limit));
+  return new Set(incomes.flatMap((v, i) => (v > limit && v > rest * 1.25 ? [i] : [])));
+}
+
+/** A bar cut short: rounded top at `top`, down to `bottom`, with a slanted gap around `at` where it's broken. */
+function brokenBar(x: number, top: number, w: number, bottom: number, at: number) {
+  const r = Math.min(RADIUS, w / 2);
+  const upper = [
+    `M${x},${at + BREAK_SLANT - BREAK_GAP / 2}`,
+    `V${top + r}`,
+    `Q${x},${top} ${x + r},${top}`,
+    `H${x + w - r}`,
+    `Q${x + w},${top} ${x + w},${top + r}`,
+    `V${at - BREAK_SLANT - BREAK_GAP / 2}`,
+    "Z",
+  ];
+  const lower = [
+    `M${x},${bottom}`,
+    `V${at + BREAK_SLANT + BREAK_GAP / 2}`,
+    `L${x + w},${at - BREAK_SLANT + BREAK_GAP / 2}`,
+    `V${bottom}`,
+    "Z",
+  ];
+  return [...upper, ...lower].join(" ");
 }
 
 function roundedTop(x: number, y: number, w: number, h: number, r: number) {
