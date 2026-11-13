@@ -30,7 +30,7 @@ from finance.categories import (
     MERCHANT_KEYWORDS,
     Category,
 )
-from finance.transactions import description, signed_amount, transaction_date, unique_transaction_keys
+from finance.transactions import description, payment_date, signed_amount, unique_transaction_keys
 
 # Kinds of category that aren't spending: money put into savings, loan payments and transfers between own accounts.
 NOT_SPENDING_KINDS = {"saving", "loan", "transfer"}
@@ -176,7 +176,7 @@ def normalize(account: Account, raw: dict[str, Any], key: str) -> dict[str, Any]
         "account_uid": account.uid,
         "account": account.label,
         "bank": account.bank,
-        "date": transaction_date(raw),
+        "date": payment_date(raw),  # the day the money moved (see payment_date)
         "amount": signed_amount(raw),
         "currency": (raw.get("transaction_amount") or {}).get("currency"),
         "direction": raw.get("credit_debit_indicator"),
