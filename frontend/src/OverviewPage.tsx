@@ -141,7 +141,6 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
           series={overview.series}
           groups={overview.groups ?? []}
           selected={overview.month}
-          usual={f.usual_spent}
           onSelect={setMonth}
         />
       </section>

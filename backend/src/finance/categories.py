@@ -64,13 +64,20 @@ DEFAULT_CATEGORIES = [
 SPENDING_GROUPS: list[tuple[str, str]] = [
     ("fixed", "Fixed"),
     ("groceries", "Groceries"),
+    ("health", "Health"),
     ("dining", "Dining and leisure"),
     ("travel", "Travel"),
     ("other", "Other"),
 ]
 SPENDING_GROUP_IDS = {group for group, _ in SPENDING_GROUPS}
 # Where the default categories start out (fixed costs go to "fixed", anything not listed to "other").
-_DEFAULT_GROUPS = {"groceries": "groceries", "eating_out": "dining", "leisure": "dining", "travel": "travel"}
+_DEFAULT_GROUPS = {
+    "groceries": "groceries",
+    "health": "health",
+    "eating_out": "dining",
+    "leisure": "dining",
+    "travel": "travel",
+}
 
 
 def default_group(category_id: str, fixed: bool) -> str:

@@ -132,11 +132,11 @@ def test_scoreboard_without_enough_history_has_no_median():
 
 def test_spending_is_grouped_for_the_charts():
     result = build_overview(history(), DEFAULT_CATEGORIES, today=date(2026, 11, 4))
-    assert [g["id"] for g in result["groups"]] == ["fixed", "groceries", "dining", "travel", "other"]
+    assert [g["id"] for g in result["groups"]] == ["fixed", "groceries", "health", "dining", "travel", "other"]
     september, october = result["series"][-2:]
-    assert september["groups"] == {"fixed": 10000, "groceries": 3000, "dining": 1000, "travel": 0, "other": 0}
+    assert september["groups"] == {"fixed": 10000, "groceries": 3000, "health": 0, "dining": 1000, "travel": 0, "other": 0}
     # Refunds lower their group; uncategorized spending is Other. The groups add up to the month's spending.
-    assert october["groups"] == {"fixed": 10000, "groceries": 2800, "dining": 0, "travel": 0, "other": 300}
+    assert october["groups"] == {"fixed": 10000, "groceries": 2800, "health": 0, "dining": 0, "travel": 0, "other": 300}
     assert sum(october["groups"].values()) == result["figures"]["spent"]
     groups = {r["category"]: r["group"] for r in result["scoreboard"]}
     assert groups == {"housing": "fixed", "groceries": "groceries", "eating_out": "dining", "uncategorized": "other"}

@@ -946,11 +946,6 @@ button.month-step:hover:not(:disabled) {
   background: repeating-linear-gradient(45deg, var(--ink-muted) 0 2px, var(--paper-sunken) 2px 5px);
 }
 
-.legend-line {
-  width: 18px;
-  border-top: 2px dashed var(--ink);
-}
-
 .chart-frame {
   position: relative;
   margin-top: var(--space-2);

@@ -4,6 +4,7 @@
 export const GROUP_FILL: Record<string, string> = {
   fixed: "var(--group-fixed)",
   groceries: "var(--group-groceries)",
+  health: "var(--group-health)",
   dining: "var(--group-dining)",
   travel: "var(--group-travel)",
   other: "var(--group-other)",
