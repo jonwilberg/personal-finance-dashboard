@@ -198,10 +198,11 @@ export const api = {
     }
     return request<{ total: number; items: Transaction[] }>(`/api/transactions?${params}`);
   },
-  setCategory: (id: string, category: string | null) =>
-    request<Transaction>(`/api/transactions/${encodeURIComponent(id)}/category`, {
+  /** Set (or, with null, remove) your category on many transactions at once; returns them as they are now. */
+  setCategories: (changes: { id: string; category: string | null }[]) =>
+    request<{ items: Transaction[] }>("/api/transactions/categories", {
       method: "PUT",
-      body: JSON.stringify({ category }),
+      body: JSON.stringify({ changes }),
     }),
   rules: () => request<CategoryRule[]>("/api/rules"),
   addRule: (pattern: string, category: string, regex = false) =>

@@ -457,6 +457,26 @@ class Storage:
                 db.execute("UPDATE category_overrides SET category = ? WHERE category = ?", (move_to, category_id))
             db.execute("DELETE FROM categories WHERE id = ?", (category_id,))
 
+    def missing_transactions(self, transaction_ids: list[str]) -> list[str]:
+        """The ids among these that aren't stored transactions."""
+        with self._connect() as db:
+            stored = {
+                f"{row['account_uid']}:{row['transaction_key']}"
+                for row in db.execute("SELECT account_uid, transaction_key FROM transactions")
+            }
+        return [i for i in transaction_ids if i not in stored]
+
+    def set_overrides(self, changes: list[tuple[str, str | None]]) -> None:
+        """Set or remove your category on many transactions at once, all or nothing."""
+        with self._connect() as db:
+            for transaction_id, category in changes:
+                if category is None:
+                    db.execute("DELETE FROM category_overrides WHERE transaction_id = ?", (transaction_id,))
+                else:
+                    db.execute(
+                        "INSERT OR REPLACE INTO category_overrides VALUES (?, ?, ?)", (transaction_id, category, _now())
+                    )
+
     def set_override(self, transaction_id: str, category: str | None) -> None:
         """Set your category for one transaction, or remove it (None) so the automatic category applies."""
         with self._connect() as db:

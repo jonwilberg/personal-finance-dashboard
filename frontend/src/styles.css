@@ -1677,3 +1677,80 @@ tr.is-flash > td {
 select.is-filtering {
   border-color: var(--ink);
 }
+
+/* All transactions: selecting rows for a bulk category change */
+
+.table-grid {
+  grid-template-columns: 20px 96px minmax(0, 2fr) minmax(110px, 0.6fr) minmax(0, 1.2fr);
+}
+
+.select-cell {
+  display: flex;
+  align-items: center;
+  padding-top: 2px;
+}
+
+.select-cell input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+
+/* Selected rows use the design guide's selected-row tint, reaching into the margin like the other row marks. */
+.ledger-row.is-selected {
+  margin: 0 calc(-1 * var(--space-3));
+  padding-left: var(--space-3);
+  padding-right: var(--space-3);
+  background: var(--highlight);
+}
+
+/* The bar for the selection (or the Undo after a change), kept in view at the bottom of the screen. */
+.bulk-bar {
+  position: sticky;
+  bottom: var(--space-4);
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--paper-raised);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--ink) 12%, transparent);
+  font-size: var(--text-small);
+}
+
+.bulk-bar select {
+  width: auto;
+  flex: 0 1 260px;
+  min-width: 180px;
+}
+
+@media (max-width: 640px) {
+  .table-grid {
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+  }
+
+  .table-grid > .select-cell {
+    grid-column: 1;
+    grid-row: span 3;
+  }
+
+  .table-grid > :first-child:not(.select-cell),
+  .table-grid > .select-cell + * {
+    grid-column: 2 / -1;
+  }
+
+  .table-grid .category-cell {
+    grid-column: 2 / -1;
+  }
+
+  .bulk-bar select {
+    min-width: 0;
+    flex: 1 1 160px;
+  }
+}
