@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 
 from finance.config import Settings
 from finance.enable_banking import API_URL, EnableBankingClient
+from finance.manual import ManualAccountError, manual_account
+from finance.storage import Storage
 from finance.web import create_app
 
 TRANSACTIONS = [
@@ -385,3 +387,65 @@ def test_many_transactions_can_get_a_category_at_once_and_be_undone(api, bank):
         {"id": rema["id"], "category": "nope"},
     ]}).status_code == 422
     assert next(t for t in api.get("/api/transactions").json()["items"] if t["id"] == rema["id"])["category"] == "groceries"
+
+
+CARD = {
+    "bank": "Example Bank",
+    "country": "NO",
+    "name": "Credit card",
+    "card": True,
+    "transactions": [
+        {"date": "2026-10-03", "text": "SHOP, Main street 1", "amount": "-250.00"},
+        {"date": "2026-10-03", "text": "SHOP, Main street 1", "amount": "-250.00"},
+        {"date": "2026-10-09", "text": "HOTEL, Harbour road", "amount": "-1000.00", "details": "1 500,00 ZAR"},
+        {"date": "2026-10-20", "text": "Innbetaling", "amount": "1500.00", "payment": True},
+    ],
+}
+
+
+def test_a_card_added_by_hand_is_never_refreshed_and_its_bill_payment_is_a_transfer(api, bank, tmp_path):
+    connect(api, bank)
+    store = Storage(tmp_path / "data")
+    bill_payment = {
+        "transaction_amount": {"amount": "1500.00", "currency": "NOK"},
+        "credit_debit_indicator": "DBIT",
+        "status": "BOOK",
+        "booking_date": "2026-10-20",
+        "creditor": {"name": "Example Bank"},
+    }
+    store.save_transactions("acc-1", [bill_payment])
+    store.add_manual_account(manual_account(CARD))
+
+    card = next(c for c in api.get("/api/connections").json() if c["manual"])
+    assert card["expired"] is False
+    assert card["aspsp"]["name"] == "Example Bank"
+    [account] = card["accounts"]
+    assert account["cash_account_type"] == "CARD"
+    assert account["transactions"]["count"] == 4  # the same purchase twice is kept twice
+    assert api.post(f"/api/accounts/{account['uid']}/refresh").status_code == 409
+
+    items = api.get("/api/transactions", params={"view": "all"}).json()["items"]
+    payments = [t for t in items if abs(t["amount"]) == 1500]
+    assert len(payments) == 2 and all(t["kind"] == "transfer" for t in payments)
+    hotel = next(t for t in items if t["amount"] == -1000)
+    assert hotel["description"] == "HOTEL, Harbour road | 1 500,00 ZAR"
+
+    # Adding it again replaces its transactions; removing it never calls the bank.
+    store.add_manual_account(manual_account(CARD | {"transactions": CARD["transactions"][:1]}))
+    assert sum(t["account_uid"] == account["uid"] for t in api.get("/api/transactions").json()["items"]) == 1
+    assert api.delete(f"/api/connections/{card['session_id']}").json() == {"ok": True}
+    assert bank.deleted == []
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"bank": ""},
+        {"transactions": [{"date": "05.01.2026", "text": "SHOP", "amount": "-1"}]},
+        {"transactions": [{"date": "2026-01-05", "text": "SHOP", "amount": "lots"}]},
+        {"transactions": [{"date": "2026-01-05", "text": "", "amount": "-1"}]},
+    ],
+)
+def test_a_hand_added_account_file_must_be_complete(change):
+    with pytest.raises(ManualAccountError):
+        manual_account(CARD | change)

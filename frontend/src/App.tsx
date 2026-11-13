@@ -207,7 +207,7 @@ function RefreshAll({ connections, onChanged }: { connections: Connection[]; onC
   const rows = connections.flatMap((connection) =>
     connection.accounts.map((account) => ({ connection, account, updated: lastUpdated(account) })),
   );
-  const refreshable = rows.filter((row) => !row.connection.expired);
+  const refreshable = rows.filter((row) => !row.connection.expired && !row.connection.manual);
 
   const refreshAll = async () => {
     setRunning(true);
@@ -255,9 +255,11 @@ function RefreshAll({ connections, onChanged }: { connections: Connection[]; onC
                 {accountNumber(account) && <span className="muted"> {accountNumber(account)}</span>}
               </span>
               <span className={s?.state === "failed" ? "refresh-failed" : "muted"}>
-                {connection.expired
-                  ? "Consent expired, reconnect"
-                  : s?.state === "refreshing"
+                {connection.manual
+                  ? "Added by hand"
+                  : connection.expired
+                    ? "Consent expired, reconnect"
+                    : s?.state === "refreshing"
                     ? "Refreshing…"
                     : s?.state === "waiting"
                       ? "Waiting…"
@@ -307,7 +309,10 @@ function ConnectionCard(props: {
   const [busy, setBusy] = useState(false);
 
   const disconnect = async () => {
-    if (!window.confirm(`Revoke access to ${connection.aspsp.name}?`)) return;
+    const question = connection.manual
+      ? `Remove the ${connection.aspsp.name} account you added by hand? Its transactions stop counting.`
+      : `Revoke access to ${connection.aspsp.name}?`;
+    if (!window.confirm(question)) return;
     setBusy(true);
     try {
       await api.disconnect(connection.session_id);
@@ -329,7 +334,9 @@ function ConnectionCard(props: {
           <h3>{connection.aspsp.name}</h3>
           <p className="meta small">
             {plural(connection.accounts.length, "account")} ·{" "}
-            {connection.expired ? (
+            {connection.manual ? (
+              <>added by hand from statements</>
+            ) : connection.expired ? (
               <span className="badge badge-warn">Consent expired, reconnect</span>
             ) : (
               <>access until {formatDate(connection.valid_until)}</>
@@ -337,7 +344,7 @@ function ConnectionCard(props: {
           </p>
         </div>
         <button className="text" onClick={disconnect} disabled={busy}>
-          Disconnect
+          {connection.manual ? "Remove" : "Disconnect"}
         </button>
       </header>
       <ul className="account-list">

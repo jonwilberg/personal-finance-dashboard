@@ -30,6 +30,7 @@ from finance.connections import (
     session_record,
 )
 from finance.enable_banking import EnableBankingClient, EnableBankingError
+from finance.manual import is_manual_session
 from finance.overview import build_overview
 from finance.storage import CategoryError, PersonError, Storage
 from finance.transactions import summarize
@@ -173,6 +174,8 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
         return [
             record
             | {
+                # Added by hand from statements (see finance.manual): no bank connection, so never refreshed.
+                "manual": is_manual_session(record["session_id"]),
                 "expired": datetime.fromisoformat(record["valid_until"]) <= now,
                 "accounts": [
                     account | _account_state(store, account["uid"]) | {"owner": owned.get(account["uid"], SHARED)}
@@ -206,7 +209,8 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
     def disconnect(session_id: str) -> dict[str, bool]:
         if not any(s["session_id"] == session_id for s in store.sessions()):
             raise HTTPException(404, "Unknown connection")
-        client.delete_session(session_id)
+        if not is_manual_session(session_id):  # a hand-added account has no consent at the bank to revoke
+            client.delete_session(session_id)
         store.remove_session(session_id)
         return {"ok": True}
 
@@ -214,6 +218,11 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
     def refresh_account(account_uid: str, longest: bool = False, days: int = 90) -> dict[str, Any]:
         """Fetch balances and transactions from the bank. Many banks allow ~4 of these per day per account."""
         _require_account(store, account_uid)
+        if any(
+            is_manual_session(s["session_id"]) and any(a["uid"] == account_uid for a in s["accounts"])
+            for s in store.sessions()
+        ):
+            raise HTTPException(409, "This account was added by hand, so there's no bank to refresh it from.")
         if store.account_needs_numbers(account_uid):
             # Needed to recognise transfers to this account; fetched once.
             store.set_account_identifiers(account_uid, account_identifiers(client.get_account_details(account_uid)))

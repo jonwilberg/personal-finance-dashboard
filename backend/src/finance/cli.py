@@ -12,6 +12,7 @@ import webbrowser
 from datetime import date, timedelta
 from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -24,6 +25,8 @@ from finance.connections import (
     session_record,
 )
 from finance.enable_banking import EnableBankingClient, EnableBankingError
+from finance import manual
+from finance.manual import ManualAccountError, is_manual_session, load_manual_account
 from finance.storage import Storage
 from finance.transactions import description, inspect, signed_amount, transaction_date
 
@@ -78,10 +81,21 @@ def main(argv: list[str] | None = None) -> int:
     disconnect = commands.add_parser("disconnect", help="Revoke a saved session")
     disconnect.add_argument("session_id")
 
+    add_account = commands.add_parser(
+        "add-account",
+        help="Add an account by hand from a JSON file, such as a closed card copied from its statements",
+        description=manual.__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    add_account.add_argument("file", type=Path, help="JSON file with the account and its transactions")
+
     args = parser.parse_args(argv)
     try:
         settings = load_settings(args.env)
         store = Storage(settings.data_dir)
+        if args.command == "add-account":
+            cmd_add_account(store, args)
+            return 0
         if args.command == "serve":
             from finance.web import serve_app
 
@@ -103,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
                 "disconnect": cmd_disconnect,
             }[args.command]
             handler(client, settings, store, args)
-    except (ConfigError, BankNotFound, EnableBankingError) as error:
+    except (ConfigError, BankNotFound, EnableBankingError, ManualAccountError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1
     return 0
@@ -166,6 +180,9 @@ def cmd_accounts(client: EnableBankingClient, settings: Settings, store: Storage
         print('No saved sessions. Connect a bank with "finance connect" or "finance serve".')
         return
     for saved in sessions:
+        if is_manual_session(saved["session_id"]):
+            print(f"{saved['aspsp']['name']}  added by hand: {', '.join(a['name'] for a in saved['accounts'])}")
+            continue
         status = client.get_session(saved["session_id"]).get("status")
         print(f"{saved['aspsp']['name']} ({saved['aspsp']['country']})  session {saved['session_id']}")
         print(f"  status {status}, valid until {saved['valid_until']}")
@@ -229,9 +246,23 @@ def cmd_categorize(store: Storage) -> None:
 
 
 def cmd_disconnect(client: EnableBankingClient, settings: Settings, store: Storage, args: argparse.Namespace) -> None:
-    client.delete_session(args.session_id)
+    if not is_manual_session(args.session_id):
+        client.delete_session(args.session_id)
     store.remove_session(args.session_id)
-    print(f"Revoked session {args.session_id}.")
+    print(f"Removed {args.session_id}.")
+
+
+def cmd_add_account(store: Storage, args: argparse.Namespace) -> None:
+    added = load_manual_account(args.file)
+    store.add_manual_account(added)
+    amounts = [signed_amount(t) for t in added.transactions]
+    dates = sorted(transaction_date(t) for t in added.transactions)
+    print(f"Added {added.bank} {added.account['name']} ({added.account['uid']}) to {store.path}")
+    print(
+        f"{len(amounts)} transactions, {dates[0] if dates else '-'} to {dates[-1] if dates else '-'}:"
+        f"  in {sum((a for a in amounts if a > 0), Decimal())}  out {sum((a for a in amounts if a < 0), Decimal())}"
+    )
+    print("Choose whose account it is on the Accounts page.")
 
 
 def _is_local_http(url: str) -> bool:

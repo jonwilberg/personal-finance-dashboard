@@ -58,6 +58,8 @@ export interface Connection {
   valid_until: string;
   created_at: string;
   expired: boolean;
+  /** Added by hand from statements (no bank connection), so it's never refreshed. */
+  manual: boolean;
   accounts: Account[];
 }
 

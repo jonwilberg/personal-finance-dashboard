@@ -19,6 +19,7 @@ from typing import Any
 
 from finance.categories import DEFAULT_CATEGORIES, KINDS, SPLIT_CATEGORIES, Category
 from finance.categorize import CategorizationSettings, Rule, keyword_category
+from finance.manual import ManualAccount
 from finance.transactions import transaction_date, unique_transaction_keys
 
 DATABASE_FILE = "finance.db"
@@ -208,6 +209,14 @@ class Storage:
                     for position, account in enumerate(record["accounts"])
                 ],
             )
+
+    def add_manual_account(self, manual: ManualAccount) -> None:
+        """Add an account by hand (see finance.manual), or replace it and all its transactions."""
+        self.add_session(manual.session_record())
+        uid = manual.account["uid"]
+        with self._connect() as db:
+            db.execute("DELETE FROM transactions WHERE account_uid = ?", (uid,))
+        self.save_transactions(uid, manual.transactions)
 
     def remove_session(self, session_id: str) -> None:
         with self._connect() as db:
