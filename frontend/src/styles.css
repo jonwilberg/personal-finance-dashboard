@@ -820,20 +820,48 @@ button.danger {
   border: 0;
 }
 
-.month-switcher {
+/* Overview header: the month as the page title, arrows to step through months, and whose accounts are counted on
+   the right. Wraps under the title on narrow screens. */
+.overview-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+}
+
+.overview-title {
+  display: flex;
+  align-items: center;
   gap: var(--space-3);
 }
 
-.month-current {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0;
-  font-size: var(--text-small);
+.month-steps {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+button.month-step {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
   color: var(--ink);
+  border: 1px solid var(--rule);
+  font-size: var(--text-subhead);
+  line-height: 1;
+}
+
+button.month-step:hover:not(:disabled) {
+  background: var(--paper-sunken);
+  border-color: var(--ink-muted);
+  opacity: 1;
+}
+
+.overview-header .owner-filter {
+  margin: 0;
 }
 
 .dek a {
