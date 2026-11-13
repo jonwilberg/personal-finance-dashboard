@@ -123,6 +123,7 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
         </p>
         <SpendingChart
           series={overview.series}
+          groups={overview.groups ?? []}
           selected={overview.month}
           usual={f.usual_spent}
           onSelect={setMonth}
@@ -132,7 +133,7 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
       {overview.scoreboard && overview.scoreboard.length > 0 && (
         <section className="section">
           <p className="label">Spending by category{scope && ` · ${scope}`}</p>
-          <SpendingSplit rows={overview.scoreboard} />
+          <SpendingSplit rows={overview.scoreboard} groups={overview.groups ?? []} />
           <CategoryScoreboard
             rows={overview.scoreboard}
             months={overview.series}

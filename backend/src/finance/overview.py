@@ -20,7 +20,7 @@ from decimal import Decimal
 from statistics import median
 from typing import Any
 
-from finance.categories import Category
+from finance.categories import SPENDING_GROUPS, Category, spending_group
 
 HISTORY_MONTHS = 12
 # Fewer previous months than this and there's no meaningful "usual" to compare with.
@@ -87,9 +87,12 @@ def build_overview(
                 "adjustable": _money(totals.get(m, _empty())["adjustable"]),
                 "uncategorized": _money(totals.get(m, _empty())["uncategorized"]),
                 "income": _money(totals.get(m, _empty())["income"]),
+                # Spending by chart group, in stacking order (see categories.SPENDING_GROUPS).
+                "groups": {g: _money(totals.get(m, _empty())["by_group"].get(g, Decimal())) for g, _ in SPENDING_GROUPS},
             }
             for m in shown
         ],
+        "groups": [{"id": g, "name": name} for g, name in SPENDING_GROUPS],
         "changes": changes,
         "scoreboard": _scoreboard(totals, shown, this, usual, spent, categories),
     }
@@ -108,9 +111,11 @@ def _monthly_totals(transactions: list[dict[str, Any]], by_id: dict[str, Categor
             if t["direction"] == "DBIT":
                 bucket["uncategorized"] -= amount
                 bucket["by_category"][UNCATEGORIZED] -= amount
+                bucket["by_group"][spending_group(None)] -= amount
         elif category.kind == "expense":
             bucket["fixed" if category.fixed else "adjustable"] -= amount
             bucket["by_category"][category.id] -= amount
+            bucket["by_group"][spending_group(category)] -= amount
         elif category.kind == "income":
             bucket["income"] += amount
         elif category.kind == "saving":
@@ -129,6 +134,7 @@ def _empty() -> dict[str, Any]:
         "saved": Decimal(),
         "loans": Decimal(),
         "by_category": defaultdict(Decimal),
+        "by_group": defaultdict(Decimal),
     }
 
 
@@ -154,8 +160,8 @@ def _scoreboard(
     """Every spending category with this month, the median month, the difference, and its monthly history (the
     months shown in the chart, up to and including this month) with their total."""
     rows = []
-    entries = [(c.id, c.name, c.fixed) for c in categories if c.kind == "expense"]
-    for key, name, fixed in [*entries, (UNCATEGORIZED, "Not categorized", False)]:
+    entries = [(c.id, c.name, c.fixed, spending_group(c)) for c in categories if c.kind == "expense"]
+    for key, name, fixed, group in [*entries, (UNCATEGORIZED, "Not categorized", False, spending_group(None))]:
         history = [totals.get(m, _empty())["by_category"].get(key, Decimal()) for m in months]
         amount = this["by_category"].get(key, Decimal())
         median_month = usual["by_category"].get(key, Decimal()) if usual else None
@@ -166,6 +172,7 @@ def _scoreboard(
                 "category": key,
                 "name": name,
                 "fixed": fixed,
+                "group": group,
                 "amount": _money(amount),
                 "share": float(amount / spent) if spent > 0 else None,
                 "usual": _money(median_month) if median_month is not None else None,

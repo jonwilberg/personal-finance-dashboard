@@ -17,7 +17,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from finance.categories import DEFAULT_CATEGORIES, KINDS, SPLIT_CATEGORIES, Category
+from finance.categories import (
+    DEFAULT_CATEGORIES,
+    KINDS,
+    SPENDING_GROUP_IDS,
+    SPLIT_CATEGORIES,
+    Category,
+    default_group,
+)
 from finance.categorize import CategorizationSettings, Rule, keyword_category
 from finance.manual import ManualAccount
 from finance.transactions import transaction_date, unique_transaction_keys
@@ -111,7 +118,8 @@ CREATE TABLE IF NOT EXISTS categories (
     kind TEXT NOT NULL,          -- expense, income, saving, loan or transfer (see categories.KINDS)
     fixed INTEGER NOT NULL DEFAULT 0,
     system INTEGER NOT NULL DEFAULT 0,
-    position INTEGER NOT NULL
+    position INTEGER NOT NULL,
+    spending_group TEXT          -- spending categories: their group on the charts (categories.SPENDING_GROUPS)
 );
 """
 
@@ -134,8 +142,12 @@ class Storage:
             # Databases from before regex rules: their rules are all text rules.
             if "regex" not in {row["name"] for row in db.execute("PRAGMA table_info(category_rules)")}:
                 db.execute("ALTER TABLE category_rules ADD COLUMN regex INTEGER NOT NULL DEFAULT 0")
+            # Databases from before spending groups: filled in below from the fixed flag and the defaults.
+            if "spending_group" not in {row["name"] for row in db.execute("PRAGMA table_info(categories)")}:
+                db.execute("ALTER TABLE categories ADD COLUMN spending_group TEXT")
         _import_json_files(self)
         _seed_categories(self)
+        _fill_spending_groups(self)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -402,7 +414,10 @@ class Storage:
     def categories(self) -> list[Category]:
         with self._connect() as db:
             rows = db.execute("SELECT * FROM categories ORDER BY position, name").fetchall()
-        return [Category(r["id"], r["name"], r["kind"], bool(r["fixed"]), bool(r["system"])) for r in rows]
+        return [
+            Category(r["id"], r["name"], r["kind"], bool(r["fixed"]), bool(r["system"]), r["spending_group"])
+            for r in rows
+        ]
 
     def category(self, category_id: str) -> Category | None:
         return next((c for c in self.categories() if c.id == category_id), None)
@@ -412,21 +427,33 @@ class Storage:
             rows = db.execute("SELECT category, count(*) AS n FROM category_rules GROUP BY category").fetchall()
         return {row["category"]: row["n"] for row in rows}
 
-    def add_category(self, name: str, kind: str, fixed: bool = False) -> Category:
+    def add_category(self, name: str, kind: str, fixed: bool = False, group: str | None = None) -> Category:
+        """Add a category. A spending category goes in `group` (by default Fixed if `fixed`, otherwise Other)."""
         name = _category_name(name)
         _check_kind(kind)
+        fixed, group = _fixed_and_group(kind, fixed, group or ("fixed" if fixed else "other"))
         with self._connect() as db:
             taken = {row["id"] for row in db.execute("SELECT id FROM categories")}
             category_id = _unique_slug(name, taken)
             position = db.execute("SELECT coalesce(max(position), -1) + 1 FROM categories").fetchone()[0]
             db.execute(
-                "INSERT INTO categories VALUES (?, ?, ?, ?, 0, ?)", (category_id, name, kind, int(fixed), position)
+                "INSERT INTO categories (id, name, kind, fixed, system, position, spending_group) "
+                "VALUES (?, ?, ?, ?, 0, ?, ?)",
+                (category_id, name, kind, int(fixed), position, group),
             )
-        return Category(category_id, name, kind, fixed)
+        return Category(category_id, name, kind, fixed, False, group)
 
     def update_category(
-        self, category_id: str, *, name: str | None = None, kind: str | None = None, fixed: bool | None = None
+        self,
+        category_id: str,
+        *,
+        name: str | None = None,
+        kind: str | None = None,
+        fixed: bool | None = None,
+        group: str | None = None,
     ) -> Category:
+        """Change a category. For spending, the group decides whether it's fixed: choosing the Fixed group makes it
+        fixed and any other group makes it adjustable; setting `fixed` moves it into or out of the Fixed group."""
         current = self.category(category_id)
         if current is None:
             raise CategoryError("Unknown category")
@@ -434,17 +461,28 @@ class Storage:
             _check_kind(kind)
             if current.system and kind != current.kind:
                 raise CategoryError(f"{current.name} is used by the app itself, so its type can't change")
+        new_kind = kind or current.kind
+        if group is None:
+            current_group = current.group or default_group(category_id, current.fixed)
+            if fixed is True:
+                group = "fixed"
+            elif fixed is False and current_group == "fixed":
+                group = "other"
+            else:
+                group = current_group
+        new_fixed, new_group = _fixed_and_group(new_kind, current.fixed if fixed is None else fixed, group)
         updated = Category(
             category_id,
             _category_name(name) if name is not None else current.name,
-            kind or current.kind,
-            current.fixed if fixed is None else fixed,
+            new_kind,
+            new_fixed,
             current.system,
+            new_group,
         )
         with self._connect() as db:
             db.execute(
-                "UPDATE categories SET name = ?, kind = ?, fixed = ? WHERE id = ?",
-                (updated.name, updated.kind, int(updated.fixed), category_id),
+                "UPDATE categories SET name = ?, kind = ?, fixed = ?, spending_group = ? WHERE id = ?",
+                (updated.name, updated.kind, int(updated.fixed), updated.group, category_id),
             )
         return updated
 
@@ -625,8 +663,12 @@ def _seed_categories(storage: Storage) -> None:
         return
     with storage._connect() as db:
         db.executemany(
-            "INSERT OR IGNORE INTO categories VALUES (?, ?, ?, ?, ?, ?)",
-            [(c.id, c.name, c.kind, int(c.fixed), int(c.system), i) for i, c in enumerate(DEFAULT_CATEGORIES)],
+            "INSERT OR IGNORE INTO categories (id, name, kind, fixed, system, position, spending_group) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                (c.id, c.name, c.kind, int(c.fixed), int(c.system), i, _fixed_and_group(c.kind, c.fixed, default_group(c.id, c.fixed))[1])
+                for i, c in enumerate(DEFAULT_CATEGORIES)
+            ],
         )
         for old, (targets, fallback) in SPLIT_CATEGORIES.items():
             for row in db.execute("SELECT pattern FROM category_rules WHERE category = ?", (old,)).fetchall():
@@ -636,6 +678,30 @@ def _seed_categories(storage: Storage) -> None:
                 )
             db.execute("UPDATE category_overrides SET category = ? WHERE category = ?", (fallback, old))
     storage._set_meta("categories_seeded_at", _now())
+
+
+def _fill_spending_groups(storage: Storage) -> None:
+    """Give spending categories without a group (from before groups, or added elsewhere) their default group."""
+    with storage._connect() as db:
+        rows = db.execute(
+            "SELECT id, fixed FROM categories WHERE kind = 'expense' AND spending_group IS NULL"
+        ).fetchall()
+        db.executemany(
+            "UPDATE categories SET spending_group = ? WHERE id = ?",
+            [(default_group(row["id"], bool(row["fixed"])), row["id"]) for row in rows],
+        )
+
+
+def _fixed_and_group(kind: str, fixed: bool, group: str | None) -> tuple[bool, str | None]:
+    """A category's fixed flag and group, kept consistent: spending is fixed exactly when it's in the Fixed group
+    (`group` None means its default group); other kinds of category have no group."""
+    if kind != "expense":
+        return fixed, None
+    if group is None:
+        return fixed, "fixed" if fixed else "other"
+    if group not in SPENDING_GROUP_IDS:
+        raise CategoryError(f"Unknown spending group {group!r}")
+    return group == "fixed", group
 
 
 def _category_name(name: str) -> str:

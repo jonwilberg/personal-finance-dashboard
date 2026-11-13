@@ -71,6 +71,8 @@ export interface Category {
   kind: CategoryKind;
   fixed: boolean;
   system: boolean;
+  /** Spending categories: their group on the Overview's charts (see SpendingGroup). Null for other kinds. */
+  group: string | null;
   transactions?: number;
   rules?: number;
 }
@@ -184,9 +186,11 @@ export const api = {
       { method: "POST" },
     ),
   categories: () => request<Category[]>("/api/categories"),
-  addCategory: (name: string, kind: CategoryKind, fixed: boolean) =>
-    request<Category>("/api/categories", { method: "POST", body: JSON.stringify({ name, kind, fixed }) }),
-  updateCategory: (id: string, changes: Partial<Pick<Category, "name" | "kind" | "fixed">>) =>
+  /** `group` is for spending categories (fixed costs go in "fixed"); null for other kinds. */
+  addCategory: (name: string, kind: CategoryKind, group: string | null) =>
+    request<Category>("/api/categories", { method: "POST", body: JSON.stringify({ name, kind, group }) }),
+  spendingGroups: () => request<SpendingGroup[]>("/api/spending-groups"),
+  updateCategory: (id: string, changes: Partial<Pick<Category, "name" | "kind" | "fixed" | "group">>) =>
     request<Category>(`/api/categories/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(changes) }),
   deleteCategory: (id: string, moveTo: string | null) =>
     request<{ ok: boolean }>(
@@ -243,6 +247,14 @@ export interface OverviewMonth {
   adjustable: number;
   uncategorized: number;
   income: number;
+  /** Spending per group (see SpendingGroup), in stacking order. */
+  groups: Record<string, number>;
+}
+
+/** A group spending is shown in on the charts: fixed costs, a few large categories, and Other. */
+export interface SpendingGroup {
+  id: string;
+  name: string;
 }
 
 export interface OverviewChange {
@@ -258,6 +270,8 @@ export interface ScoreboardRow {
   category: string;
   name: string;
   fixed: boolean;
+  /** Its spending group's id. */
+  group: string;
   amount: number;
   share: number | null;
   usual: number | null;
@@ -276,6 +290,8 @@ export interface Overview {
   figures?: OverviewFigures;
   usual_months?: number;
   series: OverviewMonth[];
+  /** The spending groups, in stacking order (bottom first). */
+  groups?: SpendingGroup[];
   changes?: OverviewChange[];
   scoreboard?: ScoreboardRow[];
 }

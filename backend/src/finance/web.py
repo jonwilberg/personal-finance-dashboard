@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from finance.categories import KINDS
+from finance.categories import KINDS, SPENDING_GROUPS
 from finance.categorize import Rule, categorized_transactions, summarize_categorization
 from finance.config import BACKEND_DIR, Settings
 from finance.connections import (
@@ -92,12 +92,15 @@ class NewCategory(BaseModel):
     name: str
     kind: str = "expense"
     fixed: bool = False
+    # Spending only: its group on the charts (categories.SPENDING_GROUPS); by default Fixed if fixed, else Other.
+    group: str | None = None
 
 
 class CategoryChanges(BaseModel):
     name: str | None = None
     kind: str | None = None
     fixed: bool | None = None
+    group: str | None = None
 
 
 def create_app(settings: Settings, client: EnableBankingClient | None = None) -> FastAPI:
@@ -258,13 +261,22 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
     def category_kinds() -> list[str]:
         return list(KINDS)
 
+    @app.get("/api/spending-groups")
+    def spending_groups() -> list[dict[str, str]]:
+        """The groups spending categories belong to, in the order the charts stack them."""
+        return [{"id": g, "name": name} for g, name in SPENDING_GROUPS]
+
     @app.post("/api/categories")
     def add_category(request: NewCategory) -> dict[str, Any]:
-        return asdict(store.add_category(request.name, request.kind, request.fixed))
+        return asdict(store.add_category(request.name, request.kind, request.fixed, request.group))
 
     @app.patch("/api/categories/{category_id}")
     def update_category(category_id: str, changes: CategoryChanges) -> dict[str, Any]:
-        return asdict(store.update_category(category_id, name=changes.name, kind=changes.kind, fixed=changes.fixed))
+        return asdict(
+            store.update_category(
+                category_id, name=changes.name, kind=changes.kind, fixed=changes.fixed, group=changes.group
+            )
+        )
 
     @app.delete("/api/categories/{category_id}")
     def delete_category(category_id: str, move_to: str | None = None) -> dict[str, bool]:

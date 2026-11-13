@@ -30,6 +30,9 @@ class Category:
     fixed: bool = False
     # System categories are used by the app itself (transfer detection) and can be renamed but not deleted.
     system: bool = False
+    # For spending categories: the group the overview's charts show it in (see SPENDING_GROUPS). Fixed costs are in
+    # the "fixed" group, and only they are; None for other kinds of category.
+    group: str | None = None
 
 
 DEFAULT_CATEGORIES = [
@@ -55,6 +58,33 @@ DEFAULT_CATEGORIES = [
     Category("loans", "Loan payments", "loan", fixed=True),
     Category("transfer", "Transfers", "transfer", system=True),
 ]
+
+# The groups spending is shown in on the overview's charts, in stacking order (bottom to top). Each spending
+# category belongs to one, chosen on the Categories page; uncategorized spending is Other.
+SPENDING_GROUPS: list[tuple[str, str]] = [
+    ("fixed", "Fixed"),
+    ("groceries", "Groceries"),
+    ("dining", "Dining and leisure"),
+    ("travel", "Travel"),
+    ("other", "Other"),
+]
+SPENDING_GROUP_IDS = {group for group, _ in SPENDING_GROUPS}
+# Where the default categories start out (fixed costs go to "fixed", anything not listed to "other").
+_DEFAULT_GROUPS = {"groceries": "groceries", "eating_out": "dining", "leisure": "dining", "travel": "travel"}
+
+
+def default_group(category_id: str, fixed: bool) -> str:
+    """The group a spending category starts in, before you choose one."""
+    return "fixed" if fixed else _DEFAULT_GROUPS.get(category_id, "other")
+
+
+def spending_group(category: Category | None) -> str:
+    """The chart group of a spending category; None (uncategorized spending) is Other."""
+    if category is None:
+        return "other"
+    if category.group in SPENDING_GROUP_IDS:
+        return category.group
+    return default_group(category.id, category.fixed)
 
 # Merchant keywords per category, checked in this order (first match wins). Norwegian merchants first.
 # Order matters where names overlap: "OBS BYGG" (home) is checked before "OBS" (groceries).

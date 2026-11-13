@@ -743,6 +743,42 @@ input.category-name:focus {
   text-align: right;
 }
 
+/* Spending categories in their chart groups, each headed by the group's colour */
+.category-group {
+  margin-top: var(--space-5);
+}
+
+.category-group-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--text-body);
+  font-weight: 500;
+}
+
+.category-group .category-list {
+  margin-top: var(--space-2);
+}
+
+.category-group-empty {
+  margin: var(--space-2) 0 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--ink);
+}
+
+.group-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.group-pick select {
+  flex: 1;
+  min-width: 0;
+}
+
 .segmented-small button {
   padding: 3px 10px;
   font-size: var(--text-caption);
@@ -1566,26 +1602,26 @@ input.rule-regex {
   font-weight: 500;
 }
 
-/* Labels inside a block: light text on the fixed blue, ink on the adjustable ochre (both >= 5:1). */
+/* Labels inside a block: light text on the dark group colours, ink on the light ones (see spendingGroups.ts). */
 .split-inside {
   pointer-events: auto;
 }
 
-.split-inside.on-fixed .split-name,
-.split-inside.on-fixed .split-figures {
+.split-inside.on-dark .split-name,
+.split-inside.on-dark .split-figures {
   color: var(--paper-raised);
 }
 
-.split-inside.on-fixed .split-share {
+.split-inside.on-dark .split-share {
   color: color-mix(in srgb, var(--paper-raised) 80%, transparent);
 }
 
-.split-inside.on-adjustable .split-name,
-.split-inside.on-adjustable .split-figures {
+.split-inside.on-light .split-name,
+.split-inside.on-light .split-figures {
   color: var(--ink);
 }
 
-.split-inside.on-adjustable .split-share {
+.split-inside.on-light .split-share {
   color: color-mix(in srgb, var(--ink) 75%, transparent);
 }
 

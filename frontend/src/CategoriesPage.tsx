@@ -1,28 +1,45 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import { type Category, type CategoryKind, KIND_LABELS, api } from "./api";
+import { type Category, type CategoryKind, KIND_LABELS, type SpendingGroup, api } from "./api";
+import { groupFill } from "./spendingGroups";
 
 // Kinds a category can be given. Transfers are reserved for the app's own transfer detection.
 const EDITABLE_KINDS: CategoryKind[] = ["expense", "income", "saving", "loan"];
 const KIND_HINTS: Record<CategoryKind, string> = {
-  expense: "Counted as spending.",
+  expense:
+    "Counted as spending. Each category belongs to a group, which is its colour on the Overview's charts; Fixed is " +
+    "for costs that stay the same from month to month.",
   income: "Counted as money in.",
   saving: "Money put into savings or investments. Not spending; tracked on its own.",
   loan: "Loan payments. Not counted as consumption; tracked on its own.",
   transfer: "Money moving between your own accounts. Left out of all statistics.",
 };
-// Fixed versus adjustable only matters for money going out on costs.
-const HAS_FIXED = new Set<CategoryKind>(["expense", "loan"]);
+const NEW_SPENDING_GROUP = "other";
 
 export function CategoriesPage({ onError }: { onError: (e: unknown) => void }) {
   const [categories, setCategories] = useState<Category[] | null>(null);
+  const [groups, setGroups] = useState<SpendingGroup[]>([]);
   const reload = useCallback(() => {
     api.categories().then(setCategories).catch(onError);
   }, [onError]);
   useEffect(reload, [reload]);
+  useEffect(() => {
+    api.spendingGroups().then(setGroups).catch(onError);
+  }, [onError]);
+
+  const row = (category: Category) => (
+    <CategoryRow
+      key={category.id}
+      category={category}
+      groups={groups}
+      others={(categories ?? []).filter((c) => c.id !== category.id)}
+      onChanged={reload}
+      onError={onError}
+    />
+  );
 
   return (
     <>
-      <AddCategory onAdded={reload} onError={onError} />
+      <AddCategory groups={groups} onAdded={reload} onError={onError} />
       {(Object.keys(KIND_LABELS) as CategoryKind[]).map((kind) => {
         const ofKind = categories?.filter((c) => c.kind === kind) ?? [];
         if (categories && ofKind.length === 0) return null;
@@ -31,17 +48,30 @@ export function CategoriesPage({ onError }: { onError: (e: unknown) => void }) {
             <p className="label">{KIND_LABELS[kind]}</p>
             <h2>{categories ? `${ofKind.length} ${ofKind.length === 1 ? "category" : "categories"}` : "Loading…"}</h2>
             <p className="dek small">{KIND_HINTS[kind]}</p>
-            <div className="category-list">
-              {ofKind.map((category) => (
-                <CategoryRow
-                  key={category.id}
-                  category={category}
-                  others={(categories ?? []).filter((c) => c.id !== category.id)}
-                  onChanged={reload}
-                  onError={onError}
-                />
-              ))}
-            </div>
+            {kind === "expense" && groups.length > 0 ? (
+              // Spending in its chart groups, in the order the charts stack them.
+              groups.map((group) => {
+                const members = ofKind.filter((c) => (c.group ?? NEW_SPENDING_GROUP) === group.id);
+                return (
+                  <div className="category-group" key={group.id}>
+                    <h3 className="category-group-heading">
+                      <span className="legend-swatch" style={{ background: groupFill(group.id) }} aria-hidden="true" />
+                      {group.name}
+                      <span className="meta small">{members.length}</span>
+                    </h3>
+                    {members.length > 0 ? (
+                      <div className="category-list">{members.map(row)}</div>
+                    ) : (
+                      <p className="meta small category-group-empty">
+                        No categories yet. Move one here with its group menu.
+                      </p>
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="category-list">{ofKind.map(row)}</div>
+            )}
           </section>
         );
       })}
@@ -49,10 +79,10 @@ export function CategoriesPage({ onError }: { onError: (e: unknown) => void }) {
   );
 }
 
-function AddCategory(props: { onAdded: () => void; onError: (e: unknown) => void }) {
+function AddCategory(props: { groups: SpendingGroup[]; onAdded: () => void; onError: (e: unknown) => void }) {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<CategoryKind>("expense");
-  const [fixed, setFixed] = useState(false);
+  const [group, setGroup] = useState(NEW_SPENDING_GROUP);
   const [saving, setSaving] = useState(false);
 
   const submit = async (event: FormEvent) => {
@@ -60,9 +90,9 @@ function AddCategory(props: { onAdded: () => void; onError: (e: unknown) => void
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await api.addCategory(name, kind, HAS_FIXED.has(kind) && fixed);
+      await api.addCategory(name, kind, kind === "expense" ? group : null);
       setName("");
-      setFixed(false);
+      setGroup(NEW_SPENDING_GROUP);
       props.onAdded();
     } catch (error) {
       props.onError(error);
@@ -90,7 +120,12 @@ function AddCategory(props: { onAdded: () => void; onError: (e: unknown) => void
             ))}
           </select>
         </label>
-        {HAS_FIXED.has(kind) && <FixedToggle fixed={fixed} onChange={setFixed} label="Cost type" />}
+        {kind === "expense" && props.groups.length > 0 && (
+          <label>
+            Group
+            <GroupSelect groups={props.groups} value={group} onChange={setGroup} />
+          </label>
+        )}
         <button type="submit" disabled={saving || !name.trim()}>
           {saving ? "Adding…" : "Add category"}
         </button>
@@ -101,6 +136,7 @@ function AddCategory(props: { onAdded: () => void; onError: (e: unknown) => void
 
 function CategoryRow(props: {
   category: Category;
+  groups: SpendingGroup[];
   others: Category[];
   onChanged: () => void;
   onError: (e: unknown) => void;
@@ -111,7 +147,7 @@ function CategoryRow(props: {
   const [moveTo, setMoveTo] = useState("");
   useEffect(() => setName(category.name), [category.name]);
 
-  const update = async (changes: Partial<Pick<Category, "name" | "kind" | "fixed">>) => {
+  const update = async (changes: Partial<Pick<Category, "name" | "kind" | "group">>) => {
     try {
       await api.updateCategory(category.id, changes);
       props.onChanged();
@@ -169,8 +205,12 @@ function CategoryRow(props: {
           </select>
         )}
         <div>
-          {HAS_FIXED.has(category.kind) && (
-            <FixedToggle fixed={category.fixed} onChange={(fixed) => update({ fixed })} />
+          {category.kind === "expense" && props.groups.length > 0 && (
+            <GroupSelect
+              groups={props.groups}
+              value={category.group ?? NEW_SPENDING_GROUP}
+              onChange={(group) => update({ group })}
+            />
           )}
         </div>
         <span className="meta small nowrap">{usage}</span>
@@ -214,28 +254,18 @@ function CategoryRow(props: {
   );
 }
 
-function FixedToggle(props: { fixed: boolean; onChange: (fixed: boolean) => void; label?: string }) {
-  const toggle = (
-    <div className="segmented segmented-small" role="radiogroup" aria-label="Fixed or adjustable cost">
-      <button type="button" role="radio" aria-checked={props.fixed} aria-selected={props.fixed} onClick={() => props.onChange(true)}>
-        Fixed
-      </button>
-      <button
-        type="button"
-        role="radio"
-        aria-checked={!props.fixed}
-        aria-selected={!props.fixed}
-        onClick={() => props.onChange(false)}
-      >
-        Adjustable
-      </button>
-    </div>
-  );
-  if (!props.label) return toggle;
+/** The spending group a category belongs to, with the group's chart colour beside it. */
+function GroupSelect(props: { groups: SpendingGroup[]; value: string; onChange: (group: string) => void }) {
   return (
-    <div className="field">
-      <span className="field-label">{props.label}</span>
-      {toggle}
-    </div>
+    <span className="group-pick">
+      <span className="legend-swatch" style={{ background: groupFill(props.value) }} aria-hidden="true" />
+      <select aria-label="Group" value={props.value} onChange={(e) => props.onChange(e.target.value)}>
+        {props.groups.map((g) => (
+          <option key={g.id} value={g.id}>
+            {g.name}
+          </option>
+        ))}
+      </select>
+    </span>
   );
 }
