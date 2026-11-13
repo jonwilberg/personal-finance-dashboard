@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import type { OverviewMonth, ScoreboardRow } from "./api";
+import { CategoryTransactions } from "./CategoryTransactions";
 import { formatKr } from "./format";
 import { monthTitle } from "./SpendingChart";
 
@@ -14,9 +15,24 @@ const COLUMNS: { key: SortKey | null; label: string; numeric: boolean }[] = [
   { key: null, label: "Last 12 months", numeric: false },
 ];
 
-/** Every spending category for the selected month, sortable, with a sparkline of its monthly history. */
-export function CategoryScoreboard(props: { rows: ScoreboardRow[]; months: OverviewMonth[]; total: number; usual: number | null }) {
+/**
+ * Every spending category for the selected month, sortable, with a sparkline of its monthly history. A row opens
+ * to the month's transactions in that category, to move any that belong somewhere else.
+ */
+export function CategoryScoreboard(props: {
+  rows: ScoreboardRow[];
+  months: OverviewMonth[];
+  total: number;
+  usual: number | null;
+  /** The selected month (YYYY-MM) and whose accounts count, for the transactions a row opens to. */
+  month: string;
+  owners?: string[];
+  onChanged: () => void;
+  onError: (e: unknown) => void;
+}) {
   const [sort, setSort] = useState<{ key: SortKey; descending: boolean }>({ key: "amount", descending: true });
+  const [open, setOpen] = useState<string | null>(null);
+  const flip = (category: string) => setOpen((current) => (current === category ? null : category));
 
   const rows = useMemo(() => {
     const value = (row: ScoreboardRow) => (sort.key === "name" ? row.name : (row[sort.key] ?? -Infinity));
@@ -62,31 +78,67 @@ export function CategoryScoreboard(props: { rows: ScoreboardRow[]; months: Overv
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => (
-          // The id lets the spending split above jump to a category's row.
-          <tr key={row.category} id={`scoreboard-${row.category}`}>
-            <td>
-              <span className="score-name">
-                {row.name}
-                {row.fixed && <span className="account-type">Fixed</span>}
-              </span>
-            </td>
-            <td className="num">
-              <span className="score-amount">{formatKr(row.amount)}</span>
-              {row.share !== null && row.amount > 0 && (
-                <span className="meta small score-share">{Math.round(row.share * 100)} %</span>
+        {rows.map((row) => {
+          const isOpen = open === row.category;
+          return (
+            <Fragment key={row.category}>
+              {/* The id lets the spending split above jump to a category's row. Clicking anywhere on the row opens it;
+                  the name is the button for keyboards and screen readers. */}
+              <tr
+                id={`scoreboard-${row.category}`}
+                className={`score-row${isOpen ? " is-open" : ""}`}
+                onClick={() => flip(row.category)}
+              >
+                <td>
+                  <button
+                    className="score-toggle"
+                    aria-expanded={isOpen}
+                    aria-controls={`score-detail-${row.category}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      flip(row.category);
+                    }}
+                  >
+                    <span className="score-chevron" aria-hidden="true">
+                      ›
+                    </span>
+                    <span className="score-name">
+                      {row.name}
+                      {row.fixed && <span className="account-type">Fixed</span>}
+                    </span>
+                  </button>
+                </td>
+                <td className="num">
+                  <span className="score-amount">{formatKr(row.amount)}</span>
+                  {row.share !== null && row.amount > 0 && (
+                    <span className="meta small score-share">{Math.round(row.share * 100)} %</span>
+                  )}
+                </td>
+                <td className="num meta">{row.usual !== null ? formatKr(row.usual) : "–"}</td>
+                <td className="num">
+                  <Difference delta={row.delta} />
+                </td>
+                <td className="num">{formatKr(row.ltm)}</td>
+                <td>
+                  <Sparkline values={row.history} months={props.months} name={row.name} />
+                </td>
+              </tr>
+              {isOpen && (
+                <tr className="score-detail" id={`score-detail-${row.category}`}>
+                  <td colSpan={COLUMNS.length}>
+                    <CategoryTransactions
+                      category={row.category}
+                      month={props.month}
+                      owners={props.owners}
+                      onChanged={props.onChanged}
+                      onError={props.onError}
+                    />
+                  </td>
+                </tr>
               )}
-            </td>
-            <td className="num meta">{row.usual !== null ? formatKr(row.usual) : "–"}</td>
-            <td className="num">
-              <Difference delta={row.delta} />
-            </td>
-            <td className="num">{formatKr(row.ltm)}</td>
-            <td>
-              <Sparkline values={row.history} months={props.months} name={row.name} />
-            </td>
-          </tr>
-        ))}
+            </Fragment>
+          );
+        })}
       </tbody>
       <tfoot>
         <tr>

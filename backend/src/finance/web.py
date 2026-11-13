@@ -31,7 +31,7 @@ from finance.connections import (
 )
 from finance.enable_banking import EnableBankingClient, EnableBankingError
 from finance.manual import is_manual_session
-from finance.overview import build_overview
+from finance.overview import UNCATEGORIZED, build_overview
 from finance.storage import CategoryError, PersonError, Storage
 from finance.transactions import summarize
 
@@ -291,15 +291,27 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
         account: str | None = None,
         rule: str | None = None,
         q: str | None = None,
+        month: str | None = None,
+        owner: list[str] | None = Query(default=None),
         limit: int = Query(default=200, ge=1, le=5000),
         offset: int = 0,
     ) -> dict[str, Any]:
-        """Categorized transactions, newest first. view=review shows only uncategorized ones."""
+        """Categorized transactions, newest first. view=review shows only uncategorized ones.
+
+        category=uncategorized gives those without a category; month (YYYY-MM) and owner (repeatable, as for the
+        overview) narrow them to what one of the overview's figures counts.
+        """
         items = all_transactions()
         if view == "review":
             items = [t for t in items if t["category"] is None]
-        if category:
+        if category == UNCATEGORIZED:
+            items = [t for t in items if t["category"] is None]
+        elif category:
             items = [t for t in items if t["category"] == category]
+        if month:
+            items = [t for t in items if (t["date"] or "").startswith(month)]
+        if owner:
+            items = owned_by(items, owner)
         if account:
             items = [t for t in items if t["account_uid"] == account]
         if rule:
@@ -403,10 +415,14 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
         """
         transactions = all_transactions()
         if owner:
-            owned = owners_by_account()
-            wanted = set(owner)
-            transactions = [t for t in transactions if owned.get(t["account_uid"], SHARED) in wanted]
+            transactions = owned_by(transactions, owner)
         return build_overview(transactions, store.categories(), month)
+
+    def owned_by(transactions: list[dict[str, Any]], owners: list[str]) -> list[dict[str, Any]]:
+        """The transactions on accounts belonging to these owners (people, or "shared")."""
+        owned = owners_by_account()
+        wanted = set(owners)
+        return [t for t in transactions if owned.get(t["account_uid"], SHARED) in wanted]
 
     @app.get("/api/categorization/summary")
     def categorization_summary() -> dict[str, Any]:
