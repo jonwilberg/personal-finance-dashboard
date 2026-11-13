@@ -449,3 +449,13 @@ def test_a_card_added_by_hand_is_never_refreshed_and_its_bill_payment_is_a_trans
 def test_a_hand_added_account_file_must_be_complete(change):
     with pytest.raises(ManualAccountError):
         manual_account(CARD | change)
+
+
+def test_spending_groups_are_listed_and_a_category_can_move_between_them(api):
+    groups = api.get("/api/spending-groups").json()
+    assert [g["id"] for g in groups] == ["fixed", "groceries", "dining", "travel", "other"]
+    moved = api.patch("/api/categories/shopping", json={"group": "fixed"}).json()
+    assert (moved["group"], moved["fixed"]) == ("fixed", True)
+    added = api.post("/api/categories", json={"name": "Gym", "kind": "expense", "group": "dining"}).json()
+    assert (added["group"], added["fixed"]) == ("dining", False)
+    assert api.patch("/api/categories/shopping", json={"group": "nonsense"}).status_code == 422

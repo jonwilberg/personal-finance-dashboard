@@ -293,3 +293,46 @@ def test_a_stored_regex_that_no_longer_compiles_is_skipped(tmp_path):
     storage.add_rule("KIWI", "groceries")
     storage.add_rule("(", "shopping", regex=True)  # only possible by writing the database directly
     assert storage.categorization().rules == [Rule("KIWI", "groceries")]
+
+
+def test_spending_categories_from_before_groups_get_their_default_group(tmp_path):
+    import sqlite3
+
+    db = sqlite3.connect(tmp_path / "finance.db")
+    db.execute(
+        "CREATE TABLE categories (id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL,"
+        " fixed INTEGER NOT NULL DEFAULT 0, system INTEGER NOT NULL DEFAULT 0, position INTEGER NOT NULL)"
+    )
+    db.executemany(
+        "INSERT INTO categories VALUES (?, ?, ?, ?, 0, ?)",
+        [("groceries", "Groceries", "expense", 0, 0), ("subscriptions", "Subscriptions", "expense", 0, 1),
+         ("memberships", "Memberships", "expense", 1, 2), ("salary", "Salary", "income", 0, 3)],
+    )
+    db.commit()
+    db.close()
+
+    groups = {c.id: c.group for c in Storage(tmp_path).categories()}
+    # Your own fixed choices decide Fixed; the large defaults get their own groups; the rest is Other.
+    assert (groups["groceries"], groups["subscriptions"], groups["memberships"]) == ("groceries", "other", "fixed")
+    assert (groups["eating_out"], groups["leisure"], groups["travel"], groups["housing"]) == (
+        "dining", "dining", "travel", "fixed")
+    assert groups["salary"] is None
+
+
+def test_a_spending_categorys_group_decides_whether_it_is_fixed(tmp_path):
+    storage = Storage(tmp_path)
+    assert storage.add_category("Gym", "expense", group="dining").group == "dining"
+    rent = storage.add_category("Parking", "expense", fixed=True)
+    assert (rent.group, rent.fixed) == ("fixed", True)
+    assert storage.add_category("Bonus", "income", group="travel").group is None
+
+    moved = storage.update_category("leisure", group="fixed")
+    assert (moved.group, moved.fixed) == ("fixed", True)
+    unfixed = storage.update_category("leisure", fixed=False)  # out of Fixed, into Other
+    assert (unfixed.group, unfixed.fixed) == ("other", False)
+    assert storage.update_category("leisure", group="travel").group == "travel"
+    assert storage.update_category("leisure", kind="income").group is None
+    assert storage.update_category("leisure", kind="expense").group == "dining"  # back to its default group
+
+    with pytest.raises(CategoryError):
+        storage.update_category("leisure", group="nonsense")

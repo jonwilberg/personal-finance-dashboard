@@ -743,6 +743,42 @@ input.category-name:focus {
   text-align: right;
 }
 
+/* Spending categories in their chart groups, each headed by the group's colour */
+.category-group {
+  margin-top: var(--space-5);
+}
+
+.category-group-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--text-body);
+  font-weight: 500;
+}
+
+.category-group .category-list {
+  margin-top: var(--space-2);
+}
+
+.category-group-empty {
+  margin: var(--space-2) 0 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--ink);
+}
+
+.group-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.group-pick select {
+  flex: 1;
+  min-width: 0;
+}
+
 .segmented-small button {
   padding: 3px 10px;
   font-size: var(--text-caption);
