@@ -151,7 +151,8 @@ def _scoreboard(
     spent: Decimal,
     categories: list[Category],
 ) -> list[dict[str, Any]]:
-    """Every spending category with this month, the median month, the difference and its monthly history."""
+    """Every spending category with this month, the median month, the difference, and its monthly history (the
+    months shown in the chart, up to and including this month) with their total."""
     rows = []
     entries = [(c.id, c.name, c.fixed) for c in categories if c.kind == "expense"]
     for key, name, fixed in [*entries, (UNCATEGORIZED, "Not categorized", False)]:
@@ -170,6 +171,7 @@ def _scoreboard(
                 "usual": _money(median_month) if median_month is not None else None,
                 "delta": _money(amount - median_month) if median_month is not None else None,
                 "history": [_money(v) for v in history],
+                "ltm": _money(sum(history, Decimal())),
             }
         )
     rows.sort(key=lambda r: r["amount"], reverse=True)
