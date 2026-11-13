@@ -127,10 +127,6 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
           usual={f.usual_spent}
           onSelect={setMonth}
         />
-        <p className="meta small">
-          Median spending: the median of the {overview.usual_months || "previous"} months before. Select a bar to open that
-          month.
-        </p>
       </section>
 
       {overview.scoreboard && overview.scoreboard.length > 0 && (

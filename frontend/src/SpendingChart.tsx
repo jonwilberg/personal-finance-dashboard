@@ -71,8 +71,8 @@ export function SpendingChart(props: {
   const hovered = hover !== null ? series[hover] : null;
 
   /**
-   * The figures above the bars: each month's spending and income, in full for the selected month where there's room,
-   * compact for the rest so twelve months fit. A label sits above its own bar, nudged sideways off the bar beside it
+   * The figures above the bars: each month's spending and income, compact ("38,3k") so twelve months fit; the
+   * selected month's are only set bolder. A label sits above its own bar, nudged sideways off the bar beside it
    * or lifted a line when that's what it takes, and is left out when it would still touch a bar or another label
    * (narrow bars on phones): the tooltip and the table have every figure. The selected month goes first, then
    * spending, then income.
@@ -92,21 +92,19 @@ export function SpendingChart(props: {
       const size = isSelected ? 12 : 11;
       const top = kind === "spent" ? y(totals[i]) : incomeTop(i);
       const centre = kind === "spent" ? pairX(i) + barW / 2 : incomeX(i) + barW / 2;
-      const texts = isSelected ? [formatKr(value), barTotal(value, band)] : [barTotal(value, band)];
-      for (const text of texts) {
-        const half = (text.length * size * 0.58 + 4) / 2; // estimated width (tabular figures), plus the halo
-        // Above the bar, or sideways off the other bar of the pair: spending to the left, income to the right.
-        const xs = [centre, kind === "spent" ? incomeX(i) - 2 - half : incomeX(i) - 1 + half];
-        const baseline = top - (isSelected ? 8 : 6);
-        for (const lift of [0, size + 3]) {
-          for (const cx of xs) {
-            const box = { x0: cx - half, x1: cx + half, y0: baseline - lift - size * 0.75 - 2, y1: baseline - lift + 2 };
-            const inside = box.x0 >= PAD.left - 4 && box.x1 <= WIDTH - 2 && box.y0 >= 0;
-            if (inside && !bars.some((b) => overlaps(box, b)) && !placed.some((p) => overlaps(box, p))) {
-              placed.push(box);
-              out.push({ key: `${kind}-${i}`, i, text, cx, baseline: baseline - lift });
-              return;
-            }
+      const text = barTotal(value, band);
+      const half = (text.length * size * 0.58 + 4) / 2; // estimated width (tabular figures), plus the halo
+      // Above the bar, or sideways off the other bar of the pair: spending to the left, income to the right.
+      const xs = [centre, kind === "spent" ? incomeX(i) - 2 - half : incomeX(i) - 1 + half];
+      const baseline = top - (isSelected ? 8 : 6);
+      for (const lift of [0, size + 3]) {
+        for (const cx of xs) {
+          const box = { x0: cx - half, x1: cx + half, y0: baseline - lift - size * 0.75 - 2, y1: baseline - lift + 2 };
+          const inside = box.x0 >= PAD.left - 4 && box.x1 <= WIDTH - 2 && box.y0 >= 0;
+          if (inside && !bars.some((b) => overlaps(box, b)) && !placed.some((p) => overlaps(box, p))) {
+            placed.push(box);
+            out.push({ key: `${kind}-${i}`, i, text, cx, baseline: baseline - lift });
+            return;
           }
         }
       }
@@ -138,18 +136,10 @@ export function SpendingChart(props: {
           <span className="legend-swatch" style={{ background: INCOME_FILL }} />
           Income
         </span>
-        {cut.some(Boolean) && (
-          <span className="legend-item">
-            <svg className="legend-break" width="10" height="16" viewBox="0 0 10 16">
-              <path d={brokenBar(0, 0, 10, 16, 9)} fill={INCOME_FILL} />
-            </svg>
-            Income far above a typical month, cut short
-          </span>
-        )}
         {usual !== null && (
           <span className="legend-item">
             <span className="legend-line" />
-            Median spending
+            Median spend LTM
           </span>
         )}
       </div>
