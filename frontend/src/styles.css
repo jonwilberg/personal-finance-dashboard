@@ -1775,6 +1775,28 @@ button.split-label.is-hover {
   font-weight: 500;
 }
 
+/* The income and spent totals heading their bars. */
+.split-total {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: var(--text-caption);
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.split-total-label {
+  color: var(--ink-muted);
+}
+
+.split-total-value {
+  color: var(--ink);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
 /* A group's name and total beside its bracket, right-aligned against it. */
 .split-group {
   position: absolute;

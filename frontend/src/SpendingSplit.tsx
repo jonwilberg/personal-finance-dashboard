@@ -5,7 +5,9 @@ import { groupFill } from "./spendingGroups";
 
 // The month's spending as one tall bar, split by category: a "zoom in" on the month's column in the chart above it,
 // stacked the same way (the groups in their order from the bottom, each group's categories largest first, what
-// isn't categorized hatched on top of Other).
+// isn't categorized hatched on top of Other). The month's income stands to its left on the same scale, drawn like
+// the chart's income (a pale column with a dark top edge), and cut short with a break when it is far above the
+// spending. Both totals head their bars.
 // - Every category gets a one-line label to the right, joined by an elbowed leader line, spread only as far as
 //   needed to stop labels touching (order is kept, so leaders never cross).
 // - On wide screens each group gets a bracket on the left with its name and total; narrower screens show the
@@ -13,8 +15,10 @@ import { groupFill } from "./spendingGroups";
 // - Clicking a block or label jumps to its row in the table below.
 
 const UNCATEGORIZED = "uncategorized";
-const BAR_H = 420; // the bar's height
+const HEAD = 44; // the totals above the bars
+const BAR_H = 420; // the bars' area below the totals
 const BAR_W = 56;
+const BAR_GAP = 12; // between the income and spending bars
 const GAP = 2; // surface gap between blocks
 const LINE = 21; // a label's line, spacing included
 const GROUP_LINE = 38; // a group label's two lines, spacing included
@@ -22,6 +26,12 @@ const GROUPS_W = 190; // the bracket column, on wide screens
 const BRACKETS_FROM = 620; // narrower than this: a legend line instead of brackets
 const ELBOW = 14; // the leader's first, straight stretch out of the bar
 const LEADER = 46; // from the bar's edge to the labels
+// Income above this many times the spending is cut short, so the spending keeps most of the height.
+const BREAK_FACTOR = 1.5;
+const OVERSHOOT = 6; // a cut income bar reaches this far above the area, to show it carries on
+const BREAK_AT = 16; // the break's distance below the area's top
+const INCOME = "var(--chart-income)";
+const INCOME_GHOST = "color-mix(in srgb, var(--chart-income) 9%, transparent)";
 
 interface Block {
   row: ScoreboardRow;
@@ -47,7 +57,16 @@ function spread(wanted: number[], step: number, low: number, high: number) {
   return y;
 }
 
-export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups: SpendingGroup[] }) {
+export function SpendingSplit({
+  rows,
+  groups,
+  income,
+}: {
+  rows: ScoreboardRow[];
+  groups: SpendingGroup[];
+  /** The month's income, for the bar beside the spending. */
+  income: number;
+}) {
   const frameRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(720);
   const [hover, setHover] = useState<string | null>(null);
@@ -77,9 +96,18 @@ export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups:
   const total = ordered.reduce((sum, r) => sum + r.amount, 0);
   const figures = (amount: number, share: number) => `${formatKr(amount)} · ${shareText(share)}`;
 
+  // One scale for both bars: the taller one fills the area, unless income is far above the spending, when the
+  // spending sets the scale (with some headroom) and the income bar is cut short.
+  const earned = Math.max(income, 0);
+  const cut = earned > total * BREAK_FACTOR;
+  const scale = cut ? total * 1.15 : Math.max(total, earned);
+  const base = HEAD + BAR_H; // the bars' common bottom
+  const spentH = (total / scale) * BAR_H;
+  const incomeTop = cut ? HEAD - OVERSHOOT : base - (earned / scale) * BAR_H;
+
   // Blocks from the bottom up; y grows downwards, so each block sits above the one before.
-  const usable = BAR_H - GAP * (ordered.length - 1);
-  let bottom = BAR_H;
+  const usable = spentH - GAP * (ordered.length - 1);
+  let bottom = base;
   const blocks: Block[] = ordered.map((row) => {
     const height = Math.max((row.amount / total) * usable, 1.5);
     const block = { row, share: row.amount / total, top: bottom - height, height };
@@ -88,7 +116,8 @@ export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups:
   });
 
   const brackets = width >= BRACKETS_FROM;
-  const barX = brackets ? GROUPS_W : 0;
+  const incomeX = brackets ? GROUPS_W : 0;
+  const barX = incomeX + BAR_W + BAR_GAP;
   const barRight = barX + BAR_W;
   const labelX = barRight + LEADER;
 
@@ -97,8 +126,8 @@ export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups:
   const labelY = spread(
     topDown.map((b) => b.top + b.height / 2),
     LINE,
-    LINE / 2,
-    BAR_H - LINE / 2,
+    HEAD + LINE / 2,
+    base - LINE / 2,
   );
 
   // Groups, with their span on the bar and their totals.
@@ -114,8 +143,8 @@ export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups:
   const groupY = spread(
     groupsTopDown.map((g) => (g.top + g.end) / 2),
     GROUP_LINE,
-    GROUP_LINE / 2,
-    BAR_H - GROUP_LINE / 2,
+    HEAD + GROUP_LINE / 2,
+    base - GROUP_LINE / 2,
   );
 
   const fill = (row: ScoreboardRow) => (row.category === UNCATEGORIZED ? `url(#${hatchId})` : groupFill(row.group));
@@ -126,6 +155,7 @@ export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups:
     onBlur: () => setHover(null),
     onClick: () => showRow(category),
   });
+  const breakAt = HEAD + BREAK_AT;
 
   return (
     <div className="split" ref={frameRef}>
@@ -141,8 +171,8 @@ export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups:
           ))}
         </div>
       )}
-      <div className="split-frame" style={{ height: BAR_H }}>
-        <svg width={width} height={BAR_H} aria-hidden="true">
+      <div className="split-frame" style={{ height: base }}>
+        <svg width={width} height={base} aria-hidden="true">
           <defs>
             <pattern id={hatchId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
               <rect width="6" height="6" fill="var(--paper-sunken)" />
@@ -150,9 +180,30 @@ export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups:
             </pattern>
           </defs>
 
+          {/* The month's income, on the spending's scale: a pale column with a dark top edge, broken when cut. */}
+          {earned > 0 && (
+            <g className="split-income">
+              {cut ? (
+                <>
+                  <path
+                    d={`M${incomeX},${incomeTop} H${incomeX + BAR_W} V${breakAt - 5} L${incomeX},${breakAt + 1} Z`}
+                    fill={INCOME_GHOST}
+                  />
+                  <path
+                    d={`M${incomeX},${breakAt + 5} L${incomeX + BAR_W},${breakAt - 1} V${base} H${incomeX} Z`}
+                    fill={INCOME_GHOST}
+                  />
+                </>
+              ) : (
+                <rect x={incomeX} y={incomeTop} width={BAR_W} height={base - incomeTop} fill={INCOME_GHOST} />
+              )}
+              <line x1={incomeX} x2={incomeX + BAR_W} y1={incomeTop} y2={incomeTop} stroke={INCOME} strokeWidth={2} />
+            </g>
+          )}
+
           {brackets &&
             groupsTopDown.map((g, i) => {
-              const x = barX - 10;
+              const x = incomeX - 10;
               const mid = (g.top + g.end) / 2;
               return (
                 <g key={g.group.id} className="split-bracket">
@@ -189,12 +240,24 @@ export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups:
           })}
         </svg>
 
+        {/* The two totals, heading their bars. */}
+        {earned > 0 && (
+          <div className="split-total" style={{ left: incomeX - BAR_GAP / 2, width: BAR_W + BAR_GAP }}>
+            <span className="split-total-label">Income</span>
+            <span className="split-total-value">{formatKr(earned)}</span>
+          </div>
+        )}
+        <div className="split-total" style={{ left: barX - BAR_GAP / 2, width: BAR_W + BAR_GAP }}>
+          <span className="split-total-label">Spent</span>
+          <span className="split-total-value">{formatKr(total)}</span>
+        </div>
+
         {brackets &&
           groupsTopDown.map((g, i) => (
             <div
               key={g.group.id}
               className="split-group"
-              style={{ top: groupY[i] - GROUP_LINE / 2 + 2, right: width - (barX - 30), height: GROUP_LINE - 4 }}
+              style={{ top: groupY[i] - GROUP_LINE / 2 + 2, right: width - (incomeX - 30), height: GROUP_LINE - 4 }}
             >
               <span className="split-group-name">
                 <span className="legend-swatch" style={{ background: groupFill(g.group.id) }} aria-hidden="true" />
