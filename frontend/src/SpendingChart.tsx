@@ -73,11 +73,15 @@ export function SpendingChart(props: {
   const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
   // Narrow columns (phones) have no room for a plus on every month: green says kept there, and minus stays.
   const tight = band < 36;
-  const signed = (value: number, plus = !tight) =>
-    `${value >= 0 ? (plus ? "+" : "") : "−"}${thousands(Math.abs(value))}`;
+  // The sign is kept apart from the digits so it can hang outside them, and figures line up down the columns.
+  const plain = (value: number): Figure => ({ sign: "", digits: thousands(value) });
+  const signed = (value: number, plus = !tight): Figure => ({
+    sign: value >= 0 ? (plus ? "+" : "") : "−",
+    digits: thousands(Math.abs(value)),
+  });
   const ledger = [
-    { key: "income", label: "Income", cells: incomes.map(thousands), total: thousands(sum(incomes)) },
-    { key: "spent", label: "Spent", cells: totals.map(thousands), total: thousands(sum(totals)) },
+    { key: "income", label: "Income", cells: incomes.map(plain), total: plain(sum(incomes)) },
+    { key: "spent", label: "Spent", cells: totals.map(plain), total: plain(sum(totals)) },
     {
       key: "kept",
       label: "Kept",
@@ -246,11 +250,13 @@ export function SpendingChart(props: {
                 onMouseLeave={() => setHover(null)}
                 onClick={() => props.onSelect(series[i].month)}
               >
-                {cell}
+                <LedgerFigure figure={cell} />
               </span>
             ))}
             {showTotals && (
-              <span className={`ledger-total ledger-${row.key} ${row.tone?.(sum(nets)) ?? ""}`}>{row.total}</span>
+              <span className={`ledger-total ledger-${row.key} ${row.tone?.(sum(nets)) ?? ""}`}>
+                <LedgerFigure figure={row.total} />
+              </span>
             )}
           </Fragment>
         ))}
@@ -284,6 +290,26 @@ export function SpendingChart(props: {
         </tbody>
       </table>
     </div>
+  );
+}
+
+interface Figure {
+  sign: string;
+  digits: string;
+}
+
+/**
+ * A ledger figure, right-aligned in a box as wide as the widest figure, so units and "k" line up down a column; a
+ * plus or minus hangs outside the box instead of pushing the digits aside.
+ */
+function LedgerFigure({ figure }: { figure: Figure }) {
+  return (
+    <span className="ledger-figure">
+      <span className="ledger-digits">
+        {figure.sign && <span className="ledger-sign">{figure.sign}</span>}
+        {figure.digits}
+      </span>
+    </span>
   );
 }
 
