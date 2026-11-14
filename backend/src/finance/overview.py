@@ -95,6 +95,12 @@ def build_overview(
         "groups": [{"id": g, "name": name} for g, name in SPENDING_GROUPS],
         "changes": changes,
         "scoreboard": _scoreboard(totals, shown, this, usual, spent, categories),
+        # This month: income per income category, largest first.
+        "income_breakdown": [
+            {"category": key, "name": by_id[key].name, "amount": _money(amount)}
+            for key, amount in sorted(this["income_by_category"].items(), key=lambda kv: kv[1], reverse=True)
+            if amount > 0 and key in by_id
+        ],
     }
 
 
@@ -118,6 +124,7 @@ def _monthly_totals(transactions: list[dict[str, Any]], by_id: dict[str, Categor
             bucket["by_group"][spending_group(category)] -= amount
         elif category.kind == "income":
             bucket["income"] += amount
+            bucket["income_by_category"][category.id] += amount
         elif category.kind == "saving":
             bucket["saved"] -= amount
         elif category.kind == "loan":
@@ -135,6 +142,7 @@ def _empty() -> dict[str, Any]:
         "loans": Decimal(),
         "by_category": defaultdict(Decimal),
         "by_group": defaultdict(Decimal),
+        "income_by_category": defaultdict(Decimal),
     }
 
 

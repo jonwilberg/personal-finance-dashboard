@@ -256,6 +256,13 @@ export interface OverviewMonth {
   groups: Record<string, number>;
 }
 
+/** A month's income from one income category. */
+export interface IncomeRow {
+  category: string;
+  name: string;
+  amount: number;
+}
+
 /** A group spending is shown in on the charts: fixed costs, a few large categories, and Other. */
 export interface SpendingGroup {
   id: string;
@@ -297,6 +304,8 @@ export interface Overview {
   series: OverviewMonth[];
   /** The spending groups, in stacking order (bottom first). */
   groups?: SpendingGroup[];
+  /** This month's income per income category, largest first. */
+  income_breakdown?: IncomeRow[];
   changes?: OverviewChange[];
   scoreboard?: ScoreboardRow[];
 }
