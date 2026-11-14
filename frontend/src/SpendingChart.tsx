@@ -187,6 +187,13 @@ export function SpendingChart(props: {
             );
           })}
 
+          {/* Heads the ledger's totals column, in the row of month names. "Total", not "LTM": with less than a
+              year of data the column covers fewer months. */}
+          {showTotals && (
+            <text x={WIDTH} y={HEIGHT - 8} textAnchor="end" className="chart-axis chart-axis-strong">
+              Total
+            </text>
+          )}
         </svg>
 
         {hovered && hover !== null && (
