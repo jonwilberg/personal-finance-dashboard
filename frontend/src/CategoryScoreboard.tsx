@@ -102,10 +102,7 @@ export function CategoryScoreboard(props: {
                     <span className="score-chevron" aria-hidden="true">
                       ›
                     </span>
-                    <span className="score-name">
-                      {row.name}
-                      {row.fixed && <span className="account-type">Fixed</span>}
-                    </span>
+                    <span className="score-name">{row.name}</span>
                   </button>
                 </td>
                 <td className="num">
