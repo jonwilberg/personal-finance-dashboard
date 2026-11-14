@@ -1046,6 +1046,23 @@ button.month-step:hover:not(:disabled) {
   font-weight: 500;
 }
 
+/* Right-aligned in a box as wide as "209k", so the digits line up down each column; the sign hangs just left of
+   the digits, outside the alignment. */
+.ledger-figure {
+  display: inline-block;
+  min-width: 4ch;
+  text-align: right;
+}
+
+.ledger-digits {
+  position: relative;
+}
+
+.ledger-sign {
+  position: absolute;
+  right: 100%;
+}
+
 .chart-ledger .is-up {
   color: var(--positive);
 }
