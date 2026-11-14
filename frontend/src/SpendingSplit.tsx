@@ -1,67 +1,63 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { ScoreboardRow, SpendingGroup } from "./api";
 import { formatKr } from "./format";
-import { LIGHT_TEXT_GROUPS, groupFill } from "./spendingGroups";
+import { groupFill } from "./spendingGroups";
 
-// The month's spending as one bar, split by category and coloured by spending group, as in the 12-month chart above
-// it: the groups in their order, each group's categories largest first, and what isn't categorized (hatched) last.
-// - A block wide enough for its label carries it inside.
-// - The others get a label just above or below the bar (alternating), starting at the block's centre and spread
-//   only as far as needed to stop labels touching. Order is kept on each side, so leader lines never cross.
-// - A legend line above the bar says what the colours mean, with each group’s total and share.
+// The month's spending as one tall bar, split by category: a "zoom in" on the month's column in the chart above it,
+// stacked the same way (the groups in their order from the bottom, each group's categories largest first, what
+// isn't categorized hatched on top of Other).
+// - Every category gets a one-line label to the right, joined by an elbowed leader line, spread only as far as
+//   needed to stop labels touching (order is kept, so leaders never cross).
+// - On wide screens each group gets a bracket on the left with its name and total; narrower screens show the
+//   groups as a legend line above instead.
 // - Clicking a block or label jumps to its row in the table below.
 
 const UNCATEGORIZED = "uncategorized";
-const BAR_H = 38; // room for a two-line label inside a block
-const LABEL_H = 30; // two lines: name, then "amount · share"
-const LEADER = 16; // leader length above the bar
+const BAR_H = 420; // the bar's height
+const BAR_W = 56;
 const GAP = 2; // surface gap between blocks
-const LABEL_GAP = 12; // space between neighbouring labels
-const LIST_BELOW = 480; // narrower than this (phones): a list instead of placed labels
-const FONT = '12px "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif';
+const LINE = 21; // a label's line, spacing included
+const GROUP_LINE = 38; // a group label's two lines, spacing included
+const GROUPS_W = 190; // the bracket column, on wide screens
+const BRACKETS_FROM = 620; // narrower than this: a legend line instead of brackets
+const ELBOW = 14; // the leader's first, straight stretch out of the bar
+const LEADER = 46; // from the bar's edge to the labels
 
-interface Part {
+interface Block {
   row: ScoreboardRow;
   share: number;
-  x: number;
-  w: number;
-  labelW: number;
-}
-
-interface Placed {
-  part: Part;
-  above: boolean;
-  lx: number; // label centre
-}
-
-let canvas: HTMLCanvasElement | null = null;
-/** Text width in the label font, with room for the fixed-width digits the labels use (canvas can't apply them). */
-function textWidth(text: string, weight = 400): number {
-  canvas ??= document.createElement("canvas");
-  const context = canvas.getContext("2d");
-  if (!context) return text.length * 7.5;
-  context.font = `${weight} ${FONT}`;
-  return context.measureText(text).width * 1.08;
+  top: number;
+  height: number;
 }
 
 export function shareText(share: number) {
   return share > 0 && share < 0.005 ? "<1 %" : `${Math.round(share * 100)} %`;
 }
 
+/**
+ * Centres for a run of labels, each wanting to sit at `wanted` (top to bottom): pushed down where they would
+ * touch, then back up from the bottom edge, so the run keeps its order and stays as near its marks as it can.
+ */
+function spread(wanted: number[], step: number, low: number, high: number) {
+  const y = wanted.map((w) => Math.min(Math.max(w, low), high));
+  for (let i = 1; i < y.length; i++) y[i] = Math.max(y[i], y[i - 1] + step);
+  for (let i = y.length - 1; i >= 0; i--) {
+    y[i] = Math.min(y[i], i === y.length - 1 ? high : y[i + 1] - step);
+  }
+  return y;
+}
+
 export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups: SpendingGroup[] }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(720);
   const [hover, setHover] = useState<string | null>(null);
-  const [, setFontsReady] = useState(false); // re-measure once the web font has loaded
   const hatchId = useId().replace(/:/g, "");
-  const clipId = `${hatchId}-clip`;
 
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
     const observer = new ResizeObserver(([entry]) => setWidth(Math.max(240, Math.round(entry.contentRect.width))));
     observer.observe(frame);
-    document.fonts?.ready.then(() => setFontsReady(true));
     return () => observer.disconnect();
   }, []);
 
@@ -71,6 +67,7 @@ export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups:
     const index = groups.findIndex((g) => g.id === row.group);
     return index < 0 ? groups.length : index;
   };
+  // Bottom first: the groups in chart order, each group's largest first, uncategorized last.
   const ordered = [...spent].sort(
     (a, b) =>
       rank(a) - rank(b) ||
@@ -78,196 +75,153 @@ export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups:
       b.amount - a.amount,
   );
   const total = ordered.reduce((sum, r) => sum + r.amount, 0);
-  const figures = (row: ScoreboardRow, share: number) => `${formatKr(row.amount)} · ${shareText(share)}`;
+  const figures = (amount: number, share: number) => `${formatKr(amount)} · ${shareText(share)}`;
 
-  const usable = width - GAP * (ordered.length - 1);
-  let cursor = 0;
-  const parts: Part[] = ordered.map((row) => {
-    const w = Math.max((row.amount / total) * usable, 1.5);
-    const share = row.amount / total;
-    const labelW = Math.ceil(Math.max(textWidth(row.name), textWidth(figures(row, share)))) + 12;
-    const part = { row, share, x: cursor, w, labelW };
-    cursor += w + GAP;
-    return part;
+  // Blocks from the bottom up; y grows downwards, so each block sits above the one before.
+  const usable = BAR_H - GAP * (ordered.length - 1);
+  let bottom = BAR_H;
+  const blocks: Block[] = ordered.map((row) => {
+    const height = Math.max((row.amount / total) * usable, 1.5);
+    const block = { row, share: row.amount / total, top: bottom - height, height };
+    bottom -= height + GAP;
+    return block;
   });
 
-  const inside = (p: Part) => p.row.category !== UNCATEGORIZED && p.w >= p.labelW + 8;
-  const outside = parts.filter((p) => !inside(p));
-  const placed = width < LIST_BELOW ? null : placeLabels(outside, width);
-  const list = placed === null;
+  const brackets = width >= BRACKETS_FROM;
+  const barX = brackets ? GROUPS_W : 0;
+  const barRight = barX + BAR_W;
+  const labelX = barRight + LEADER;
 
-  const hasAbove = !!placed?.some((p) => p.above);
-  const hasBelow = !!placed?.some((p) => !p.above);
-  const barTop = hasAbove ? LABEL_H + LEADER : 0;
-  const barBottom = barTop + BAR_H;
-  const belowTop = barBottom + LEADER;
-  const height = list || !hasBelow ? barBottom : belowTop + LABEL_H;
-  const leaders = (placed ?? []).map((p) => ({
-    p,
-    x1: p.part.x + p.part.w / 2,
-    y1: p.above ? barTop : barBottom,
-    x2: p.lx,
-    y2: p.above ? LABEL_H : belowTop,
-  }));
-
-  // The groups, with their totals, for the legend line above the bar.
-  const legend = groups.flatMap((group) => {
-    const amount = ordered.filter((r) => r.group === group.id).reduce((sum, r) => sum + r.amount, 0);
-    return amount > 0 ? [{ key: group.id, name: group.name, swatch: groupFill(group.id), amount, share: amount / total }] : [];
-  });
-
-  const fill = (row: ScoreboardRow) =>
-    row.category === UNCATEGORIZED ? `url(#${hatchId})` : groupFill(row.group);
-  const isHover = (p: Part) => hover === p.row.category;
-  const events = (p: Part) => ({
-    onMouseEnter: () => setHover(p.row.category),
-    onMouseLeave: () => setHover(null),
-    onClick: () => showRow(p.row.category),
-  });
-  const labelText = (part: Part) => (
-    <>
-      <span className="split-name">{part.row.name}</span>
-      <span className="split-figures">
-        {formatKr(part.row.amount)} · <span className="split-share">{shareText(part.share)}</span>
-      </span>
-    </>
+  // Category labels, top to bottom (the reverse of the stacking order).
+  const topDown = [...blocks].reverse();
+  const labelY = spread(
+    topDown.map((b) => b.top + b.height / 2),
+    LINE,
+    LINE / 2,
+    BAR_H - LINE / 2,
   );
+
+  // Groups, with their span on the bar and their totals.
+  const groupSpans = groups.flatMap((group) => {
+    const members = blocks.filter((b) => b.row.group === group.id);
+    if (members.length === 0) return [];
+    const amount = members.reduce((sum, b) => sum + b.row.amount, 0);
+    const top = Math.min(...members.map((b) => b.top));
+    const end = Math.max(...members.map((b) => b.top + b.height));
+    return [{ group, amount, share: amount / total, top, end }];
+  });
+  const groupsTopDown = [...groupSpans].reverse();
+  const groupY = spread(
+    groupsTopDown.map((g) => (g.top + g.end) / 2),
+    GROUP_LINE,
+    GROUP_LINE / 2,
+    BAR_H - GROUP_LINE / 2,
+  );
+
+  const fill = (row: ScoreboardRow) => (row.category === UNCATEGORIZED ? `url(#${hatchId})` : groupFill(row.group));
+  const events = (category: string) => ({
+    onMouseEnter: () => setHover(category),
+    onMouseLeave: () => setHover(null),
+    onFocus: () => setHover(category),
+    onBlur: () => setHover(null),
+    onClick: () => showRow(category),
+  });
 
   return (
     <div className="split" ref={frameRef}>
-      {/* What the colours mean, with each group's total: the same legend style as the 12-month chart above. */}
-      <div className="chart-legend split-legend">
-        {legend.map((g) => (
-          <span key={g.key} className="legend-item">
-            <span className="legend-swatch" style={{ background: g.swatch }} aria-hidden="true" />
-            <span className="split-legend-name">{g.name}</span>
-            <span className="split-figures">
-              {formatKr(g.amount)} · <span className="split-share">{shareText(g.share)}</span>
+      {!brackets && (
+        // Narrow screens: what the colours mean, with each group's total, as a legend line above.
+        <div className="chart-legend split-legend">
+          {groupSpans.map((g) => (
+            <span key={g.group.id} className="legend-item">
+              <span className="legend-swatch" style={{ background: groupFill(g.group.id) }} aria-hidden="true" />
+              <span className="split-legend-name">{g.group.name}</span>
+              <span className="split-figures">{figures(g.amount, g.share)}</span>
             </span>
-          </span>
-        ))}
-      </div>
-      <div className="split-frame" style={{ height }}>
-        <svg
-          width={width}
-          height={height}
-          viewBox={`0 0 ${width} ${height}`}
-          role="img"
-          aria-label={`Spending this month by category: ${parts.map((p) => `${p.row.name} ${figures(p.row, p.share)}`).join(", ")}`}
-        >
+          ))}
+        </div>
+      )}
+      <div className="split-frame" style={{ height: BAR_H }}>
+        <svg width={width} height={BAR_H} aria-hidden="true">
           <defs>
             <pattern id={hatchId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
               <rect width="6" height="6" fill="var(--paper-sunken)" />
               <line x1="0" y1="0" x2="0" y2="6" stroke="var(--ink-muted)" strokeWidth="2" />
             </pattern>
-            {/* Rounded ends on the bar as a whole, not on every block. */}
-            <clipPath id={clipId}>
-              <rect x={0} y={barTop} width={width} height={BAR_H} rx={4} />
-            </clipPath>
           </defs>
 
-          {leaders.map(({ p, x1, y1, x2, y2 }) => (
-            <line
-              key={p.part.row.category}
-              className={`split-leader${isHover(p.part) ? " is-hover" : ""}`}
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-            />
-          ))}
+          {brackets &&
+            groupsTopDown.map((g, i) => {
+              const x = barX - 10;
+              const mid = (g.top + g.end) / 2;
+              return (
+                <g key={g.group.id} className="split-bracket">
+                  <path d={`M${x + 5},${g.top + 1} H${x} V${g.end - 1} H${x + 5}`} fill="none" />
+                  {/* From the bracket's middle out to its label, where the label had to move. */}
+                  <path d={`M${x},${mid} H${x - 8} L${x - 16},${groupY[i]}`} fill="none" />
+                </g>
+              );
+            })}
 
-          <g clipPath={`url(#${clipId})`}>
-            {parts.map((part) => (
-              <rect
-                key={part.row.category}
-                className={`split-block${hover && !isHover(part) ? " is-dimmed" : ""}`}
-                x={part.x}
-                y={barTop}
-                width={part.w}
-                height={BAR_H}
-                fill={fill(part.row)}
-                {...events(part)}
-              >
-                <title>{`${part.row.name}: ${figures(part.row, part.share)}`}</title>
-              </rect>
-            ))}
-          </g>
+          {topDown.map((b, i) => {
+            const isHover = hover === b.row.category;
+            const cy = b.top + b.height / 2;
+            return (
+              <g key={b.row.category}>
+                <rect
+                  className={`split-block${hover && !isHover ? " is-dimmed" : ""}`}
+                  x={barX}
+                  y={b.top}
+                  width={BAR_W}
+                  height={b.height}
+                  fill={fill(b.row)}
+                  onMouseEnter={() => setHover(b.row.category)}
+                  onMouseLeave={() => setHover(null)}
+                  onClick={() => showRow(b.row.category)}
+                />
+                <path
+                  className={`split-leader${isHover ? " is-hover" : ""}`}
+                  d={`M${barRight + 2},${cy} H${barRight + ELBOW} L${labelX - 6},${labelY[i]}`}
+                  fill="none"
+                />
+              </g>
+            );
+          })}
         </svg>
 
-        {!list &&
-          parts.filter(inside).map((part) => (
+        {brackets &&
+          groupsTopDown.map((g, i) => (
             <div
-              key={part.row.category}
-              className={`split-label split-inside ${LIGHT_TEXT_GROUPS.has(part.row.group) ? "on-dark" : "on-light"}${isHover(part) ? " is-hover" : ""}`}
-              style={{ left: part.x, width: part.w, top: barTop, height: BAR_H }}
-              title={`${part.row.name}: ${figures(part.row, part.share)}`}
-              {...events(part)}
+              key={g.group.id}
+              className="split-group"
+              style={{ top: groupY[i] - GROUP_LINE / 2 + 2, right: width - (barX - 30), height: GROUP_LINE - 4 }}
             >
-              {labelText(part)}
+              <span className="split-group-name">
+                <span className="legend-swatch" style={{ background: groupFill(g.group.id) }} aria-hidden="true" />
+                {g.group.name}
+              </span>
+              <span className="split-figures">{figures(g.amount, g.share)}</span>
             </div>
           ))}
 
-        {placed?.map(({ part, above, lx }) => (
-          <div
-            key={part.row.category}
-            className={`split-label split-outside${isHover(part) ? " is-hover" : ""}`}
-            style={{ left: lx - part.labelW / 2, width: part.labelW, top: above ? 0 : belowTop, height: LABEL_H }}
-            title={`${part.row.name}: ${figures(part.row, part.share)}`}
-            {...events(part)}
+        {topDown.map((b, i) => (
+          <button
+            key={b.row.category}
+            type="button"
+            className={`split-label${hover === b.row.category ? " is-hover" : ""}`}
+            style={{ top: labelY[i] - LINE / 2, left: labelX, maxWidth: width - labelX, height: LINE }}
+            title={`${b.row.name}: ${figures(b.row.amount, b.share)}. Show in the table.`}
+            {...events(b.row.category)}
           >
-            {labelText(part)}
-          </div>
+            <span className="split-name">{b.row.name}</span>
+            <span className="split-figures">
+              {formatKr(b.row.amount)} · <span className="split-share">{shareText(b.share)}</span>
+            </span>
+          </button>
         ))}
       </div>
-
-      {list && (
-        <ul className="split-list small">
-          {parts.map((part) => (
-            <li key={part.row.category} {...events(part)}>
-              <span
-                className={`legend-swatch${part.row.category === UNCATEGORIZED ? " legend-hatch" : ""}`}
-                style={part.row.category === UNCATEGORIZED ? undefined : { background: fill(part.row) }}
-                aria-hidden="true"
-              />
-              <span className="split-name">{part.row.name}</span>
-              <span className="split-figures">
-                {formatKr(part.row.amount)} · <span className="split-share">{shareText(part.share)}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
-}
-
-/**
- * Labels for blocks too narrow to hold their own, alternating above and below the bar. On each side every label
- * starts at its block's centre and is spread just enough that none touch, keeping their order, so their leader
- * lines never cross. Returns null when a side can't fit its labels at all (then a list is used instead).
- */
-function placeLabels(parts: Part[], width: number): Placed[] | null {
-  const sides = [parts.filter((_, i) => i % 2 === 0), parts.filter((_, i) => i % 2 === 1)];
-  const placed: Placed[] = [];
-  for (const [side, members] of sides.entries()) {
-    const needed = members.reduce((sum, p) => sum + p.labelW, 0) + LABEL_GAP * Math.max(members.length - 1, 0);
-    if (needed > width) return null;
-    const centre = members.map((p) => Math.min(Math.max(p.x + p.w / 2, p.labelW / 2), width - p.labelW / 2));
-    // Push right where labels touch, then back left from the right edge, so the cluster stays as near as it can.
-    for (let i = 1; i < members.length; i++) {
-      centre[i] = Math.max(centre[i], centre[i - 1] + (members[i - 1].labelW + members[i].labelW) / 2 + LABEL_GAP);
-    }
-    for (let i = members.length - 1; i >= 0; i--) {
-      const limit =
-        i === members.length - 1
-          ? width - members[i].labelW / 2
-          : centre[i + 1] - (members[i].labelW + members[i + 1].labelW) / 2 - LABEL_GAP;
-      centre[i] = Math.min(centre[i], limit);
-    }
-    members.forEach((part, i) => placed.push({ part, above: side === 0, lx: centre[i] }));
-  }
-  return placed;
 }
 
 /** Scroll to the category's row in the table below and flash it briefly. */

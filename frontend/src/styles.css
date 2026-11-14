@@ -1690,8 +1690,9 @@ input.rule-regex {
   border-radius: var(--radius);
 }
 
-/* Overview: this month's spending as one bar split by category. Wide blocks carry their label inside; the rest get
-   a label just above or below, joined by a short leader line. A legend line above says what the colours mean. */
+/* Overview: this month's spending as one tall bar split by category, a zoom-in on the month's column above. Each
+   category has a one-line label to the right on an elbowed leader; on wide screens each group has a bracket on the
+   left with its total, on narrow ones a legend line above. */
 
 .split {
   margin: var(--space-3) 0 var(--space-5);
@@ -1725,22 +1726,34 @@ input.rule-regex {
   stroke-width: 1.5;
 }
 
-.split-label {
+.split-bracket path {
+  stroke: var(--ink-muted);
+  stroke-width: 1;
+}
+
+button.split-label {
   position: absolute;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  gap: var(--space-2);
   padding: 0 4px;
+  border: none;
+  border-radius: 2px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
   font-size: var(--text-caption);
-  line-height: 1.25;
-  text-align: center;
   white-space: nowrap;
   cursor: pointer;
 }
 
-.split-label > span {
-  max-width: 100%;
+button.split-label:hover,
+button.split-label.is-hover {
+  background: var(--paper-sunken);
+}
+
+.split-label .split-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1750,7 +1763,7 @@ input.rule-regex {
 }
 
 .split-figures {
-  color: var(--ink);
+  color: var(--ink-secondary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1762,27 +1775,24 @@ input.rule-regex {
   font-weight: 500;
 }
 
-/* Labels inside a block: light text on the dark group colours, ink on the light ones (see spendingGroups.ts). */
-.split-inside {
-  pointer-events: auto;
+/* A group's name and total beside its bracket, right-aligned against it. */
+.split-group {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  font-size: var(--text-caption);
+  line-height: 1.3;
+  white-space: nowrap;
 }
 
-.split-inside.on-dark .split-name,
-.split-inside.on-dark .split-figures {
-  color: var(--paper-raised);
-}
-
-.split-inside.on-dark .split-share {
-  color: color-mix(in srgb, var(--paper-raised) 80%, transparent);
-}
-
-.split-inside.on-light .split-name,
-.split-inside.on-light .split-figures {
+.split-group-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--ink);
-}
-
-.split-inside.on-light .split-share {
-  color: color-mix(in srgb, var(--ink) 75%, transparent);
+  font-weight: 500;
 }
 
 .split-legend {
@@ -1817,23 +1827,6 @@ tr.is-flash > td {
     animation: none;
     background: var(--highlight);
   }
-}
-
-/* Phones: the bar, then a list with a swatch per category instead of placed labels. */
-.split-list {
-  list-style: none;
-  margin: var(--space-3) 0 0;
-  padding: 0;
-}
-
-.split-list li {
-  display: grid;
-  grid-template-columns: 12px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 3px 0;
-  border-bottom: var(--rule-hair);
-  cursor: pointer;
 }
 
 /* A filter that is narrowing the list gets an ink outline, so it’s clear the list isn’t everything. */
