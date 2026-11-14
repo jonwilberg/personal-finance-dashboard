@@ -1690,8 +1690,9 @@ input.rule-regex {
   border-radius: var(--radius);
 }
 
-/* Overview: this month's spending as one bar split by category. Wide blocks carry their label inside; the rest get
-   a label just above or below, joined by a short leader line. A legend line above says what the colours mean. */
+/* Overview: the month's money in and out as two tall bars, a zoom-in on the month's column above. Spending is
+   labelled on the right under group headings, income on the left; a bracket between the bars marks what was kept or
+   overspent. */
 
 .split {
   margin: var(--space-3) 0 var(--space-5);
@@ -1720,69 +1721,150 @@ input.rule-regex {
   stroke-width: 1;
 }
 
-.split-leader.is-hover {
-  stroke: var(--ink);
-  stroke-width: 1.5;
-}
-
-.split-label {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
+/* A label row: name, then amount and share in right-aligned columns, so the figures line up like a ledger. */
+.split-row {
+  display: grid;
   align-items: center;
-  justify-content: center;
-  padding: 0 4px;
+  column-gap: var(--space-2);
   font-size: var(--text-caption);
-  line-height: 1.25;
-  text-align: center;
   white-space: nowrap;
-  cursor: pointer;
 }
 
-.split-label > span {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.split-income-row {
+  position: absolute;
 }
 
 .split-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--ink);
 }
 
-.split-figures {
-  color: var(--ink);
+.split-amount {
+  text-align: right;
+  color: var(--ink-secondary);
   font-variant-numeric: tabular-nums;
 }
 
 .split-share {
+  text-align: right;
   color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
 }
 
-.split-label.is-hover .split-name {
+.split-figures {
+  color: var(--ink-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A group's labels: its heading, then its categories indented under it. */
+.split-group {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+}
+
+.split-group-row .split-name,
+.split-group-row .split-amount {
+  color: var(--ink);
   font-weight: 500;
 }
 
-/* Labels inside a block: light text on the dark group colours, ink on the light ones (see spendingGroups.ts). */
-.split-inside {
-  pointer-events: auto;
+button.split-category {
+  width: 100%;
+  padding: 0 0 0 calc(12px + 6px); /* under the heading's name, past its swatch */
+  border: none;
+  border-radius: 2px;
+  background: none;
+  font: inherit;
+  font-size: var(--text-caption);
+  text-align: left;
+  cursor: pointer;
 }
 
-.split-inside.on-dark .split-name,
-.split-inside.on-dark .split-figures {
-  color: var(--paper-raised);
+/* On the left, income names sit right against their figures, next to the bar. */
+.split-income-row .split-name {
+  justify-content: flex-end;
 }
 
-.split-inside.on-dark .split-share {
-  color: color-mix(in srgb, var(--paper-raised) 80%, transparent);
+button.split-category:hover,
+button.split-category.is-hover {
+  background: var(--paper-sunken);
 }
 
-.split-inside.on-light .split-name,
-.split-inside.on-light .split-figures {
+button.split-category.is-hover .split-name {
+  font-weight: 500;
+}
+
+/* What was kept or overspent: a bracket between the bars and its figure over the shorter one. */
+.split-net-bracket {
+  stroke-width: 1.5;
+}
+
+.split-net-bracket.is-up {
+  stroke: var(--positive);
+}
+
+.split-net-bracket.is-down {
+  stroke: var(--signal);
+}
+
+.split-net {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2px 6px;
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+  background: var(--paper);
+  font-size: var(--text-caption);
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.split-net.is-up {
+  color: var(--positive);
+}
+
+.split-net.is-down {
+  color: var(--signal);
+}
+
+.split-net-value {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The income and spent totals heading their bars. */
+.split-total {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: var(--text-caption);
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.split-total-label {
+  color: var(--ink-muted);
+}
+
+/* Phones: the bars are slimmer, so their totals are set a size smaller to stay apart. */
+.split.is-narrow .split-total {
+  font-size: 10px;
+}
+
+.split-total-value {
   color: var(--ink);
-}
-
-.split-inside.on-light .split-share {
-  color: color-mix(in srgb, var(--ink) 75%, transparent);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .split-legend {
@@ -1817,23 +1899,6 @@ tr.is-flash > td {
     animation: none;
     background: var(--highlight);
   }
-}
-
-/* Phones: the bar, then a list with a swatch per category instead of placed labels. */
-.split-list {
-  list-style: none;
-  margin: var(--space-3) 0 0;
-  padding: 0;
-}
-
-.split-list li {
-  display: grid;
-  grid-template-columns: 12px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 3px 0;
-  border-bottom: var(--rule-hair);
-  cursor: pointer;
 }
 
 /* A filter that is narrowing the list gets an ink outline, so it’s clear the list isn’t everything. */

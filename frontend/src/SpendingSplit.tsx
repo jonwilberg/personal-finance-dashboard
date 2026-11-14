@@ -1,67 +1,82 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { ScoreboardRow, SpendingGroup } from "./api";
+import type { IncomeRow, ScoreboardRow, SpendingGroup } from "./api";
 import { formatKr } from "./format";
-import { LIGHT_TEXT_GROUPS, groupFill } from "./spendingGroups";
+import { groupFill } from "./spendingGroups";
 
-// The month's spending as one bar, split by category and coloured by spending group, as in the 12-month chart above
-// it: the groups in their order, each group's categories largest first, and what isn't categorized (hatched) last.
-// - A block wide enough for its label carries it inside.
-// - The others get a label just above or below the bar (alternating), starting at the block's centre and spread
-//   only as far as needed to stop labels touching. Order is kept on each side, so leader lines never cross.
-// - A legend line above the bar says what the colours mean, with each group’s total and share.
-// - Clicking a block or label jumps to its row in the table below.
+// The month as money in and money out, side by side: a "zoom in" on the month's column in the chart above.
+// - Spending is one tall bar stacked like the chart (the groups in their order from the bottom, a slightly wider gap
+//   between groups, each group's categories largest first, uncategorized hatched on top). On the right each group
+//   has a heading with its total, joined to its band by one leader, and its categories listed underneath.
+// - Income stands to its left on the same scale, split by income category in tints of the income ink and labelled
+//   on the left. It is cut short with a break when it is far above the spending.
+// - A bracket between the bars marks what was kept or overspent; the two totals head their bars.
+// - Amounts and shares sit in right-aligned columns, so they read like the ledger above.
+// - Clicking a category jumps to its row in the table below.
 
 const UNCATEGORIZED = "uncategorized";
-const BAR_H = 38; // room for a two-line label inside a block
-const LABEL_H = 30; // two lines: name, then "amount · share"
-const LEADER = 16; // leader length above the bar
+const HEAD = 44; // the totals above the bars
+const MIN_BAR_H = 420; // the bars' area below the totals; taller when the labels need it
+const BAR_W = 56;
+const BAR_GAP = 16; // between the income and spending bars, where the kept bracket goes
 const GAP = 2; // surface gap between blocks
-const LABEL_GAP = 12; // space between neighbouring labels
-const LIST_BELOW = 480; // narrower than this (phones): a list instead of placed labels
-const FONT = '12px "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif';
+const GROUP_GAP = 6; // a slightly wider gap between groups
+const LINE = 20; // a label line
+const BLOCK_GAP = 8; // between one group's labels and the next
+const ELBOW = 12; // a leader's first, straight stretch out of a bar
+const LEADER = 40; // from a bar's edge to its labels
+const INCOME_LABELS_W = 240; // the income labels on the left, on wide screens
+const WIDE = 720; // narrower than this: income categories as a line above
+const BREAK_FACTOR = 1.5; // income above this many times the spending is cut short
+const OVERSHOOT = 6; // a cut income bar reaches this far above the area, to show it carries on
+const BREAK_AT = 18; // the break's distance below the area's top
+const INCOME = "var(--chart-income)";
+const INCOME_TINTS = [20, 11, 7, 5]; // % of the income ink, largest category first
 
-interface Part {
+interface Block {
   row: ScoreboardRow;
-  share: number;
-  x: number;
-  w: number;
-  labelW: number;
-}
-
-interface Placed {
-  part: Part;
-  above: boolean;
-  lx: number; // label centre
-}
-
-let canvas: HTMLCanvasElement | null = null;
-/** Text width in the label font, with room for the fixed-width digits the labels use (canvas can't apply them). */
-function textWidth(text: string, weight = 400): number {
-  canvas ??= document.createElement("canvas");
-  const context = canvas.getContext("2d");
-  if (!context) return text.length * 7.5;
-  context.font = `${weight} ${FONT}`;
-  return context.measureText(text).width * 1.08;
+  top: number;
+  height: number;
 }
 
 export function shareText(share: number) {
   return share > 0 && share < 0.005 ? "<1 %" : `${Math.round(share * 100)} %`;
 }
 
-export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups: SpendingGroup[] }) {
+/**
+ * Tops for a run of label blocks of the given heights, each wanting to start at `wanted` (top to bottom): pushed
+ * down where they would touch, then back up from the bottom edge, so the run keeps its order and stays as near its
+ * marks as it can.
+ */
+function spread(wanted: number[], heights: number[], gap: number, low: number, high: number) {
+  const top = wanted.map((w, i) => Math.min(Math.max(w, low), high - heights[i]));
+  for (let i = 1; i < top.length; i++) top[i] = Math.max(top[i], top[i - 1] + heights[i - 1] + gap);
+  for (let i = top.length - 1; i >= 0; i--) {
+    const limit = i === top.length - 1 ? high - heights[i] : top[i + 1] - gap - heights[i];
+    top[i] = Math.max(low, Math.min(top[i], limit));
+  }
+  return top;
+}
+
+export function SpendingSplit({
+  rows,
+  groups,
+  income,
+}: {
+  rows: ScoreboardRow[];
+  groups: SpendingGroup[];
+  /** The month's income per income category, largest first. */
+  income: IncomeRow[];
+}) {
   const frameRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(720);
   const [hover, setHover] = useState<string | null>(null);
-  const [, setFontsReady] = useState(false); // re-measure once the web font has loaded
   const hatchId = useId().replace(/:/g, "");
-  const clipId = `${hatchId}-clip`;
 
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
     const observer = new ResizeObserver(([entry]) => setWidth(Math.max(240, Math.round(entry.contentRect.width))));
     observer.observe(frame);
-    document.fonts?.ready.then(() => setFontsReady(true));
     return () => observer.disconnect();
   }, []);
 
@@ -71,6 +86,7 @@ export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups:
     const index = groups.findIndex((g) => g.id === row.group);
     return index < 0 ? groups.length : index;
   };
+  // Bottom first: the groups in chart order, each group's largest first, uncategorized last.
   const ordered = [...spent].sort(
     (a, b) =>
       rank(a) - rank(b) ||
@@ -78,196 +94,261 @@ export function SpendingSplit({ rows, groups }: { rows: ScoreboardRow[]; groups:
       b.amount - a.amount,
   );
   const total = ordered.reduce((sum, r) => sum + r.amount, 0);
-  const figures = (row: ScoreboardRow, share: number) => `${formatKr(row.amount)} · ${shareText(share)}`;
+  const earnedRows = income.filter((r) => r.amount > 0);
+  const earned = earnedRows.reduce((sum, r) => sum + r.amount, 0);
 
-  const usable = width - GAP * (ordered.length - 1);
-  let cursor = 0;
-  const parts: Part[] = ordered.map((row) => {
-    const w = Math.max((row.amount / total) * usable, 1.5);
-    const share = row.amount / total;
-    const labelW = Math.ceil(Math.max(textWidth(row.name), textWidth(figures(row, share)))) + 12;
-    const part = { row, share, x: cursor, w, labelW };
-    cursor += w + GAP;
-    return part;
+  // The groups top down, each with its categories (largest first) for the labels on the right.
+  const groupsUsed = groups.filter((g) => ordered.some((r) => r.group === g.id));
+  const labelGroups = [...groupsUsed].reverse().map((group) => {
+    const members = ordered.filter((r) => r.group === group.id);
+    const amount = members.reduce((sum, r) => sum + r.amount, 0);
+    return { group, members, amount, height: LINE * (members.length + 1) };
+  });
+  const needed = labelGroups.reduce((sum, g) => sum + g.height, 0) + BLOCK_GAP * (labelGroups.length - 1);
+  const barH = Math.max(MIN_BAR_H, needed);
+  const base = HEAD + barH; // the bars' common bottom
+
+  // One scale for both bars: the taller one fills the area, unless income is far above the spending, when the
+  // spending sets the scale (with some headroom) and the income bar is cut short.
+  const cut = earned > total * BREAK_FACTOR;
+  const scale = cut ? total * 1.15 : Math.max(total, earned, 1);
+  const spentTop = base - (total / scale) * barH;
+  const incomeTop = earned <= 0 ? base : cut ? HEAD - OVERSHOOT : base - (earned / scale) * barH;
+
+  // Spending blocks from the bottom up, with a wider gap where the group changes.
+  const changes = ordered.filter((r, i) => i > 0 && r.group !== ordered[i - 1].group).length;
+  const usable = base - spentTop - GAP * (ordered.length - 1) - (GROUP_GAP - GAP) * changes;
+  let bottom = base;
+  const blocks: Block[] = ordered.map((row, i) => {
+    if (i > 0) bottom -= row.group !== ordered[i - 1].group ? GROUP_GAP : GAP;
+    const height = Math.max((row.amount / total) * usable, 1.5);
+    const block = { row, top: bottom - height, height };
+    bottom -= height;
+    return block;
   });
 
-  const inside = (p: Part) => p.row.category !== UNCATEGORIZED && p.w >= p.labelW + 8;
-  const outside = parts.filter((p) => !inside(p));
-  const placed = width < LIST_BELOW ? null : placeLabels(outside, width);
-  const list = placed === null;
-
-  const hasAbove = !!placed?.some((p) => p.above);
-  const hasBelow = !!placed?.some((p) => !p.above);
-  const barTop = hasAbove ? LABEL_H + LEADER : 0;
-  const barBottom = barTop + BAR_H;
-  const belowTop = barBottom + LEADER;
-  const height = list || !hasBelow ? barBottom : belowTop + LABEL_H;
-  const leaders = (placed ?? []).map((p) => ({
-    p,
-    x1: p.part.x + p.part.w / 2,
-    y1: p.above ? barTop : barBottom,
-    x2: p.lx,
-    y2: p.above ? LABEL_H : belowTop,
-  }));
-
-  // The groups, with their totals, for the legend line above the bar.
-  const legend = groups.flatMap((group) => {
-    const amount = ordered.filter((r) => r.group === group.id).reduce((sum, r) => sum + r.amount, 0);
-    return amount > 0 ? [{ key: group.id, name: group.name, swatch: groupFill(group.id), amount, share: amount / total }] : [];
+  // Income blocks from the bottom up, largest first, within the income bar as drawn.
+  const incomeUsable = base - incomeTop - GAP * Math.max(earnedRows.length - 1, 0);
+  let incomeBottom = base;
+  const incomeBlocks = earnedRows.map((row, i) => {
+    if (i > 0) incomeBottom -= GAP;
+    const height = Math.max((row.amount / earned) * incomeUsable, 1.5);
+    const block = { row, top: incomeBottom - height, height, tint: INCOME_TINTS[Math.min(i, INCOME_TINTS.length - 1)] };
+    incomeBottom -= height;
+    return block;
   });
 
-  const fill = (row: ScoreboardRow) =>
-    row.category === UNCATEGORIZED ? `url(#${hatchId})` : groupFill(row.group);
-  const isHover = (p: Part) => hover === p.row.category;
-  const events = (p: Part) => ({
-    onMouseEnter: () => setHover(p.row.category),
-    onMouseLeave: () => setHover(null),
-    onClick: () => showRow(p.row.category),
+  const wide = width >= WIDE;
+  // Narrow screens: slimmer bars and shorter leaders, so the category names keep their room.
+  const barW = wide ? BAR_W : 44;
+  const barGap = wide ? BAR_GAP : 14;
+  const leader = wide ? LEADER : 22;
+  const incomeX = wide ? INCOME_LABELS_W + LEADER : 0;
+  const barX = incomeX + barW + barGap;
+  const barRight = barX + barW;
+  const labelX = barRight + leader;
+  const labelW = Math.min(400, width - labelX);
+  const withShares = labelW >= 300;
+
+  // Where each group's labels go, and where its band sits on the bar.
+  const bands = labelGroups.map((g) => {
+    const members = blocks.filter((b) => b.row.group === g.group.id);
+    const top = Math.min(...members.map((b) => b.top));
+    const end = Math.max(...members.map((b) => b.top + b.height));
+    return { top, end, mid: (top + end) / 2 };
   });
-  const labelText = (part: Part) => (
-    <>
-      <span className="split-name">{part.row.name}</span>
-      <span className="split-figures">
-        {formatKr(part.row.amount)} · <span className="split-share">{shareText(part.share)}</span>
-      </span>
-    </>
+  const groupTops = spread(
+    bands.map((band) => band.mid - LINE / 2),
+    labelGroups.map((g) => g.height),
+    BLOCK_GAP,
+    HEAD,
+    base,
   );
 
+  // Income labels on the left, top down.
+  const incomeTopDown = [...incomeBlocks].reverse();
+  const incomeLabelTops = spread(
+    incomeTopDown.map((b) => b.top + b.height / 2 - LINE / 2),
+    incomeTopDown.map(() => LINE),
+    2,
+    HEAD,
+    base,
+  );
+
+  // What was kept or overspent: a bracket between the bars, labelled over the shorter one.
+  const net = earned - total;
+  const higher = Math.min(incomeTop, spentTop);
+  const lower = Math.max(incomeTop, spentTop);
+  const showNet = earned > 0 && lower - higher >= 6;
+  const shorterX = incomeTop > spentTop ? incomeX : barX;
+  const netY = Math.max(HEAD + 18, (higher + lower) / 2);
+  const bracketX = incomeX + barW + barGap / 2;
+  const breakAt = HEAD + BREAK_AT;
+
+  const fill = (row: ScoreboardRow) => (row.category === UNCATEGORIZED ? `url(#${hatchId})` : groupFill(row.group));
+  const events = (category: string) => ({
+    onMouseEnter: () => setHover(category),
+    onMouseLeave: () => setHover(null),
+    onFocus: () => setHover(category),
+    onBlur: () => setHover(null),
+    onClick: () => showRow(category),
+  });
+  const columns = withShares ? "minmax(0, 1fr) 96px 44px" : "minmax(0, 1fr) 72px";
+
   return (
-    <div className="split" ref={frameRef}>
-      {/* What the colours mean, with each group's total: the same legend style as the 12-month chart above. */}
-      <div className="chart-legend split-legend">
-        {legend.map((g) => (
-          <span key={g.key} className="legend-item">
-            <span className="legend-swatch" style={{ background: g.swatch }} aria-hidden="true" />
-            <span className="split-legend-name">{g.name}</span>
-            <span className="split-figures">
-              {formatKr(g.amount)} · <span className="split-share">{shareText(g.share)}</span>
+    <div className={`split${wide ? "" : " is-narrow"}`} ref={frameRef}>
+      {!wide && earnedRows.length > 0 && (
+        // Narrow screens: the income categories as a line above.
+        <div className="chart-legend split-legend">
+          {earnedRows.map((row, i) => (
+            <span key={row.category} className="legend-item">
+              <span
+                className="legend-swatch"
+                style={{ background: `color-mix(in srgb, ${INCOME} ${INCOME_TINTS[Math.min(i, 3)]}%, transparent)` }}
+                aria-hidden="true"
+              />
+              <span className="split-legend-name">{row.name}</span>
+              <span className="split-figures">{formatKr(row.amount)}</span>
             </span>
-          </span>
-        ))}
-      </div>
-      <div className="split-frame" style={{ height }}>
-        <svg
-          width={width}
-          height={height}
-          viewBox={`0 0 ${width} ${height}`}
-          role="img"
-          aria-label={`Spending this month by category: ${parts.map((p) => `${p.row.name} ${figures(p.row, p.share)}`).join(", ")}`}
-        >
+          ))}
+        </div>
+      )}
+      <div className="split-frame" style={{ height: base }}>
+        <svg width={width} height={base} aria-hidden="true">
           <defs>
             <pattern id={hatchId} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
               <rect width="6" height="6" fill="var(--paper-sunken)" />
               <line x1="0" y1="0" x2="0" y2="6" stroke="var(--ink-muted)" strokeWidth="2" />
             </pattern>
-            {/* Rounded ends on the bar as a whole, not on every block. */}
-            <clipPath id={clipId}>
-              <rect x={0} y={barTop} width={width} height={BAR_H} rx={4} />
-            </clipPath>
           </defs>
 
-          {leaders.map(({ p, x1, y1, x2, y2 }) => (
-            <line
-              key={p.part.row.category}
-              className={`split-leader${isHover(p.part) ? " is-hover" : ""}`}
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
+          {/* Income by category, in tints of the income ink, with its dark top edge and, when cut, a break. */}
+          {incomeBlocks.map((b) => (
+            <rect
+              key={b.row.category}
+              x={incomeX}
+              y={b.top}
+              width={barW}
+              height={b.height}
+              fill={`color-mix(in srgb, ${INCOME} ${b.tint}%, transparent)`}
+            />
+          ))}
+          {earned > 0 && (
+            <line x1={incomeX} x2={incomeX + barW} y1={incomeTop} y2={incomeTop} stroke={INCOME} strokeWidth={2} />
+          )}
+          {cut && (
+            <path
+              d={`M${incomeX - 1},${breakAt + 2} L${incomeX + barW + 1},${breakAt - 4} V${breakAt} L${incomeX - 1},${breakAt + 6} Z`}
+              fill="var(--paper)"
+            />
+          )}
+          {wide &&
+            incomeTopDown.map((b, i) => (
+              <path
+                key={b.row.category}
+                className="split-leader"
+                d={`M${incomeX - 2},${b.top + b.height / 2} H${incomeX - ELBOW} L${incomeX - LEADER + 6},${incomeLabelTops[i] + LINE / 2}`}
+                fill="none"
+              />
+            ))}
+
+          {/* Spending by category. */}
+          {blocks.map((b) => (
+            <rect
+              key={b.row.category}
+              className={`split-block${hover && hover !== b.row.category ? " is-dimmed" : ""}`}
+              x={barX}
+              y={b.top}
+              width={barW}
+              height={b.height}
+              fill={fill(b.row)}
+              onMouseEnter={() => setHover(b.row.category)}
+              onMouseLeave={() => setHover(null)}
+              onClick={() => showRow(b.row.category)}
+            />
+          ))}
+          {labelGroups.map((g, i) => (
+            <path
+              key={g.group.id}
+              className="split-leader"
+              d={`M${barRight + 2},${bands[i].mid} H${barRight + ELBOW} L${labelX - 6},${groupTops[i] + LINE / 2}`}
+              fill="none"
             />
           ))}
 
-          <g clipPath={`url(#${clipId})`}>
-            {parts.map((part) => (
-              <rect
-                key={part.row.category}
-                className={`split-block${hover && !isHover(part) ? " is-dimmed" : ""}`}
-                x={part.x}
-                y={barTop}
-                width={part.w}
-                height={BAR_H}
-                fill={fill(part.row)}
-                {...events(part)}
-              >
-                <title>{`${part.row.name}: ${figures(part.row, part.share)}`}</title>
-              </rect>
-            ))}
-          </g>
+          {showNet && (
+            <path
+              className={`split-net-bracket ${net >= 0 ? "is-up" : "is-down"}`}
+              d={`M${bracketX - 3},${higher} H${bracketX + 3} M${bracketX},${higher} V${lower} M${bracketX - 3},${lower} H${bracketX + 3}`}
+              fill="none"
+            />
+          )}
         </svg>
 
-        {!list &&
-          parts.filter(inside).map((part) => (
+        {/* The two totals, heading their bars. */}
+        {earned > 0 && (
+          <div className="split-total" style={{ left: incomeX - barGap / 2, width: barW + barGap }}>
+            <span className="split-total-label">Income</span>
+            <span className="split-total-value">{formatKr(earned)}</span>
+          </div>
+        )}
+        <div className="split-total" style={{ left: barX - barGap / 2, width: barW + barGap }}>
+          <span className="split-total-label">Spent</span>
+          <span className="split-total-value">{formatKr(total)}</span>
+        </div>
+
+        {showNet && (
+          <div
+            className={`split-net ${net >= 0 ? "is-up" : "is-down"}`}
+            style={{ left: shorterX + barW / 2, top: netY }}
+          >
+            <span>{net >= 0 ? "Kept" : "Overspent"}</span>
+            <span className="split-net-value">{formatKr(Math.abs(net))}</span>
+          </div>
+        )}
+
+        {wide &&
+          incomeTopDown.map((b, i) => (
             <div
-              key={part.row.category}
-              className={`split-label split-inside ${LIGHT_TEXT_GROUPS.has(part.row.group) ? "on-dark" : "on-light"}${isHover(part) ? " is-hover" : ""}`}
-              style={{ left: part.x, width: part.w, top: barTop, height: BAR_H }}
-              title={`${part.row.name}: ${figures(part.row, part.share)}`}
-              {...events(part)}
+              key={b.row.category}
+              className="split-row split-income-row"
+              style={{ top: incomeLabelTops[i], left: 0, width: INCOME_LABELS_W, height: LINE, gridTemplateColumns: columns }}
             >
-              {labelText(part)}
+              <span className="split-name">{b.row.name}</span>
+              <span className="split-amount">{formatKr(b.row.amount)}</span>
+              {withShares && <span className="split-share">{shareText(b.row.amount / earned)}</span>}
             </div>
           ))}
 
-        {placed?.map(({ part, above, lx }) => (
-          <div
-            key={part.row.category}
-            className={`split-label split-outside${isHover(part) ? " is-hover" : ""}`}
-            style={{ left: lx - part.labelW / 2, width: part.labelW, top: above ? 0 : belowTop, height: LABEL_H }}
-            title={`${part.row.name}: ${figures(part.row, part.share)}`}
-            {...events(part)}
-          >
-            {labelText(part)}
+        {labelGroups.map((g, i) => (
+          <div key={g.group.id} className="split-group" style={{ top: groupTops[i], left: labelX, width: labelW }}>
+            <div className="split-row split-group-row" style={{ height: LINE, gridTemplateColumns: columns }}>
+              <span className="split-name">
+                <span className="legend-swatch" style={{ background: groupFill(g.group.id) }} aria-hidden="true" />
+                {g.group.name}
+              </span>
+              <span className="split-amount">{formatKr(g.amount)}</span>
+              {withShares && <span className="split-share">{shareText(g.amount / total)}</span>}
+            </div>
+            {g.members.map((row) => (
+              <button
+                key={row.category}
+                type="button"
+                className={`split-row split-category${hover === row.category ? " is-hover" : ""}`}
+                style={{ height: LINE, gridTemplateColumns: columns }}
+                title={`${row.name}: ${formatKr(row.amount)}. Show in the table.`}
+                {...events(row.category)}
+              >
+                <span className="split-name">{row.name}</span>
+                <span className="split-amount">{formatKr(row.amount)}</span>
+                {withShares && <span className="split-share">{shareText(row.amount / total)}</span>}
+              </button>
+            ))}
           </div>
         ))}
       </div>
-
-      {list && (
-        <ul className="split-list small">
-          {parts.map((part) => (
-            <li key={part.row.category} {...events(part)}>
-              <span
-                className={`legend-swatch${part.row.category === UNCATEGORIZED ? " legend-hatch" : ""}`}
-                style={part.row.category === UNCATEGORIZED ? undefined : { background: fill(part.row) }}
-                aria-hidden="true"
-              />
-              <span className="split-name">{part.row.name}</span>
-              <span className="split-figures">
-                {formatKr(part.row.amount)} · <span className="split-share">{shareText(part.share)}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
-}
-
-/**
- * Labels for blocks too narrow to hold their own, alternating above and below the bar. On each side every label
- * starts at its block's centre and is spread just enough that none touch, keeping their order, so their leader
- * lines never cross. Returns null when a side can't fit its labels at all (then a list is used instead).
- */
-function placeLabels(parts: Part[], width: number): Placed[] | null {
-  const sides = [parts.filter((_, i) => i % 2 === 0), parts.filter((_, i) => i % 2 === 1)];
-  const placed: Placed[] = [];
-  for (const [side, members] of sides.entries()) {
-    const needed = members.reduce((sum, p) => sum + p.labelW, 0) + LABEL_GAP * Math.max(members.length - 1, 0);
-    if (needed > width) return null;
-    const centre = members.map((p) => Math.min(Math.max(p.x + p.w / 2, p.labelW / 2), width - p.labelW / 2));
-    // Push right where labels touch, then back left from the right edge, so the cluster stays as near as it can.
-    for (let i = 1; i < members.length; i++) {
-      centre[i] = Math.max(centre[i], centre[i - 1] + (members[i - 1].labelW + members[i].labelW) / 2 + LABEL_GAP);
-    }
-    for (let i = members.length - 1; i >= 0; i--) {
-      const limit =
-        i === members.length - 1
-          ? width - members[i].labelW / 2
-          : centre[i + 1] - (members[i].labelW + members[i + 1].labelW) / 2 - LABEL_GAP;
-      centre[i] = Math.min(centre[i], limit);
-    }
-    members.forEach((part, i) => placed.push({ part, above: side === 0, lx: centre[i] }));
-  }
-  return placed;
 }
 
 /** Scroll to the category's row in the table below and flash it briefly. */
