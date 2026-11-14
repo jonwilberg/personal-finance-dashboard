@@ -942,6 +942,14 @@ button.month-step:hover:not(:disabled) {
   border-radius: 2px;
 }
 
+/* Income stands behind the spending as a pale column with a dark top edge. */
+.legend-income {
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--chart-income) 9%, transparent);
+  border-top: 2px solid var(--chart-income);
+  border-radius: 2px 2px 0 0;
+}
+
 .legend-hatch {
   background: repeating-linear-gradient(45deg, var(--ink-muted) 0 2px, var(--paper-sunken) 2px 5px);
 }
@@ -1012,6 +1020,15 @@ button.month-step:hover:not(:disabled) {
   font-weight: 500;
   fill: var(--ink);
   stroke: color-mix(in srgb, var(--rule) 60%, var(--paper));
+}
+
+/* A month's net above its column: kept in green, overspent in red (the sign says which too). */
+.chart-total.chart-net.is-up {
+  fill: var(--positive);
+}
+
+.chart-total.chart-net.is-down {
+  fill: var(--signal);
 }
 
 .chart-tooltip {
