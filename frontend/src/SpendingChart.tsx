@@ -69,20 +69,20 @@ export function SpendingChart(props: {
 
   const hovered = hover !== null ? series[hover] : null;
 
-  // The ledger: income, spending and the difference per month, compact so twelve fit, and the totals.
+  // The ledger: income, spending and the difference per month in whole thousands, so twelve fit, and the totals.
   const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
   // Narrow columns (phones) have no room for a plus on every month: green says kept there, and minus stays.
   const tight = band < 36;
-  const signed = (value: number, width: number, plus = !tight) =>
-    `${value >= 0 ? (plus ? "+" : "") : "−"}${barTotal(Math.abs(value), width)}`;
+  const signed = (value: number, plus = !tight) =>
+    `${value >= 0 ? (plus ? "+" : "") : "−"}${thousands(Math.abs(value))}`;
   const ledger = [
-    { key: "income", label: "Income", cells: incomes.map((v) => barTotal(v, band)), total: barTotal(sum(incomes), 0) },
-    { key: "spent", label: "Spent", cells: totals.map((v) => barTotal(v, band)), total: barTotal(sum(totals), 0) },
+    { key: "income", label: "Income", cells: incomes.map(thousands), total: thousands(sum(incomes)) },
+    { key: "spent", label: "Spent", cells: totals.map(thousands), total: thousands(sum(totals)) },
     {
       key: "kept",
       label: "Kept",
-      cells: nets.map((v) => signed(v, band)),
-      total: signed(sum(nets), 0, true),
+      cells: nets.map((v) => signed(v)),
+      total: signed(sum(nets), true),
       tone: (v: number) => (v >= 0 ? "is-up" : "is-down"),
     },
   ];
@@ -366,11 +366,10 @@ function niceScale(value: number) {
   return { max, ticks };
 }
 
-/** A figure as "38,3k", or "38k" where columns are too narrow for the decimal. */
-function barTotal(value: number, band: number) {
+/** A figure in whole thousands, as "38k" (under a thousand as it is). */
+function thousands(value: number) {
   if (value < 1000) return String(Math.round(value));
-  const digits = band >= 48 ? 1 : 0;
-  return `${(value / 1000).toLocaleString("nb-NO", { maximumFractionDigits: digits })}k`;
+  return `${(value / 1000).toLocaleString("nb-NO", { maximumFractionDigits: 0 })}k`;
 }
 
 function compactKr(value: number) {
