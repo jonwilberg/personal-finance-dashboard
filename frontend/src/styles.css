@@ -942,6 +942,14 @@ button.month-step:hover:not(:disabled) {
   border-radius: 2px;
 }
 
+/* Income stands behind the spending as a pale column with a dark top edge. */
+.legend-income {
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--chart-income) 9%, transparent);
+  border-top: 2px solid var(--chart-income);
+  border-radius: 2px 2px 0 0;
+}
+
 .legend-hatch {
   background: repeating-linear-gradient(45deg, var(--ink-muted) 0 2px, var(--paper-sunken) 2px 5px);
 }
@@ -989,29 +997,67 @@ button.month-step:hover:not(:disabled) {
   opacity: 0.6;
 }
 
-/* Totals above the bars. The selected month’s is in full and darker; the others are quieter. Each has a halo
-   in the colour behind it, so the median line stops short of the digits instead of running through them; hovered
-   and selected columns are tinted, so their halo matches the tint. */
-.chart-total {
-  font-family: var(--font-ui);
-  font-size: 11px;
-  fill: var(--ink-secondary);
+/* The ledger under the bar chart: income, spent and kept per month, each figure under its column. The selected
+   and hovered months are tinted like their columns above; kept is green, overspent red (the sign says which too). */
+.chart-ledger {
+  display: grid;
+  font-size: var(--text-caption);
   font-variant-numeric: tabular-nums;
-  paint-order: stroke;
-  stroke: var(--paper);
-  stroke-width: 4px;
-  stroke-linejoin: round;
 }
 
-.chart-total.is-hovered {
-  stroke: color-mix(in srgb, var(--rule) 30%, var(--paper));
+.chart-ledger > span {
+  padding: 5px 0;
+  border-top: var(--rule-hair);
+  white-space: nowrap;
 }
 
-.chart-total.is-selected {
-  font-size: 12px;
+.chart-ledger > .ledger-income {
+  border-top: 1px solid var(--ink);
+}
+
+.chart-ledger > .ledger-kept {
+  border-top: 1px solid var(--ink);
   font-weight: 500;
-  fill: var(--ink);
-  stroke: color-mix(in srgb, var(--rule) 60%, var(--paper));
+}
+
+.ledger-label {
+  color: var(--ink-secondary);
+}
+
+.ledger-label.ledger-kept {
+  color: var(--ink);
+}
+
+.ledger-cell {
+  text-align: center;
+  cursor: pointer;
+}
+
+.ledger-cell.is-hovered {
+  background: color-mix(in srgb, var(--rule) 30%, transparent);
+}
+
+.ledger-cell.is-selected {
+  background: color-mix(in srgb, var(--rule) 60%, transparent);
+}
+
+.ledger-total {
+  text-align: right;
+  font-weight: 500;
+}
+
+.chart-ledger .is-up {
+  color: var(--positive);
+}
+
+.chart-ledger .is-down {
+  color: var(--signal);
+}
+
+@media (max-width: 480px) {
+  .chart-ledger {
+    font-size: 10px;
+  }
 }
 
 .chart-tooltip {

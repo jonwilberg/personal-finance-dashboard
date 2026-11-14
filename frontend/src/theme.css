@@ -26,15 +26,16 @@
   --cat-8: #a8653d;
   --cat-other: #b9b0a0;
 
-  /* Spending groups (see spendingGroups.ts) and income beside them, validated together: lightness band, chroma,
-     colour-blind separation and contrast on --paper. Other is a neutral grey, so the named groups carry the colour. */
+  /* Spending groups (see spendingGroups.ts), validated together: lightness band, chroma, colour-blind separation and
+     contrast on --paper. Other is a neutral grey, so the named groups carry the colour. Income is a dark ink, drawn
+     as a pale column with a dark top edge behind the spending. */
   --group-fixed: #2a63b0;
   --group-groceries: #b8862a;
   --group-health: #e2699a;
-  --group-dining: #9c3d5c;
-  --group-travel: #9a6ad0;
+  --group-dining: #b8452f;
+  --group-travel: #1a8a70;
   --group-other: #b9b0a0;
-  --chart-income: #1a8a70;
+  --chart-income: #3a362f;
 
   --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
   --font-ui: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -88,12 +89,12 @@
   --cat-8: #d08e66;
   --cat-other: #6b6458;
 
-  /* Not yet validated for the dark surface: travel sits close to the lighter fixed blue here. */
+  /* Not yet validated for the dark surface. Income is a light ink here, so its pale column still reads. */
   --group-fixed: #4f86cc;
   --group-groceries: #b8862a;
   --group-health: #d0739a;
-  --group-dining: #b8566f;
-  --group-travel: #b07ad8;
+  --group-dining: #d0644c;
+  --group-travel: #2fa386;
   --group-other: #6b6458;
-  --chart-income: #1a8a70;
+  --chart-income: #e8dfcf;
 }

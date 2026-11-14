@@ -1,29 +1,31 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { OverviewMonth, SpendingGroup } from "./api";
 import { formatKr } from "./format";
 import { groupFill } from "./spendingGroups";
 
-// Each month is a pair of bars: spending stacked on the left by group (fixed costs at the bottom, Other on top), and
-// income on the right.
-const INCOME_FILL = "var(--chart-income)";
+// Each month is one column: income stands behind as a pale column with a dark top edge, and spending is stacked in
+// front of it by group (fixed costs at the bottom, Other on top). Where the spending stops short of the income's top,
+// that is what was kept; where it rises above it, the month was overspent. A ledger under the chart gives each
+// month's income, spending and difference, lined up with its column, and the totals in a last column.
+const INCOME = "var(--chart-income)";
+const INCOME_GHOST = "color-mix(in srgb, var(--chart-income) 9%, transparent)";
 
 const HEIGHT = 240;
-const PAD = { top: 28, right: 8, bottom: 28, left: 52 }; // top leaves room for the labels and broken bars
+const PAD = { top: 16, bottom: 28, left: 52 }; // top leaves room for broken columns
+const TOTAL_W = 68; // the ledger's totals column, on screens wide enough for it
+const TOTAL_MIN_WIDTH = 560;
 const GAP = 2; // surface gap between stacked segments
 const RADIUS = 4; // rounded data-end on the top of each bar
-const PAIR_GAP = 3; // between a month's spending and income bars
+const EDGE = 2; // the income column's top edge
 
 // Income far above a typical month (a bonus, a tax refund) would squash every other bar, so it's left out of the
-// scale and its bar is cut short with a break. "Far above": more than BREAK_FACTOR times the median month's income,
+// scale and its column is cut short with a break. "Far above": more than BREAK_FACTOR times the median month's income,
 // and well above every other bar.
 const BREAK_FACTOR = 1.5;
-const OVERSHOOT = 6; // a broken bar reaches this far above the top gridline, to show it carries on
+const OVERSHOOT = 6; // a broken column reaches this far above the top gridline, to show it carries on
 const BREAK_AT = 14; // the break's distance below the top gridline
 const BREAK_GAP = 4;
 const BREAK_SLANT = 3;
-
-type Box = { x0: number; x1: number; y0: number; y1: number };
-const overlaps = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
 export function SpendingChart(props: {
   series: OverviewMonth[];
@@ -48,79 +50,43 @@ export function SpendingChart(props: {
 
   const totals = series.map((m) => m.fixed + m.adjustable + m.uncategorized);
   const incomes = series.map((m) => Math.max(m.income, 0));
+  const nets = series.map((_, i) => incomes[i] - totals[i]);
   const outliers = incomeOutliers(incomes, Math.max(...totals));
-  const { max, ticks } = niceScale(
-    Math.max(...totals, ...incomes.filter((_, i) => !outliers.has(i)), 1),
-  );
+  const { max, ticks } = niceScale(Math.max(...totals, ...incomes.filter((_, i) => !outliers.has(i)), 1));
   // An outlier can still fit under the rounded-up scale; then it's drawn in full after all.
   const cut = incomes.map((income) => income > max);
-  const plotW = WIDTH - PAD.left - PAD.right;
+  const showTotals = WIDTH >= TOTAL_MIN_WIDTH;
+  const padRight = showTotals ? TOTAL_W : 8;
+  const plotW = WIDTH - PAD.left - padRight;
   const plotH = HEIGHT - PAD.top - PAD.bottom;
   const band = plotW / Math.max(series.length, 1);
-  const barW = Math.min(26, band * 0.34);
-  const pairW = barW * 2 + PAIR_GAP;
+  const colW = Math.min(60, band * 0.84); // the income column
+  const barW = colW * 0.62; // the spending stack in front of it
   const y = (value: number) => PAD.top + plotH - (value / max) * plotH;
-  const pairX = (i: number) => PAD.left + band * i + (band - pairW) / 2; // left edge of a month's spending bar
-  const incomeX = (i: number) => pairX(i) + barW + PAIR_GAP;
+  const colX = (i: number) => PAD.left + band * i + (band - colW) / 2;
+  const barX = (i: number) => colX(i) + (colW - barW) / 2;
   const incomeTop = (i: number) => (cut[i] ? PAD.top - OVERSHOOT : y(incomes[i]));
 
-  const labels = placeLabels();
   const hovered = hover !== null ? series[hover] : null;
 
-  /**
-   * The figures above the bars: each month's spending and income, compact ("38,3k") so twelve months fit; the
-   * selected month's are only set bolder. A label sits above its own bar, nudged sideways off the bar beside it
-   * or lifted a line when that's what it takes, and is left out when it would still touch a bar or another label
-   * (narrow bars on phones): the tooltip and the table have every figure. The selected month goes first, then
-   * spending, then income.
-   */
-  function placeLabels() {
-    const bars: Box[] = series.flatMap((_, i) => [
-      { x0: pairX(i), x1: pairX(i) + barW, y0: y(totals[i]), y1: y(0) },
-      ...(incomes[i] > 0 ? [{ x0: incomeX(i), x1: incomeX(i) + barW, y0: incomeTop(i), y1: y(0) }] : []),
-    ]);
-    const placed: Box[] = [];
-    const out: { key: string; i: number; text: string; cx: number; baseline: number }[] = [];
-
-    const place = (i: number, kind: "spent" | "income") => {
-      const value = kind === "spent" ? totals[i] : incomes[i];
-      if (value <= 0) return;
-      const isSelected = series[i].month === selected;
-      const size = isSelected ? 12 : 11;
-      const top = kind === "spent" ? y(totals[i]) : incomeTop(i);
-      const centre = kind === "spent" ? pairX(i) + barW / 2 : incomeX(i) + barW / 2;
-      const text = barTotal(value, band);
-      const half = (text.length * size * 0.58 + 4) / 2; // estimated width (tabular figures), plus the halo
-      // Above the bar, or sideways off the other bar of the pair: spending to the left, income to the right. When the
-      // pair's bars are about as tall, the two labels would meet above the gap, so spending starts out to the left,
-      // leaving room for income beside it.
-      const sideways = kind === "spent" ? incomeX(i) - 2 - half : incomeX(i) - 1 + half;
-      const otherTop = kind === "spent" ? (incomes[i] > 0 ? incomeTop(i) : null) : y(totals[i]);
-      const level = otherTop !== null && Math.abs(otherTop - top) < size + 8;
-      const xs = kind === "spent" && level ? [sideways, centre] : [centre, sideways];
-      const baseline = top - (isSelected ? 8 : 6);
-      for (const lift of [0, size + 3]) {
-        for (const cx of xs) {
-          const box = { x0: cx - half, x1: cx + half, y0: baseline - lift - size * 0.75 - 2, y1: baseline - lift + 2 };
-          const inside = box.x0 >= PAD.left - 4 && box.x1 <= WIDTH - 2 && box.y0 >= 0;
-          if (inside && !bars.some((b) => overlaps(box, b)) && !placed.some((p) => overlaps(box, p))) {
-            placed.push(box);
-            out.push({ key: `${kind}-${i}`, i, text, cx, baseline: baseline - lift });
-            return;
-          }
-        }
-      }
-    };
-
-    const chosen = series.findIndex((m) => m.month === selected);
-    if (chosen >= 0) {
-      place(chosen, "spent");
-      place(chosen, "income");
-    }
-    series.forEach((_, i) => i !== chosen && place(i, "spent"));
-    series.forEach((_, i) => i !== chosen && place(i, "income"));
-    return out;
-  }
+  // The ledger: income, spending and the difference per month, compact so twelve fit, and the totals.
+  const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
+  // Narrow columns (phones) have no room for a plus on every month: green says kept there, and minus stays.
+  const tight = band < 36;
+  const signed = (value: number, width: number, plus = !tight) =>
+    `${value >= 0 ? (plus ? "+" : "") : "−"}${barTotal(Math.abs(value), width)}`;
+  const ledger = [
+    { key: "income", label: "Income", cells: incomes.map((v) => barTotal(v, band)), total: barTotal(sum(incomes), 0) },
+    { key: "spent", label: "Spent", cells: totals.map((v) => barTotal(v, band)), total: barTotal(sum(totals), 0) },
+    {
+      key: "kept",
+      label: "Kept",
+      cells: nets.map((v) => signed(v, band)),
+      total: signed(sum(nets), 0, true),
+      tone: (v: number) => (v >= 0 ? "is-up" : "is-down"),
+    },
+  ];
+  const ledgerColumns = `${PAD.left}px repeat(${series.length}, minmax(0, 1fr))${showTotals ? ` ${padRight}px` : ""}`;
 
   return (
     <div className="chart">
@@ -132,7 +98,7 @@ export function SpendingChart(props: {
           </span>
         ))}
         <span className="legend-item">
-          <span className="legend-swatch" style={{ background: INCOME_FILL }} />
+          <span className="legend-swatch legend-income" />
           Income
         </span>
       </div>
@@ -143,7 +109,7 @@ export function SpendingChart(props: {
             <g key={tick}>
               <line
                 x1={PAD.left}
-                x2={WIDTH - PAD.right}
+                x2={WIDTH - padRight}
                 y1={y(tick)}
                 y2={y(tick)}
                 stroke="var(--rule)"
@@ -156,15 +122,18 @@ export function SpendingChart(props: {
           ))}
 
           {series.map((month, i) => {
-            const x = pairX(i);
+            const x = barX(i);
             const isSelected = month.month === selected;
             let base = 0;
-            const segments = segmentsOf.map((s) => {
-              const value = month.groups[s.key] ?? 0;
-              const segment = { ...s, value, from: base, to: base + value };
-              base += value;
-              return segment;
-            }).filter((s) => s.value > 0);
+            const segments = segmentsOf
+              .map((s) => {
+                const value = month.groups[s.key] ?? 0;
+                const segment = { ...s, value, from: base, to: base + value };
+                base += value;
+                return segment;
+              })
+              .filter((s) => s.value > 0);
+            const top = incomeTop(i);
             return (
               <g
                 key={month.month}
@@ -174,7 +143,7 @@ export function SpendingChart(props: {
                 onClick={() => props.onSelect(month.month)}
               >
                 {/* The month's column: highlights the selected month (and the hovered one, lightly) and doubles as
-                    a hit target wider and taller than the bar. */}
+                    a hit target wider and taller than the bars. */}
                 <rect
                   className={`chart-column ${isSelected ? "is-selected" : hover === i ? "is-hovered" : ""}`}
                   x={PAD.left + band * i + 2}
@@ -183,27 +152,31 @@ export function SpendingChart(props: {
                   height={HEIGHT - 4}
                   rx={4}
                 />
+                {incomes[i] > 0 && (
+                  <>
+                    <path
+                      d={
+                        cut[i]
+                          ? brokenBar(colX(i), top, colW, y(0), PAD.top + BREAK_AT)
+                          : roundedTop(colX(i), top, colW, Math.max(y(0) - top, 0.5), RADIUS)
+                      }
+                      fill={INCOME_GHOST}
+                    />
+                    <path d={roundedEdge(colX(i), top, colW, RADIUS)} fill="none" stroke={INCOME} strokeWidth={EDGE} />
+                  </>
+                )}
                 {segments.map((s, j) => {
-                  const top = y(s.to);
+                  const segTop = y(s.to);
                   const bottom = y(s.from) - (j > 0 ? GAP : 0);
-                  const h = Math.max(bottom - top, 0.5);
+                  const h = Math.max(bottom - segTop, 0.5);
                   return j === segments.length - 1 ? (
-                    <path key={s.key} d={roundedTop(x, top, barW, h, RADIUS)} fill={s.fill} />
+                    <path key={s.key} d={roundedTop(x, segTop, barW, h, RADIUS)} fill={s.fill} />
                   ) : (
-                    <rect key={s.key} x={x} y={top} width={barW} height={h} fill={s.fill} />
+                    <rect key={s.key} x={x} y={segTop} width={barW} height={h} fill={s.fill} />
                   );
                 })}
-                {incomes[i] > 0 &&
-                  (cut[i] ? (
-                    <path d={brokenBar(incomeX(i), incomeTop(i), barW, y(0), PAD.top + BREAK_AT)} fill={INCOME_FILL} />
-                  ) : (
-                    <path
-                      d={roundedTop(incomeX(i), y(incomes[i]), barW, Math.max(y(0) - y(incomes[i]), 0.5), RADIUS)}
-                      fill={INCOME_FILL}
-                    />
-                  ))}
                 <text
-                  x={x + pairW / 2}
+                  x={colX(i) + colW / 2}
                   y={HEIGHT - 8}
                   textAnchor="middle"
                   className={`chart-axis ${isSelected ? "chart-axis-strong" : ""}`}
@@ -214,25 +187,13 @@ export function SpendingChart(props: {
             );
           })}
 
-          {/* The figures above the bars (see placeLabels), with a halo (see .chart-total) so gridlines never run
-              through them. */}
-          <g pointerEvents="none">
-            {labels.map((label) => {
-              const isSelected = series[label.i].month === selected;
-              const tint = isSelected ? " is-selected" : hover === label.i ? " is-hovered" : "";
-              return (
-                <text
-                  key={label.key}
-                  x={label.cx}
-                  y={label.baseline}
-                  textAnchor="middle"
-                  className={`chart-total${tint}`}
-                >
-                  {label.text}
-                </text>
-              );
-            })}
-          </g>
+          {/* Heads the ledger's totals column, in the row of month names. "Total", not "LTM": with less than a
+              year of data the column covers fewer months. */}
+          {showTotals && (
+            <text x={WIDTH} y={HEIGHT - 8} textAnchor="end" className="chart-axis chart-axis-strong">
+              Total
+            </text>
+          )}
         </svg>
 
         {hovered && hover !== null && (
@@ -256,8 +217,43 @@ export function SpendingChart(props: {
               <span>Income</span>
               <span>{formatKr(hovered.income)}</span>
             </div>
+            <div className="tooltip-row tooltip-total">
+              <span>{nets[hover] >= 0 ? "Kept" : "Overspent"}</span>
+              <span>{formatKr(Math.abs(nets[hover]))}</span>
+            </div>
           </div>
         )}
+      </div>
+
+      {/* Lined up with the chart's columns: the same left margin, one equal column per month, and the totals in the
+          chart's right margin. Screen readers get the same figures from the table below. */}
+      <div className="chart-ledger" style={{ gridTemplateColumns: ledgerColumns }} aria-hidden="true">
+        {ledger.map((row) => (
+          <Fragment key={row.key}>
+            <span className={`ledger-label ledger-${row.key}`}>{row.label}</span>
+            {row.cells.map((cell, i) => (
+              <span
+                key={series[i].month}
+                className={[
+                  "ledger-cell",
+                  `ledger-${row.key}`,
+                  row.tone?.(nets[i]),
+                  series[i].month === selected ? "is-selected" : hover === i ? "is-hovered" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover(null)}
+                onClick={() => props.onSelect(series[i].month)}
+              >
+                {cell}
+              </span>
+            ))}
+            {showTotals && (
+              <span className={`ledger-total ledger-${row.key} ${row.tone?.(sum(nets)) ?? ""}`}>{row.total}</span>
+            )}
+          </Fragment>
+        ))}
       </div>
 
       <table className="sr-only">
@@ -268,17 +264,21 @@ export function SpendingChart(props: {
             {segmentsOf.map((s) => (
               <th key={s.key}>{s.label}</th>
             ))}
+            <th>Spent</th>
             <th>Income</th>
+            <th>Kept (negative: overspent)</th>
           </tr>
         </thead>
         <tbody>
-          {series.map((m) => (
+          {series.map((m, i) => (
             <tr key={m.month}>
               <td>{monthTitle(m.month)}</td>
               {segmentsOf.map((s) => (
                 <td key={s.key}>{formatKr(m.groups[s.key] ?? 0)}</td>
               ))}
+              <td>{formatKr(totals[i])}</td>
               <td>{formatKr(m.income)}</td>
+              <td>{formatKr(nets[i])}</td>
             </tr>
           ))}
         </tbody>
@@ -294,8 +294,8 @@ export function monthTitle(month: string) {
 
 /**
  * The months whose income is far above a typical month's (see BREAK_FACTOR): more than that factor times the median
- * month with income, and more than a quarter above everything else on the chart (`floor` is the tallest spending or
- * median line). Needs three months with income to say what's typical.
+ * month with income, and more than a quarter above everything else on the chart (`floor` is the tallest spending).
+ * Needs three months with income to say what's typical.
  */
 function incomeOutliers(incomes: number[], floor: number): Set<number> {
   const paid = incomes.filter((v) => v > 0).sort((a, b) => a - b);
@@ -342,6 +342,17 @@ function roundedTop(x: number, y: number, w: number, h: number, r: number) {
   ].join(" ");
 }
 
+/** Just the rounded top edge of a column, for drawing as a line. */
+function roundedEdge(x: number, y: number, w: number, r: number) {
+  const radius = Math.min(r, w / 2);
+  return [
+    `M${x},${y + radius}`,
+    `Q${x},${y} ${x + radius},${y}`,
+    `H${x + w - radius}`,
+    `Q${x + w},${y} ${x + w},${y + radius}`,
+  ].join(" ");
+}
+
 /**
  * Axis top just above the tallest bar: about five round steps (1, 2, 2.5 or 5 × 10ⁿ), rounded up to the next
  * step, so headroom is at most one step instead of up to doubling the value.
@@ -355,7 +366,7 @@ function niceScale(value: number) {
   return { max, ticks };
 }
 
-/** A bar's total as "38,3k", or "38k" where bars are too narrow for the decimal. */
+/** A figure as "38,3k", or "38k" where columns are too narrow for the decimal. */
 function barTotal(value: number, band: number) {
   if (value < 1000) return String(Math.round(value));
   const digits = band >= 48 ? 1 : 0;
