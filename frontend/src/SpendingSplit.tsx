@@ -13,7 +13,8 @@ import { groupFill } from "./spendingGroups";
 // - Clicking a spending category jumps to its row in the table below.
 
 const UNCATEGORIZED = "uncategorized";
-const HEAD = 44; // the totals above the bars
+const TOTALS_H = 36; // the income and spending totals at the top
+const HEAD = 84; // the bars start below the totals and the savings connector
 const BAR_H = 480; // the bars' area below the totals
 const GAP = 2; // surface gap between blocks
 const GROUP_GAP = 6; // a slightly wider gap between groups
@@ -198,14 +199,13 @@ export function SpendingSplit({
     base,
   );
 
-  // What was kept or overspent: a bracket between the bars, labelled over the shorter one.
+  // Savings or loss: a connector from the top of the income bar, over, and down onto the top of the spending bar,
+  // with the difference in a pill on it (green for savings, red for a loss).
   const net = earned - total;
-  const higher = Math.min(incomeTop, spentTop);
-  const lower = Math.max(incomeTop, spentTop);
-  const showNet = earned > 0 && lower - higher >= 6;
-  const shorterCentre = incomeTop > spentTop ? incomeX + size.income / 2 : barX + size.spent / 2;
-  const netY = Math.max(HEAD + 18, (higher + lower) / 2);
-  const bracketX = size.income + size.gap / 2;
+  const showNet = earned > 0 && Math.round(net) !== 0;
+  const fromX = incomeX + size.income / 2;
+  const toX = barX + size.spent / 2;
+  const connectorY = Math.max(TOTALS_H + 12, Math.min(incomeTop, spentTop) - 24);
   const breakAt = HEAD + BREAK_AT;
 
   const fill = (row: ScoreboardRow) => (row.category === UNCATEGORIZED ? `url(#${hatchId})` : groupFill(row.group));
@@ -285,11 +285,10 @@ export function SpendingSplit({
           ))}
 
           {showNet && (
-            <path
-              className={`split-net-bracket ${net >= 0 ? "is-up" : "is-down"}`}
-              d={`M${bracketX - 3},${higher} H${bracketX + 3} M${bracketX},${higher} V${lower} M${bracketX - 3},${lower} H${bracketX + 3}`}
-              fill="none"
-            />
+            <g className="split-connector">
+              <path d={`M${fromX},${incomeTop - 3} V${connectorY} H${toX} V${spentTop - 9}`} fill="none" />
+              <path d={`M${toX - 4},${spentTop - 10} H${toX + 4} L${toX},${spentTop - 3} Z`} className="split-arrow" />
+            </g>
           )}
         </svg>
 
@@ -301,7 +300,7 @@ export function SpendingSplit({
           </div>
         )}
         <div className="split-total" style={{ left: barX, width: size.spent }}>
-          <span className="split-total-label">Spent</span>
+          <span className="split-total-label">Spending</span>
           <span className="split-total-value">{formatKr(total)}</span>
         </div>
 
@@ -348,9 +347,11 @@ export function SpendingSplit({
         })}
 
         {showNet && (
-          <div className={`split-net ${net >= 0 ? "is-up" : "is-down"}`} style={{ left: shorterCentre, top: netY }}>
-            <span>{net >= 0 ? "Kept" : "Overspent"}</span>
-            <span className="split-net-value">{formatKr(Math.abs(net))}</span>
+          <div
+            className={`split-pill ${net >= 0 ? "is-up" : "is-down"}`}
+            style={{ left: (fromX + toX) / 2, top: connectorY }}
+          >
+            {net >= 0 ? "Savings" : "Loss"} <span className="split-pill-value">{formatKr(Math.abs(net))}</span>
           </div>
         )}
 
