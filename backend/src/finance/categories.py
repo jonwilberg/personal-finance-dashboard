@@ -41,6 +41,7 @@ DEFAULT_CATEGORIES = [
     Category("transport", "Transport", "expense"),
     Category("travel", "Travel", "expense"),
     Category("housing", "Housing", "expense", fixed=True),
+    Category("electricity", "Electricity", "expense", fixed=True),
     Category("phone_internet", "Phone, internet and TV", "expense", fixed=True),
     Category("insurance", "Insurance", "expense", fixed=True),
     Category("clothing", "Clothing and shoes", "expense"),
@@ -58,6 +59,10 @@ DEFAULT_CATEGORIES = [
     Category("loans", "Loan payments", "loan", fixed=True),
     Category("transfer", "Transfers", "transfer", system=True),
 ]
+
+# Defaults added after the first release. Databases seeded before then get each of these once, at the end of their
+# list; if you delete one afterwards it stays deleted.
+ADDED_CATEGORIES = ("electricity",)
 
 # The groups spending is shown in on the overview's charts, in stacking order (bottom to top). Each spending
 # category belongs to one, chosen on the Categories page; uncategorized spending is Other.
@@ -146,8 +151,11 @@ MERCHANT_KEYWORDS: dict[str, list[str]] = {
     ],
     "housing": [
         "HUSLEIE", "FELLESKOSTNADER", "FELLESUTGIFTER", "BORETTSLAG", "SAMEIE", "OBOS", "USBL",
-        "KOMMUNALE AVGIFTER", "EIENDOMSSKATT", "FJORDKRAFT", "TIBBER", "HAFSLUND", "ELVIA", "LYSE", "NORGESENERGI",
-        "FORTUM", "STRØM", "NETTLEIE",
+        "KOMMUNALE AVGIFTER", "EIENDOMSSKATT",
+    ],
+    # Power suppliers and grid companies (nettleie).
+    "electricity": [
+        "FJORDKRAFT", "TIBBER", "HAFSLUND", "ELVIA", "LYSE", "NORGESENERGI", "FORTUM", "STRØM", "NETTLEIE",
     ],
     "health": [
         "APOTEK", "VITUSAPOTEK", "APOTEK 1", "BOOTS", "LEGE", "LEGESENTER", "LEGEVAKT", "TANNLEGE", "FYSIO",
@@ -205,7 +213,7 @@ BANK_CATEGORY_HINTS: list[tuple[str, str]] = [
     ("STREAMING", "subscriptions"),
     ("CABLE", "phone_internet"),
     ("TELECOMMUNICATION", "phone_internet"),
-    ("UTILITIES", "housing"),
+    ("UTILITIES", "electricity"),
     ("INSURANCE", "insurance"),
     ("DRUG STORES", "health"),
     ("PHARMAC", "health"),

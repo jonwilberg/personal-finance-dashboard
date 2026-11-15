@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from finance.categories import (
+    ADDED_CATEGORIES,
     DEFAULT_CATEGORIES,
     KINDS,
     SPENDING_GROUP_IDS,
@@ -147,6 +148,7 @@ class Storage:
                 db.execute("ALTER TABLE categories ADD COLUMN spending_group TEXT")
         _import_json_files(self)
         _seed_categories(self)
+        _add_new_categories(self)
         _fill_spending_groups(self)
 
     @contextmanager
@@ -678,6 +680,25 @@ def _seed_categories(storage: Storage) -> None:
                 )
             db.execute("UPDATE category_overrides SET category = ? WHERE category = ?", (fallback, old))
     storage._set_meta("categories_seeded_at", _now())
+
+
+def _add_new_categories(storage: Storage) -> None:
+    """Give a database seeded before a default category existed that category, once."""
+    defaults = {c.id: c for c in DEFAULT_CATEGORIES}
+    for category_id in ADDED_CATEGORIES:
+        key = f"category_added:{category_id}"
+        if storage._meta(key):
+            continue
+        c = defaults[category_id]
+        with storage._connect() as db:
+            position = db.execute("SELECT coalesce(max(position), -1) + 1 FROM categories").fetchone()[0]
+            db.execute(
+                "INSERT OR IGNORE INTO categories (id, name, kind, fixed, system, position, spending_group) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (c.id, c.name, c.kind, int(c.fixed), int(c.system), position,
+                 _fixed_and_group(c.kind, c.fixed, default_group(c.id, c.fixed))[1]),
+            )
+        storage._set_meta(key, _now())
 
 
 def _fill_spending_groups(storage: Storage) -> None:

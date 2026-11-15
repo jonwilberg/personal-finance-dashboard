@@ -1091,6 +1091,19 @@ button.month-step:hover:not(:disabled) {
   z-index: 5;
 }
 
+/* The category bars' hover box: beside the block, vertically centred on it. More spending is red, as in the table. */
+.chart-tooltip.split-tooltip {
+  transform: translateY(-50%);
+}
+
+.split-tooltip .is-up {
+  color: var(--signal);
+}
+
+.split-tooltip .is-down {
+  color: var(--positive);
+}
+
 .tooltip-row {
   display: flex;
   justify-content: space-between;
