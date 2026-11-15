@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A serif W in paper on the app's ink: thick downstrokes, thin upstrokes, serifs on the three tops. The strokes
+       run past the baseline and are clipped there, so each bottom point is one clean flat foot. -->
+  <defs>
+    <clipPath id="w"><rect x="0" y="0" width="32" height="23.8"/></clipPath>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="#22201c"/>
+  <g fill="none" stroke="#fbf7ef" clip-path="url(#w)">
+    <path d="M6.6 9 L12.2 26 M16 9 L21.4 26" stroke-width="3.4"/>
+    <path d="M10.6 26 L16 9.6 M19.8 26 L25.6 9" stroke-width="1.4"/>
+  </g>
+  <path d="M3.8 9 H9.6 M13.6 9 H18.2 M23.4 9 H28" stroke="#fbf7ef" stroke-width="1.3"/>
+</svg>
