@@ -1,4 +1,8 @@
 # personal-finance-dashboard
+
+[![CI](https://github.com/jonwilberg/personal-finance-dashboard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jonwilberg/personal-finance-dashboard/actions/workflows/ci.yml?query=branch%3Amain)
+[![App health](https://healthchecks.io/badge/e8a4d710-d6b0-4bf7-9742-a7bca8/dKQ1pfKY-2/wilberg-finance.svg)](docs/hosting.md#knowing-its-up)
+
 Personal finance app that pulls bank transactions via the Enable Banking API, automatically categorizes spending, and shows clear statistics on where your money goes.
 
 - `backend/`: Python (uv). Enable Banking client, FastAPI web app and the `finance` CLI.
