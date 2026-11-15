@@ -59,7 +59,7 @@ category, never its rank, so groceries stays the same colour on every chart.
 | Headline | Fraunces | 22 / 1.25 | Chart and section headlines |
 | Subhead | Fraunces | 17 / 1.3 | Card titles |
 | Body | Inter | 15 / 1.55 | Default UI text |
-| Label | Inter, 500, uppercase tracking 0.06em | 11 / 1.4 | Measure labels above headlines |
+| Label | Inter, 600, uppercase tracking 0.07em, full ink | 13 / 1.4 | Section titles and measure labels above headlines |
 | Small | Inter | 13 / 1.45 | Table cells, secondary info |
 | Caption | Inter | 12 / 1.4 | Axis labels, sources, footnotes |
 
