@@ -14,15 +14,15 @@ browser ──https──▶ Cloudflare (Access: Google login, two allowed email
               daily:   refresh-all (new transactions)
 ```
 
-- **Access.** Cloudflare Access asks for a Google login and lets through only the emails on its policy. The app then
-  checks Cloudflare's signed token on every request itself (`backend/src/finance/access.py`), against its own list
-  (`FINANCE_ALLOWED_EMAILS`). So a mistake in the Cloudflare settings doesn't open the door. Without those settings,
-  the app refuses to listen anywhere but on its own machine.
+- **Access.** Cloudflare Access asks for a Google login and lets through only the emails on its policy, so who may
+  use the app is decided in Cloudflare alone. The app checks Cloudflare's signed token on every request
+  (`backend/src/finance/access.py`), so nothing reaches it without passing that login, even through some other way
+  in. Without the Access settings, the app refuses to listen anywhere but on its own machine.
 - **No open ports.** The server's firewall lets in SSH only. The app is reached only through the Cloudflare tunnel,
   which the server opens from the inside.
 - **Secrets stay on the server**, in ignored files next to `deploy/compose.yaml`: `app.env`, `.env`, `backup.env`,
-  `secrets/enablebanking.pem`. Nothing secret is in the image or the repo. The allowed emails live in `app.env`,
-  never in code.
+  `secrets/enablebanking.pem`. Nothing secret is in the image or the repo. The allowed emails live only in the
+  Cloudflare Access policy, never in code.
 - **Backups.** Every night the database is snapshotted, checked and compressed, then uploaded to a private Cloudflare
   R2 bucket. That's a different company from Hetzner. The daily copies are kept 35 days and the 1st of each month for
   about 13 months. The backups aren't encrypted, so keep the bucket private (no public access or custom domain on it)
@@ -124,7 +124,6 @@ bank or account there before connecting it in the app.
      - the Enable Banking app ID (the production application's)
      - the public callback URL
      - `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD`
-     - `FINANCE_ALLOWED_EMAILS`, the two Google addresses, comma-separated
    - `deploy/.env`: the tunnel token
    - `deploy/backup.env`: the R2 bucket, endpoint and token, and optionally the
      [healthchecks.io](https://healthchecks.io) ping URLs
