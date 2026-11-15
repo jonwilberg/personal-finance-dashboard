@@ -50,6 +50,10 @@ fi
 rm -f "$DATA/finance.db-wal" "$DATA/finance.db-shm"
 install -m 0600 -o "$APP_UID" -g "$APP_UID" "$WORK/finance.db" "$DATA/finance.db"
 
-echo "==> Starting the app"
-"${COMPOSE[@]}" up -d
-echo "Done."
+if docker image inspect finance-app:current >/dev/null 2>&1; then
+  echo "==> Starting the app"
+  "${COMPOSE[@]}" up -d
+  echo "Done."
+else
+  echo "Done. No app image deployed yet: run sudo deploy/scripts/deploy.sh to start the app."
+fi
