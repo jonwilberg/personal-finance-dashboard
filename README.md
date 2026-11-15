@@ -77,7 +77,8 @@ With an `https` redirect URL, `connect` asks you to paste the URL the bank redir
 ## Hosting
 
 The app is hosted on a small Hetzner server behind Cloudflare Access (Google login, two allowed accounts), with a
-daily refresh and nightly backups to Cloudflare R2. Setup and day-to-day commands are in [docs/hosting.md](docs/hosting.md);
+daily refresh and nightly backups to Cloudflare R2. CI checks every pull request; each merge to `main` is published
+as an image with a signed attestation, which the server verifies and deploys by itself. Setup and day-to-day commands are in [docs/hosting.md](docs/hosting.md);
 the server files are in [`deploy/`](deploy/).
 
 ## Development

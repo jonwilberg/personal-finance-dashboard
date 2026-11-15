@@ -54,6 +54,17 @@ if ! command -v docker >/dev/null; then
 fi
 usermod -aG docker "$LOGIN_USER"
 
+echo "==> GitHub CLI (verifies the attestation of each image before it's deployed)"
+if ! command -v gh >/dev/null; then
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
+  chmod a+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    >/etc/apt/sources.list.d/github-cli.list
+  apt-get update
+  apt-get install -y gh
+fi
+
 echo "==> Firewall: SSH in, nothing else (the app is reached through the Cloudflare tunnel, which connects out)"
 ufw default deny incoming
 ufw default allow outgoing
@@ -85,12 +96,20 @@ echo "==> Daily refresh and nightly backup"
 sed "s#@REPO_DIR@#$REPO_DIR#g" "$DEPLOY_DIR/cron/finance" >/etc/cron.d/finance
 chmod 0644 /etc/cron.d/finance
 
+echo "==> Deploys: check for a new image every minute"
+for unit in finance-deploy.service finance-deploy.timer; do
+  sed "s#@REPO_DIR@#$REPO_DIR#g" "$DEPLOY_DIR/systemd/$unit" >"/etc/systemd/system/$unit"
+done
+systemctl daemon-reload
+systemctl enable --now finance-deploy.timer
+
 cat <<EOF
 
 Done. Next (see docs/hosting.md):
   1. Fill in $DEPLOY_DIR/app.env, $DEPLOY_DIR/.env and $DEPLOY_DIR/backup.env
   2. Put the Enable Banking key at $DEPLOY_DIR/secrets/enablebanking.pem, then:
        chown root:$APP_UID $DEPLOY_DIR/secrets/enablebanking.pem && chmod 0640 $DEPLOY_DIR/secrets/enablebanking.pem
-  3. Copy the database in (deploy/scripts/restore.sh or a direct copy), then: deploy/scripts/deploy.sh
+  3. Copy the database in (deploy/scripts/restore.sh --file), then: sudo deploy/scripts/deploy.sh
+     (the timer then deploys every new main by itself)
   Log out and back in so $LOGIN_USER can use docker without sudo.
 EOF

@@ -1,0 +1,10 @@
+# Installed by deploy/scripts/setup-server.sh. Deploys the latest main when there is a new one.
+[Unit]
+Description=Deploy the latest finance app image, if there is a new one
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=@REPO_DIR@/deploy/scripts/auto-deploy.sh
+SyslogIdentifier=finance-deploy

@@ -26,10 +26,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Test on the Python the image runs, read from the Dockerfile (Dependabot bumps it there).
+      - id: python
+        working-directory: .
+        run: echo "version=$(sed -nE 's/^FROM python:([0-9.]+)-.*/\1/p' Dockerfile)" >> "$GITHUB_OUTPUT"
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: "0.13.7"
-          python-version: "3.13"
+          python-version: ${{ steps.python.outputs.version }}
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
       - run: uv sync --frozen
@@ -45,9 +49,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Build with the Node the image builds with, read from the Dockerfile.
+      - id: node
+        working-directory: .
+        run: echo "version=$(sed -nE 's/^FROM node:([0-9]+)-.*/\1/p' Dockerfile)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "24"
+          node-version: ${{ steps.node.outputs.version }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
@@ -66,8 +74,12 @@ jobs:
         with:
           context: .
           push: false
+          load: true
+          tags: finance-app:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Start the image as the server runs it
+        run: deploy/scripts/smoke-test.sh finance-app:ci
 
   deploy-files:
     name: Deploy files
@@ -84,3 +96,50 @@ jobs:
           cp deploy/app.env.example deploy/app.env
           echo "CLOUDFLARE_TUNNEL_TOKEN=ci-placeholder" > deploy/.env
           docker compose -f deploy/compose.yaml config --quiet
+
+  # main only, once every check has passed: publish the image the server deploys, with a signed provenance
+  # attestation saying which workflow and commit built it. The server only deploys images whose attestation it can
+  # verify (deploy/scripts/auto-deploy.sh).
+  publish:
+    name: Publish image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [backend, frontend, image, deploy-files]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io
+      id-token: write # sign the attestation
+      attestations: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=main
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
