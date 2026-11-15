@@ -147,8 +147,16 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
 
       {overview.scoreboard && overview.scoreboard.length > 0 && (
         <section className="section">
-          <p className="label">Spending by category{scope && ` · ${scope}`}</p>
-          <SpendingSplit rows={overview.scoreboard} groups={overview.groups ?? []} income={overview.income_breakdown ?? []} />
+          <SpendingSplit
+            title={`Spending by category${scope ? ` · ${scope}` : ""}`}
+            rows={overview.scoreboard}
+            groups={overview.groups ?? []}
+            income={overview.income_breakdown ?? []}
+            series={overview.series}
+            groupUsual={overview.group_usual ?? null}
+            selected={overview.month}
+            onSelect={setMonth}
+          />
           <CategoryScoreboard
             rows={overview.scoreboard}
             months={overview.series}

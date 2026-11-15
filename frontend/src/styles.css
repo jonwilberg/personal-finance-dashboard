@@ -1708,7 +1708,22 @@ input.rule-regex {
    overspent. */
 
 .split {
-  margin: var(--space-3) 0 var(--space-5);
+  margin: 0 0 var(--space-5);
+}
+
+/* The section's title, and the trends' title on the same line above them. */
+.split-head {
+  position: relative;
+  margin-bottom: var(--space-3);
+}
+
+.split-head .label {
+  margin: 0;
+}
+
+.split-head .split-head-trends {
+  position: absolute;
+  top: 0;
 }
 
 .split-frame {
@@ -2026,4 +2041,106 @@ select.is-filtering {
     min-width: 0;
     flex: 1 1 160px;
   }
+}
+
+/* Each spending group's last 12 months, beside (or below) the month's split bar. */
+.trends-beside {
+  position: absolute;
+}
+
+.trends-below {
+  margin-top: var(--space-5);
+}
+
+.trends-label {
+  margin: 0 0 var(--space-2);
+}
+
+.trends-beside .trends-label {
+  height: 20px;
+}
+
+.trend-row {
+  display: flex;
+  align-items: center;
+  transition: opacity 120ms ease-out;
+}
+
+.trend-row.is-dimmed {
+  opacity: 0.4;
+}
+
+.trend-name {
+  flex: 0 0 132px;
+  font-size: var(--text-caption);
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.trend-chart {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.trend-chart svg {
+  display: block;
+  overflow: visible;
+}
+
+.trend-base {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+
+.trend-median {
+  stroke: var(--ink-secondary);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
+.trend-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.trend-hit:hover {
+  fill: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.chart-tooltip.trend-tooltip {
+  transform: translate(-50%, -100%);
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.trend-figures {
+  flex: 0 0 116px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.trend-months {
+  position: relative;
+  height: 16px;
+  margin-top: -4px;
+}
+
+.trend-months span {
+  position: absolute;
+  top: 0;
+  text-align: center;
+  font-size: var(--text-label);
+  color: var(--ink-muted);
+}
+
+.trend-months .is-selected {
+  color: var(--ink);
+  font-weight: 600;
 }

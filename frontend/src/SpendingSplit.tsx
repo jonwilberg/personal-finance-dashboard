@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { IncomeRow, ScoreboardRow, SpendingGroup } from "./api";
+import type { IncomeRow, OverviewMonth, ScoreboardRow, SpendingGroup } from "./api";
 import { formatKr } from "./format";
+import { GroupTrends } from "./GroupTrends";
 import { groupFill } from "./spendingGroups";
 
 // The month as money in and money out, side by side: a "zoom in" on the month's column in the chart above.
@@ -11,6 +12,7 @@ import { groupFill } from "./spendingGroups";
 //   same way. It is cut short with a break when it is far above the spending.
 // - A bracket between the bars marks what was kept or overspent; the two totals head their bars.
 // - Clicking a spending category jumps to its row in the table below.
+// - To the right, each group's last 12 months (GroupTrends); hovering a group there or on the bar highlights it in both.
 
 const UNCATEGORIZED = "uncategorized";
 const TOTALS_H = 34; // a total above its bar
@@ -36,6 +38,10 @@ const INCOME = "var(--chart-income)";
 const INCOME_TINTS = [20, 11, 7, 5]; // % of the income ink, largest category first
 // Group colours dark enough for light text inside; the rest take ink (each the better of the two).
 const LIGHT_TEXT_GROUPS = new Set(["fixed", "dining", "travel"]);
+const TRENDS_TITLE = "Trend per category";
+const TRENDS_GAP = 56; // between the group totals and the trends
+const TRENDS_MIN = 380; // narrower than this beside the bar: the trends go below it
+const TRENDS_ROW_BELOW = 60; // a trend row's height when below the bar
 const FONT = '12px "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif';
 
 interface Block {
@@ -102,18 +108,31 @@ function stack<T>(items: T[], amount: (item: T) => number, base: number, height:
 }
 
 export function SpendingSplit({
+  title,
   rows,
   groups,
   income,
+  series,
+  groupUsual,
+  selected,
+  onSelect,
 }: {
+  /** The section's title; the trends' title lines up with it when they're beside the bar. */
+  title: string;
   rows: ScoreboardRow[];
   groups: SpendingGroup[];
   /** The month's income per income category, largest first. */
   income: IncomeRow[];
+  /** The months up to the selected one, for each group's trend, and each group's median month. */
+  series: OverviewMonth[];
+  groupUsual: Record<string, number> | null;
+  selected: string;
+  onSelect: (month: string) => void;
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(720);
   const [hover, setHover] = useState<string | null>(null);
+  const [trendGroup, setTrendGroup] = useState<string | null>(null); // the group hovered in the trends
   const [, setFontsReady] = useState(false); // re-measure once the web font has loaded
   const hatchId = useId().replace(/:/g, "");
 
@@ -210,6 +229,30 @@ export function SpendingSplit({
   const connectorY = Math.min(incomeLabelTop, spentLabelTop) - 14;
   const breakAt = HEAD + BREAK_AT;
 
+  // The trends: every group with spending in the period, top down like the bar, beside the totals when there's room.
+  const trendGroups = [...groups].reverse().filter((g) => series.some((m) => (m.groups[g.id] ?? 0) > 0));
+  const trendsX = labelX + labelW + TRENDS_GAP;
+  const besideW = width - trendsX; // out to the page edge
+  const beside = wide && besideW >= TRENDS_MIN;
+  // One group lit in both places: from hovering it in the trends, or a category of it on the bar.
+  const hoverGroup = hover && !hover.startsWith("income:") ? blocks.find((b) => b.key === hover)?.row.group ?? null : null;
+  const activeGroup = trendGroup ?? hoverGroup;
+  const trends =
+    trendGroups.length > 0 ? (
+      <GroupTrends
+        series={series}
+        groups={trendGroups}
+        groupUsual={groupUsual}
+        selected={selected}
+        onSelect={onSelect}
+        active={activeGroup}
+        onActive={setTrendGroup}
+        width={beside ? besideW : width}
+        rowHeight={beside ? BAR_H / trendGroups.length : TRENDS_ROW_BELOW}
+        showNames={!beside}
+      />
+    ) : null;
+
   const fill = (row: ScoreboardRow) => (row.category === UNCATEGORIZED ? `url(#${hatchId})` : groupFill(row.group));
   // The hovered block's figures for the hover box, placed just right of the block's middle.
   const hovered = ((): { name: string; x: number; y: number; lines: [string, string, string?][] } | null => {
@@ -249,6 +292,14 @@ export function SpendingSplit({
 
   return (
     <div className={`split${wide ? "" : " is-narrow"}`} ref={frameRef}>
+      <div className="split-head">
+        <p className="label">{title}</p>
+        {beside && trends && (
+          <p className="label split-head-trends" style={{ left: trendsX }}>
+            {TRENDS_TITLE}
+          </p>
+        )}
+      </div>
       {!wide && earnedRows.length > 0 && (
         // Narrow screens: the income bar is too slim for labels, so its categories are a line above.
         <div className="chart-legend split-legend">
@@ -301,7 +352,11 @@ export function SpendingSplit({
           {blocks.map((b) => (
             <rect
               key={b.key}
-              className={`split-block${hover && hover !== b.key ? " is-dimmed" : ""}`}
+              className={`split-block${
+                (hover && !hover.startsWith("income:") && hover !== b.key) || (trendGroup && b.row.group !== trendGroup)
+                  ? " is-dimmed"
+                  : ""
+              }`}
               x={barX}
               y={b.top}
               width={size.spent}
@@ -428,7 +483,19 @@ export function SpendingSplit({
             <span className="split-share">{shareText(g.amount / total)}</span>
           </div>
         ))}
+
+        {beside && trends && (
+          <div className="trends-beside" style={{ left: trendsX, top: HEAD }}>
+            {trends}
+          </div>
+        )}
       </div>
+      {!beside && trends && (
+        <div className="trends-below">
+          <p className="label trends-label">{TRENDS_TITLE}</p>
+          {trends}
+        </div>
+      )}
     </div>
   );
 }

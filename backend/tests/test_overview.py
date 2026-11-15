@@ -140,6 +140,9 @@ def test_spending_is_grouped_for_the_charts():
     assert sum(october["groups"].values()) == result["figures"]["spent"]
     groups = {r["category"]: r["group"] for r in result["scoreboard"]}
     assert groups == {"housing": "fixed", "groceries": "groceries", "eating_out": "dining", "uncategorized": "other"}
+    # Each group's median month, from the months before, like the category medians.
+    assert result["group_usual"] == {"fixed": 10000, "groceries": 3000, "health": 0, "dining": 1000, "travel": 0, "other": 0}
+    assert build_overview(history(), DEFAULT_CATEGORIES, month="2026-06", today=date(2026, 11, 4))["group_usual"] is None
 
 
 def test_income_is_broken_down_by_category_for_the_month():

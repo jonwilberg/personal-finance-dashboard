@@ -93,6 +93,8 @@ def build_overview(
             for m in shown
         ],
         "groups": [{"id": g, "name": name} for g, name in SPENDING_GROUPS],
+        # The median month per group, like usual_spent; None with too little history.
+        "group_usual": {g: _money(v) for g, v in usual["by_group"].items()} if usual else None,
         "changes": changes,
         "scoreboard": _scoreboard(totals, shown, this, usual, spent, categories),
         # This month: income per income category, largest first.
@@ -154,6 +156,7 @@ def _usual(totals: dict[str, dict[str, Any]], months: list[str]) -> dict[str, An
     return {
         "spent": Decimal(median(r["fixed"] + r["adjustable"] + r["uncategorized"] for r in rows)),
         "by_category": {k: Decimal(median(r["by_category"].get(k, Decimal()) for r in rows)) for k in keys},
+        "by_group": {g: Decimal(median(r["by_group"].get(g, Decimal()) for r in rows)) for g, _ in SPENDING_GROUPS},
     }
 
 
