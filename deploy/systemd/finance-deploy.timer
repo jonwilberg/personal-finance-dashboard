@@ -1,0 +1,12 @@
+# Installed by deploy/scripts/setup-server.sh. Checks for a new image once a minute.
+[Unit]
+Description=Check for a new finance app image every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=1min
+AccuracySec=5s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

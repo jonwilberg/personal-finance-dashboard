@@ -1,7 +1,9 @@
 # The hosted app on the server: the app container and the Cloudflare tunnel that is its only way in.
 # Nothing is published on the server's own network ports. See docs/hosting.md.
 #
-#   docker compose -f deploy/compose.yaml up -d --build
+# The app runs the local image finance-app:current. deploy/scripts/auto-deploy.sh sets that tag, only to an image CI
+# published and whose attestation it verified, so compose itself never pulls or builds the app. To try a local build
+# instead: docker build -t finance-app:current . && docker compose -f deploy/compose.yaml up -d
 #
 # Lives next to (all ignored by git):
 #   deploy/.env                    CLOUDFLARE_TUNNEL_TOKEN for the tunnel
@@ -13,10 +15,8 @@ name: finance
 
 services:
   app:
-    build:
-      context: ..
-      dockerfile: Dockerfile
-    image: finance-app:latest
+    image: finance-app:current
+    pull_policy: never
     restart: unless-stopped
     env_file: app.env
     environment:
