@@ -55,7 +55,10 @@ deploy() {
   fi
 
   echo "==> New image $digest"
-  if ! gh attestation verify "oci://$image@$digest" \
+  # The attestation comes from the registry (--bundle-from-oci) and is checked against Sigstore's public trust root,
+  # so no GitHub login is needed; gh just won't start without a token. Any call that did need GitHub's API would fail
+  # with this placeholder, so it can only make verification fail, never pass.
+  if ! GH_TOKEN=no-login-needed gh attestation verify "oci://$image@$digest" \
       --repo "$repo" \
       --signer-workflow "$repo/.github/workflows/ci.yml" \
       --source-ref refs/heads/main \
