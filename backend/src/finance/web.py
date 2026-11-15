@@ -1,6 +1,7 @@
-"""Local web app: JSON API for the frontend plus the bank redirect (callback) endpoint.
+"""Web app: JSON API for the frontend plus the bank redirect (callback) endpoint.
 
-Start it with `uv run finance serve` (add `--env production` for real banks).
+Start it with `uv run finance serve` (add `--env production` for real banks). Hosted, it runs behind Cloudflare
+Access and checks the Access token on every request (see access.py and docs/hosting.md).
 """
 
 from __future__ import annotations
@@ -9,22 +10,23 @@ import re
 import time
 from collections import Counter
 from dataclasses import asdict
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode, urlparse
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from finance.access import COOKIE, HEADER, AccessDenied, AccessVerifier, SigningKeys
 from finance.categories import KINDS, SPENDING_GROUPS
 from finance.categorize import Rule, categorized_transactions, summarize_categorization
-from finance.config import BACKEND_DIR, Settings
+from finance.config import BACKEND_DIR, ConfigError, Settings
 from finance.connections import (
     BankNotFound,
-    account_identifiers,
     consent_valid_until,
     find_aspsp,
     session_record,
@@ -32,10 +34,13 @@ from finance.connections import (
 from finance.enable_banking import EnableBankingClient, EnableBankingError
 from finance.manual import is_manual_session
 from finance.overview import UNCATEGORIZED, build_overview
+from finance.refresh import ManualAccount, refresh_account as fetch_account
 from finance.storage import CategoryError, PersonError, Storage
 from finance.transactions import summarize
 
 FRONTEND_DIST = BACKEND_DIR.parent / "frontend" / "dist"
+# Answered without an Access token, so Docker can check the app is up; it says nothing else.
+HEALTH_PATH = "/healthz"
 # A bank login that hasn't come back within this time is forgotten.
 PENDING_LOGIN_TTL_SECONDS = 30 * 60
 
@@ -103,15 +108,42 @@ class CategoryChanges(BaseModel):
     group: str | None = None
 
 
-def create_app(settings: Settings, client: EnableBankingClient | None = None) -> FastAPI:
+def create_app(
+    settings: Settings, client: EnableBankingClient | None = None, access_keys: SigningKeys | None = None
+) -> FastAPI:
     client = client or EnableBankingClient.from_key_file(settings.application_id, settings.private_key_path)
     store = Storage(settings.data_dir)
     redirect_url = settings.redirect_url or client.get_application()["redirect_urls"][0]
     # state -> bank login started by this server; checked when the bank redirects back.
     pending_logins: dict[str, dict[str, Any]] = {}
 
-    app = FastAPI(title="Personal finance dashboard")
+    app = FastAPI(title="Personal finance dashboard", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.redirect_url = redirect_url
+
+    if settings.access is not None:
+        verifier = AccessVerifier(settings.access, access_keys)
+
+        @app.middleware("http")
+        async def require_access(request: Request, call_next):  # type: ignore[no-untyped-def]
+            """Every request but the health check needs a valid Cloudflare Access token for an allowed email."""
+            if request.url.path == HEALTH_PATH:
+                return await call_next(request)
+            token = request.headers.get(HEADER) or request.cookies.get(COOKIE)
+            try:
+                # Fetching Cloudflare's keys (now and then) is a blocking call.
+                request.state.user = await run_in_threadpool(verifier.email, token)
+            except AccessDenied:
+                return JSONResponse({"detail": "Forbidden"}, status_code=403)
+            return await call_next(request)
+
+    @app.get(HEALTH_PATH, include_in_schema=False)
+    def health() -> dict[str, bool]:
+        return {"ok": True}
+
+    @app.get("/api/me")
+    def me(request: Request) -> dict[str, str | None]:
+        """Who is signed in through Cloudflare Access; None when running locally."""
+        return {"email": getattr(request.state, "user", None)}
 
     @app.exception_handler(EnableBankingError)
     async def enable_banking_error(request: Request, error: EnableBankingError) -> JSONResponse:
@@ -221,20 +253,10 @@ def create_app(settings: Settings, client: EnableBankingClient | None = None) ->
     def refresh_account(account_uid: str, longest: bool = False, days: int = 90) -> dict[str, Any]:
         """Fetch balances and transactions from the bank. Many banks allow ~4 of these per day per account."""
         _require_account(store, account_uid)
-        if any(
-            is_manual_session(s["session_id"]) and any(a["uid"] == account_uid for a in s["accounts"])
-            for s in store.sessions()
-        ):
-            raise HTTPException(409, "This account was added by hand, so there's no bank to refresh it from.")
-        if store.account_needs_numbers(account_uid):
-            # Needed to recognise transfers to this account; fetched once.
-            store.set_account_identifiers(account_uid, account_identifiers(client.get_account_details(account_uid)))
-        store.save_balances(account_uid, client.get_balances(account_uid))
-        if longest:
-            transactions = client.iter_transactions(account_uid, strategy="longest")
-        else:
-            transactions = client.iter_transactions(account_uid, date_from=date.today() - timedelta(days=days))
-        store.save_transactions(account_uid, list(transactions))
+        try:
+            fetch_account(client, store, account_uid, days=days, longest=longest)
+        except ManualAccount as error:
+            raise HTTPException(409, str(error)) from error
         return _account_state(store, account_uid)
 
     def all_transactions() -> list[dict[str, Any]]:
@@ -495,14 +517,35 @@ def _to_frontend(settings: Settings, **params: str) -> RedirectResponse:
     return RedirectResponse(f"{settings.frontend_url}?{urlencode(params)}", status_code=303)
 
 
-def serve_app(settings: Settings, cert_dir: Path, port: int | None = None) -> None:
-    """Run the app on the scheme and port of the redirect URL, so the bank's redirect lands here."""
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def serve_app(
+    settings: Settings, cert_dir: Path, port: int | None = None, host: str = "127.0.0.1", plain: bool = False
+) -> None:
+    """Run the app.
+
+    Locally: on this machine only, on the scheme and port of the redirect URL so the bank's redirect lands here,
+    with a self-signed certificate for an https redirect URL.
+    Hosted (`plain`): plain HTTP on `host` and `port`, behind Cloudflare, which serves the https address. Listening
+    beyond this machine needs Cloudflare Access configured, so the app is never reachable without a login.
+    """
     import uvicorn
 
     from finance.certs import ensure_localhost_certificate
 
+    if host not in LOOPBACK_HOSTS and settings.access is None:
+        raise ConfigError(
+            f"Refusing to listen on {host} without Cloudflare Access: set CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD and "
+            "FINANCE_ALLOWED_EMAILS (see docs/hosting.md)."
+        )
     app = create_app(settings)
     redirect = urlparse(app.state.redirect_url)
+    if plain:
+        port = port or 8765
+        print(f"Serving plain HTTP on {host}:{port}; Cloudflare serves {redirect.scheme}://{redirect.netloc}/", flush=True)
+        uvicorn.run(app, host=host, port=port, log_level="warning")
+        return
     port = port or redirect.port or (443 if redirect.scheme == "https" else 80)
     ssl_options: dict[str, str] = {}
     if redirect.scheme == "https":
@@ -512,4 +555,4 @@ def serve_app(settings: Settings, cert_dir: Path, port: int | None = None) -> No
     print(f"\n  Open {redirect.scheme}://localhost:{port}/ in your browser.")
     if ssl_options:
         print("  The certificate is self-signed: accept the browser warning once (Advanced -> Proceed).\n")
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning", **ssl_options)
+    uvicorn.run(app, host=host, port=port, log_level="warning", **ssl_options)

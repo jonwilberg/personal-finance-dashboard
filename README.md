@@ -69,9 +69,16 @@ uv run finance --env production accounts                   # accounts and balanc
 uv run finance --env production transactions <account-uid> --longest
 uv run finance --env production inspect <account-uid>      # field coverage only
 uv run finance --env production disconnect <session-id>    # revoke a consent
+uv run finance --env production refresh-all                # fetch new transactions for every account
 ```
 
 With an `https` redirect URL, `connect` asks you to paste the URL the bank redirects to. The web app avoids this.
+
+## Hosting
+
+The app is hosted on a small Hetzner server behind Cloudflare Access (Google login, two allowed accounts), with a
+daily refresh and encrypted nightly backups. Setup and day-to-day commands are in [docs/hosting.md](docs/hosting.md);
+the server files are in [`deploy/`](deploy/).
 
 ## Development
 
