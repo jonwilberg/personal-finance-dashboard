@@ -40,7 +40,6 @@ const INCOME_TINTS = [20, 11, 7, 5]; // % of the income ink, largest category fi
 const LIGHT_TEXT_GROUPS = new Set(["fixed", "dining", "travel"]);
 const TRENDS_GAP = 56; // between the group totals and the trends
 const TRENDS_MIN = 380; // narrower than this beside the bar: the trends go below it
-const TRENDS_MAX = 640;
 const TRENDS_ROW_BELOW = 60; // a trend row's height when below the bar
 const FONT = '12px "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif';
 
@@ -229,7 +228,7 @@ export function SpendingSplit({
   // The trends: every group with spending in the period, top down like the bar, beside the totals when there's room.
   const trendGroups = [...groups].reverse().filter((g) => series.some((m) => (m.groups[g.id] ?? 0) > 0));
   const trendsX = labelX + labelW + TRENDS_GAP;
-  const besideW = Math.min(width - trendsX, TRENDS_MAX);
+  const besideW = width - trendsX; // out to the page edge
   const beside = wide && besideW >= TRENDS_MIN;
   // One group lit in both places: from hovering it in the trends, or a category of it on the bar.
   const hoverGroup = hover && !hover.startsWith("income:") ? blocks.find((b) => b.key === hover)?.row.group ?? null : null;
@@ -244,7 +243,7 @@ export function SpendingSplit({
         onSelect={onSelect}
         active={activeGroup}
         onActive={setTrendGroup}
-        width={beside ? besideW : Math.min(width, TRENDS_MAX)}
+        width={beside ? besideW : width}
         rowHeight={beside ? BAR_H / trendGroups.length : TRENDS_ROW_BELOW}
       />
     ) : null;

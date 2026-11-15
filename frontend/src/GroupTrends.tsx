@@ -1,20 +1,19 @@
 import { useState } from "react";
 import type { OverviewMonth, SpendingGroup } from "./api";
 import { formatKr } from "./format";
-import { monthTitle, thousands } from "./SpendingChart";
+import { monthTitle } from "./SpendingChart";
 import { groupFill } from "./spendingGroups";
 
 // Each spending group's last 12 months, one small row per group beside the month's split bar, top to bottom in the
 // bar's order. Monthly columns in the group's colour (the selected month solid, the rest a tint), a dashed line at
 // the group's median month, and on the right this month against that median.
-// Each row has its own scale, so a small group's trend shows as clearly as Fixed's; the row's top value is printed
-// at the top of its chart so the scales stay honest.
+// Each row has its own scale, so a small group's trend shows as clearly as Fixed's.
 
 const NAME_W = 132; // the group's name
 const FIGURES_W = 116; // the difference and median on the right
 const COL_GAP = 4; // between a row's columns
-const MAX_COL = 22; // the widest a column gets
-const PAD_TOP = 14; // room above a row's columns for its top value
+const MAX_COL = 40; // the widest a column gets
+const PAD_TOP = 6; // above a row's tallest column
 const PAD_BOTTOM = 8; // between rows
 
 export function GroupTrends({
@@ -106,9 +105,6 @@ export function GroupTrends({
                   <line className="trend-median" x1={0} x2={chartW} y1={y(usual)} y2={y(usual)} />
                 )}
               </svg>
-              <span className="trend-top" aria-hidden="true">
-                {thousands(high)}
-              </span>
               {tipHere !== null && (
                 <div
                   className="chart-tooltip trend-tooltip"

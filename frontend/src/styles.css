@@ -2094,17 +2094,6 @@ select.is-filtering {
   fill: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
-.trend-top {
-  position: absolute;
-  top: 0;
-  left: 0;
-  font-size: var(--text-label);
-  line-height: 1;
-  color: var(--ink-muted);
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-}
-
 .chart-tooltip.trend-tooltip {
   transform: translate(-50%, -100%);
   white-space: nowrap;
