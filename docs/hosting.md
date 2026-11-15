@@ -12,6 +12,9 @@ browser ──https──▶ Cloudflare (Access: Google login, two allowed email
                              └─ deploy/data/finance.db
               nightly: backup ──▶ Cloudflare R2 (private bucket)
               daily:   refresh-all (new transactions)
+              every minute: new image from CI? verify, deploy, check health
+
+GitHub: pull request ─▶ CI checks ─▶ merge ─▶ CI on main ─▶ image + signed attestation ─▶ ghcr.io
 ```
 
 - **Access.** Cloudflare Access asks for a Google login and lets through only the emails on its policy, so who may
@@ -23,6 +26,13 @@ browser ──https──▶ Cloudflare (Access: Google login, two allowed email
 - **Secrets stay on the server**, in ignored files next to `deploy/compose.yaml`: `app.env`, `.env`, `backup.env`,
   `secrets/enablebanking.pem`. Nothing secret is in the image or the repo. The allowed emails live only in the
   Cloudflare Access policy, never in code.
+- **Deploys.** CI (`.github/workflows/ci.yml`) runs the backend tests, the frontend build, the image build and checks
+  of the deploy files on every pull request; branch protection on `main` requires them. When `main` passes, CI
+  publishes the image to `ghcr.io` with a signed provenance attestation. Every minute the server's deploy timer
+  (`deploy/scripts/auto-deploy.sh`) looks for a new image, verifies its attestation (built by this repository's
+  `ci.yml` from `main`, on GitHub's runners), snapshots the database, and switches over. If the new version isn't
+  healthy within two minutes it puts the previous image and the snapshot back. GitHub has no access to the server and
+  holds no secrets: the server pulls.
 - **Backups.** Every night the database is snapshotted, checked and compressed, then uploaded to a private Cloudflare
   R2 bucket. That's a different company from Hetzner. The daily copies are kept 35 days and the 1st of each month for
   about 13 months. The backups aren't encrypted, so keep the bucket private (no public access or custom domain on it)
@@ -110,12 +120,12 @@ bank or account there before connecting it in the app.
    ```
 
    `setup-server.sh` does the following:
-   - adds a 2 GB swap file, so building the image fits on a small server
-   - installs Docker, automatic security updates and the backup tools
+   - adds a 2 GB swap file
+   - installs Docker, the GitHub CLI (to verify images), automatic security updates and the backup tools
    - sets up the firewall and key-only SSH
    - sets the time zone
    - creates the settings files from their examples
-   - installs the daily jobs (`deploy/cron/finance`)
+   - installs the daily jobs (`deploy/cron/finance`) and the deploy timer (`deploy/systemd/`)
 
    Log out and back in afterwards, so you can use Docker without `sudo`.
 
@@ -152,11 +162,12 @@ On the server:
 ```bash
 cd /opt/finance
 sudo deploy/scripts/restore.sh --file /tmp/finance-move.db && rm /tmp/finance-move.db
-deploy/scripts/deploy.sh
+sudo deploy/scripts/deploy.sh
 ```
 
-The first run builds the image, which takes a few minutes. Once the containers are up, the tunnel shows as healthy
-in Cloudflare.
+`deploy.sh` pulls the latest image CI published from `main`, after verifying its attestation, and starts the app.
+Once the containers are up, the tunnel shows as healthy in Cloudflare. From then on the deploy timer deploys every new
+`main` by itself.
 
 Delete `finance-move.db` on your PC afterwards. Then open `https://finance.example.com`, sign in with Google, and
 check that the Overview looks as it did locally.
@@ -174,7 +185,11 @@ The restore keeps the current database aside as `finance.db.before-restore-<time
 
 | What | How (on the server, in `/opt/finance`) |
 |---|---|
-| Deploy the latest `main` | `deploy/scripts/deploy.sh` |
+| Deploy a change | Merge its pull request. CI publishes the image and the server deploys it within about a minute |
+| Deploy the latest `main` now | `sudo deploy/scripts/deploy.sh` |
+| What did the deploys do? | `journalctl -t finance-deploy --since today` (quiet when there's nothing new) |
+| Pause automatic deploys | `sudo systemctl stop finance-deploy.timer` (`start` to resume) |
+| Go back to the previous version | `docker tag finance-app:previous finance-app:current && docker compose -f deploy/compose.yaml up -d`, then stop the timer until `main` is fixed |
 | App logs | `docker compose -f deploy/compose.yaml logs --tail 100 app` |
 | Did this morning's refresh work? | `journalctl -t finance-refresh --since today` |
 | Did last night's backup work? | `journalctl -t finance-backup --since yesterday` |

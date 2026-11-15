@@ -1,32 +1,10 @@
 #!/usr/bin/env bash
-# Update the server to the latest main and restart the app:
+# Deploy the latest main now, instead of waiting for the timer (it checks every minute anyway):
 #
-#   deploy/scripts/deploy.sh
+#   sudo deploy/scripts/deploy.sh
 #
-# Pulls main, rebuilds the image, restarts the containers and waits until the app answers its health check.
+# Same steps as the timer (deploy/scripts/auto-deploy.sh): only an image CI published from main, with a verified
+# attestation, is deployed; the app must come up healthy or the previous version and database are put back.
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-COMPOSE=(docker compose -f "$REPO_DIR/deploy/compose.yaml")
-
-cd "$REPO_DIR"
-git fetch --quiet origin main
-git merge --ff-only origin/main
-echo "==> At $(git log -1 --format='%h %s')"
-
-"${COMPOSE[@]}" build --pull app
-"${COMPOSE[@]}" up -d --remove-orphans
-
-echo "==> Waiting for the app to be healthy"
-for _ in $(seq 1 30); do
-  status="$(docker inspect --format '{{.State.Health.Status}}' "$("${COMPOSE[@]}" ps -q app)" 2>/dev/null || true)"
-  if [[ "$status" == "healthy" ]]; then
-    docker image prune -f >/dev/null
-    echo "==> Up and healthy"
-    exit 0
-  fi
-  sleep 2
-done
-echo "The app didn't become healthy. Its logs:" >&2
-"${COMPOSE[@]}" logs --tail 50 app >&2
-exit 1
+exec "$(dirname "${BASH_SOURCE[0]}")/auto-deploy.sh" "$@"
