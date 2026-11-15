@@ -93,6 +93,24 @@ def test_matching_amounts_between_own_accounts_are_transfers():
     assert result["in"] == ("transfer", "transfer")
 
 
+def test_card_refunds_and_purchases_are_not_paired_as_transfers():
+    result = run(
+        {
+            "card": [
+                tx("refund", "82.90", "CRDT", date="2026-10-02", creditor="CAR RENTAL AS"),
+                tx("purchase", "129", "DBIT", date="2026-10-03", creditor="STREAMING SERVICE"),
+            ],
+            "checking": [
+                tx("fuel", "82.90", "DBIT", date="2026-10-01", creditor="CIRCLE K"),
+                tx("repaid", "129", "CRDT", date="2026-10-03", text="Fra: Payment provider"),
+            ],
+        }
+    )
+    assert result["fuel"] == ("transport", "keyword")
+    assert result["refund"][0] != "transfer" and result["purchase"][0] != "transfer"
+    assert result["repaid"][0] != "transfer"
+
+
 def test_income_keywords_only_for_money_in():
     result = run({"checking": [tx("in", "100", "CRDT", text="Renter"), tx("out", "50", "DBIT", text="Renter")]})
     assert result["in"] == ("other_income", "keyword")
