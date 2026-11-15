@@ -3,7 +3,7 @@
 # time (deploy/compose.yaml).
 
 # --- Frontend ---
-FROM node:24-bookworm-slim AS frontend
+FROM node:26-bookworm-slim AS frontend
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
