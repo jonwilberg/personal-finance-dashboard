@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Put a database back from a backup, or move one in:
 #
-#   sudo deploy/scripts/restore.sh <age-identity-file> [backup name, e.g. finance-2026-11-20.db.gz.age]
-#       Downloads that backup from R2 (default: the newest daily one) and decrypts it with your private age key.
+#   sudo deploy/scripts/restore.sh [backup name, e.g. finance-2026-11-20.db.gz]
+#       Downloads that backup from R2 (default: the newest daily one).
 #   sudo deploy/scripts/restore.sh --file <finance.db>
 #       Uses a plain database file you copied to the server (e.g. when moving in from your PC).
 #
 # Stops the app, keeps the current database as finance.db.before-restore-<time>, puts the new one in place, checks
-# it, and starts the app again. The private age key is only needed here; keep it off the server otherwise.
+# it, and starts the app again.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -21,19 +21,19 @@ chmod 0700 "$WORK"
 if [[ "${1:-}" == "--file" ]]; then
   cp "${2:?Usage: restore.sh --file <finance.db>}" "$WORK/finance.db"
 else
-  IDENTITY="${1:?Usage: restore.sh <age-identity-file> [backup name] | --file <finance.db>}"
   # shellcheck disable=SC1091
   source "$REPO_DIR/deploy/backup.env"
-  export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
+  # NO_HEAD: the rclone in Ubuntu 24.04 checks each upload with a versioned HEAD request R2 doesn't implement
+  # (501); R2 still verifies the upload's checksum as it arrives.
+  export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true RCLONE_CONFIG_R2_NO_HEAD=true
   export RCLONE_CONFIG_R2_ENDPOINT="${R2_ENDPOINT:?}" RCLONE_CONFIG_R2_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID:?}"
   export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY:?}"
-  NAME="${2:-$(rclone lsf "r2:$BACKUP_BUCKET/daily" | sort | tail -1)}"
+  NAME="${1:-$(rclone lsf "r2:$BACKUP_BUCKET/daily" | sort | tail -1)}"
   [[ -n "$NAME" ]] || { echo "No backups found in r2:$BACKUP_BUCKET/daily" >&2; exit 1; }
   echo "==> Restoring $NAME"
   folder=daily
   rclone lsf "r2:$BACKUP_BUCKET/daily/$NAME" >/dev/null 2>&1 || folder=monthly
-  rclone copyto "r2:$BACKUP_BUCKET/$folder/$NAME" "$WORK/backup.age"
-  age -d -i "$IDENTITY" -o "$WORK/finance.db.gz" "$WORK/backup.age"
+  rclone copyto "r2:$BACKUP_BUCKET/$folder/$NAME" "$WORK/finance.db.gz"
   gunzip "$WORK/finance.db.gz"
 fi
 

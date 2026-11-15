@@ -1,5 +1,7 @@
-"""Who may use the app when it's hosted: Cloudflare Access signs every request that passes its login, and the app
-checks that signature and the signed-in email itself, so a gap in the Cloudflare setup doesn't open the door.
+"""Who may use the app when it's hosted: Cloudflare Access lets through only the people on its policy (a Google
+login for the allowed emails) and signs every request it lets through. The app checks that signature on every
+request, so nothing reaches it without passing Cloudflare's login for this app, even through some other way in.
+Who is allowed is decided in Cloudflare alone.
 
 Cloudflare Access sends its token in the Cf-Access-Jwt-Assertion header (and the CF_Authorization cookie). It's an
 RS256 JWT signed with keys published at https://<team domain>/cdn-cgi/access/certs, with the Access application's
@@ -27,8 +29,6 @@ class AccessSettings:
     team_domain: str
     # The Access application's "Application Audience (AUD) Tag".
     audience: str
-    # Lower-case emails that may use the app, even if the Access policy were to let more through.
-    allowed_emails: frozenset[str]
 
     @property
     def issuer(self) -> str:
@@ -50,7 +50,7 @@ class AccessVerifier:
         self.keys = keys or jwt.PyJWKClient(settings.certs_url, cache_keys=True, lifespan=3600, timeout=10)
 
     def email(self, token: str | None) -> str:
-        """The signed-in email, if the token is valid and the email is allowed; otherwise AccessDenied."""
+        """The signed-in email, if the token is a valid Access login for this app; otherwise AccessDenied."""
         if not token:
             raise AccessDenied("Not signed in through Cloudflare Access")
         try:
@@ -67,6 +67,6 @@ class AccessVerifier:
         except (jwt.PyJWTError, jwt.PyJWKClientError) as error:
             raise AccessDenied(f"Invalid Access token: {error}") from error
         email = str(claims.get("email", "")).strip().lower()
-        if not email or email not in self.settings.allowed_emails:
-            raise AccessDenied("This account may not use the app")
+        if not email:
+            raise AccessDenied("The Access token has no signed-in email")
         return email

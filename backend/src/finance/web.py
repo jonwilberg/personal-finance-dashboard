@@ -125,7 +125,7 @@ def create_app(
 
         @app.middleware("http")
         async def require_access(request: Request, call_next):  # type: ignore[no-untyped-def]
-            """Every request but the health check needs a valid Cloudflare Access token for an allowed email."""
+            """Every request but the health check needs a valid Cloudflare Access token for this app."""
             if request.url.path == HEALTH_PATH:
                 return await call_next(request)
             token = request.headers.get(HEADER) or request.cookies.get(COOKIE)
@@ -536,8 +536,8 @@ def serve_app(
 
     if host not in LOOPBACK_HOSTS and settings.access is None:
         raise ConfigError(
-            f"Refusing to listen on {host} without Cloudflare Access: set CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD and "
-            "FINANCE_ALLOWED_EMAILS (see docs/hosting.md)."
+            f"Refusing to listen on {host} without Cloudflare Access: set CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD "
+            "(see docs/hosting.md)."
         )
     app = create_app(settings)
     redirect = urlparse(app.state.redirect_url)

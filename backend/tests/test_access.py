@@ -19,7 +19,7 @@ from test_web import FakeBank, connect
 
 TEAM = "example.cloudflareaccess.com"
 AUD = "aud-tag"
-ALLOWED = "one@example.com"
+USER = "one@example.com"
 
 
 @pytest.fixture(scope="module")
@@ -27,7 +27,7 @@ def signing_key():
     return rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
 
-def token(key, email=ALLOWED, aud=AUD, iss=f"https://{TEAM}", expires_in=600):
+def token(key, email=USER, aud=AUD, iss=f"https://{TEAM}", expires_in=600):
     now = int(time.time())
     claims = {"email": email, "aud": aud, "iss": iss, "iat": now, "exp": now + expires_in, "sub": "x"}
     return jwt.encode(claims, key, algorithm="RS256", headers={"kid": "k1"})
@@ -45,7 +45,7 @@ def settings(tmp_path, access=True):
         private_key_path=tmp_path / "unused.pem",
         redirect_url="https://finance.example.com/callback",
         data_dir=tmp_path / "data",
-        access=AccessSettings(TEAM, AUD, frozenset({ALLOWED})) if access else None,
+        access=AccessSettings(TEAM, AUD) if access else None,
     )
 
 
@@ -56,18 +56,18 @@ def hosted(tmp_path, signing_key):
     return TestClient(app, follow_redirects=False)
 
 
-def test_requests_need_a_valid_access_token_for_an_allowed_email(hosted, signing_key):
+def test_requests_need_a_valid_access_token_for_this_app(hosted, signing_key):
     assert hosted.get("/api/overview").status_code == 403
     assert hosted.get("/api/overview", headers={"Cf-Access-Jwt-Assertion": "nonsense"}).status_code == 403
 
     good = {"Cf-Access-Jwt-Assertion": token(signing_key)}
     assert hosted.get("/api/overview", headers=good).status_code == 200
-    assert hosted.get("/api/me", headers=good).json() == {"email": ALLOWED}
+    assert hosted.get("/api/me", headers=good).json() == {"email": USER}
     # The bank's redirect back arrives in the browser with the Access cookie.
     assert hosted.get("/callback", cookies={"CF_Authorization": token(signing_key)}).status_code == 303
 
     for bad in [
-        token(signing_key, email="someone@else.com"),
+        token(signing_key, email=""),
         token(signing_key, aud="another-app"),
         token(signing_key, iss="https://other.cloudflareaccess.com"),
         token(signing_key, expires_in=-3600),
@@ -96,7 +96,7 @@ def test_access_settings_come_all_together_or_not_at_all(tmp_path, monkeypatch):
     key.write_text("unused")
     monkeypatch.setenv("ENABLE_BANKING_APP_ID", "app-id")
     monkeypatch.setenv("ENABLE_BANKING_KEY_PATH", str(key))
-    for name in ("CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "FINANCE_ALLOWED_EMAILS"):
+    for name in ("CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr("finance.config.BACKEND_DIR", tmp_path)
     assert load_settings().access is None
@@ -106,9 +106,7 @@ def test_access_settings_come_all_together_or_not_at_all(tmp_path, monkeypatch):
         load_settings()
 
     monkeypatch.setenv("CF_ACCESS_AUD", AUD)
-    monkeypatch.setenv("FINANCE_ALLOWED_EMAILS", " One@Example.com, two@example.com ")
-    access = load_settings().access
-    assert access == AccessSettings(TEAM, AUD, frozenset({"one@example.com", "two@example.com"}))
+    assert load_settings().access == AccessSettings(TEAM, AUD)
 
 
 def test_refresh_all_fetches_every_connected_account_and_reports_expired_consents(tmp_path):
