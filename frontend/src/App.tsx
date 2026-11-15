@@ -191,10 +191,15 @@ function AccountsPage({ titleActions, onError }: { titleActions: HTMLElement | n
   );
 }
 
-type RefreshStatus = { state: "waiting" | "refreshing" | "done" } | { state: "failed"; message: string };
+// A finished account carries its new fetch time, so the list shows it straight away rather than the time from
+// before the refresh (the accounts themselves are only reloaded once every account is done).
+type RefreshStatus =
+  | { state: "waiting" | "refreshing" }
+  | { state: "done"; updated: string | null }
+  | { state: "failed"; message: string };
 
 /** The most recent time the account's balance or transactions were fetched from the bank. */
-function lastUpdated(account: Account) {
+function lastUpdated(account: Pick<Account, "balances" | "transactions">) {
   const times = [account.balances?.fetched_at, account.transactions?.fetched_at].filter((t): t is string => !!t);
   return times.length ? times.reduce((a, b) => (new Date(a) > new Date(b) ? a : b)) : null;
 }
@@ -216,8 +221,8 @@ function RefreshAll({ connections, onChanged }: { connections: Connection[]; onC
     for (const { account } of refreshable) {
       setStatus((s) => ({ ...s, [account.uid]: { state: "refreshing" } }));
       try {
-        await api.refresh(account.uid);
-        setStatus((s) => ({ ...s, [account.uid]: { state: "done" } }));
+        const refreshed = await api.refresh(account.uid);
+        setStatus((s) => ({ ...s, [account.uid]: { state: "done", updated: lastUpdated(refreshed) } }));
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setStatus((s) => ({ ...s, [account.uid]: { state: "failed", message } }));
@@ -229,8 +234,13 @@ function RefreshAll({ connections, onChanged }: { connections: Connection[]; onC
 
   const done = Object.values(status).filter((s) => s.state === "done" || s.state === "failed").length;
   const failed = Object.values(status).filter((s) => s.state === "failed").length;
+  // Each row's time: the new one for an account just refreshed, otherwise the one from the last load.
+  const updatedOf = (row: (typeof rows)[number]) => {
+    const s = status[row.account.uid];
+    return (s?.state === "done" && s.updated) || row.updated;
+  };
   const latest = rows
-    .map((row) => row.updated)
+    .map(updatedOf)
     .filter((t): t is string => !!t)
     .reduce<string | null>((a, b) => (a && new Date(a) > new Date(b) ? a : b), null);
 
@@ -246,7 +256,9 @@ function RefreshAll({ connections, onChanged }: { connections: Connection[]; onC
       </span>
       {/* Shown on hover or focus of the summary, and kept open while refreshing to show progress. */}
       <ul className={`refresh-list small${running ? " is-open" : ""}`} role="tooltip">
-        {rows.map(({ connection, account, updated }) => {
+        {rows.map((row) => {
+          const { connection, account } = row;
+          const updated = updatedOf(row);
           const s = status[account.uid];
           return (
             <li key={account.uid}>
