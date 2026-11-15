@@ -393,7 +393,7 @@ function niceScale(value: number) {
 }
 
 /** A figure in whole thousands, as "38k" (under a thousand as it is). */
-function thousands(value: number) {
+export function thousands(value: number) {
   if (value < 1000) return String(Math.round(value));
   return `${(value / 1000).toLocaleString("nb-NO", { maximumFractionDigits: 0 })}k`;
 }

@@ -306,6 +306,8 @@ export interface Overview {
   groups?: SpendingGroup[];
   /** This month's income per income category, largest first. */
   income_breakdown?: IncomeRow[];
+  /** Each spending group's median month; null with too little history. */
+  group_usual?: Record<string, number> | null;
   changes?: OverviewChange[];
   scoreboard?: ScoreboardRow[];
 }
