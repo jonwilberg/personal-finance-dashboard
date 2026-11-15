@@ -26,10 +26,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Test on the Python the image runs, read from the Dockerfile (Dependabot bumps it there).
+      - id: python
+        working-directory: .
+        run: echo "version=$(sed -nE 's/^FROM python:([0-9.]+)-.*/\1/p' Dockerfile)" >> "$GITHUB_OUTPUT"
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: "0.13.7"
-          python-version: "3.13"
+          python-version: ${{ steps.python.outputs.version }}
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
       - run: uv sync --frozen
@@ -45,9 +49,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Build with the Node the image builds with, read from the Dockerfile.
+      - id: node
+        working-directory: .
+        run: echo "version=$(sed -nE 's/^FROM node:([0-9]+)-.*/\1/p' Dockerfile)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "24"
+          node-version: ${{ steps.node.outputs.version }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
@@ -66,8 +74,12 @@ jobs:
         with:
           context: .
           push: false
+          load: true
+          tags: finance-app:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Start the image as the server runs it
+        run: deploy/scripts/smoke-test.sh finance-app:ci
 
   deploy-files:
     name: Deploy files
