@@ -168,10 +168,6 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
             onChanged={recount}
             onError={onError}
           />
-          <p className="meta small">
-            In the order of the bar above. Select a column heading to sort by it, again to reverse, and a third time to
-            go back to the bar&rsquo;s order.
-          </p>
         </section>
       )}
     </>

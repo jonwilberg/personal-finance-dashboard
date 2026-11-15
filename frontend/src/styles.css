@@ -2190,8 +2190,8 @@ select.is-filtering {
 .score-group {
   display: inline-block;
   flex: none;
-  width: 4px;
-  height: 1.15em;
+  width: 6px;
+  height: 1.4em;
   border-radius: 1px;
 }
 
