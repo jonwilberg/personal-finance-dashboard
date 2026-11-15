@@ -226,9 +226,16 @@ def find_transfers(transactions: list[dict[str, Any]], accounts: list[Account], 
     for payment in card_payments:
         _pair(payment, transactions, transfers, CARD_PAYMENT_WINDOW_DAYS, exclude_accounts=cards)
 
-    # Same amount leaving one of your accounts and arriving in another shortly after.
-    for credit in (t for t in transactions if t["direction"] == "CRDT" and t["id"] not in transfers):
-        _pair(credit, transactions, transfers, TRANSFER_WINDOW_DAYS, exclude_accounts={credit["account_uid"]}, mark_self=True)
+    # Same amount leaving one of your accounts and arriving in another shortly after. Cards take no part: money
+    # reaches a card only as a bill payment (above), so a card's refund or purchase that happens to match an amount in
+    # a bank account is still a refund or a purchase.
+    for credit in (
+        t for t in transactions if t["direction"] == "CRDT" and t["id"] not in transfers and t["account_uid"] not in cards
+    ):
+        _pair(
+            credit, transactions, transfers, TRANSFER_WINDOW_DAYS, exclude_accounts={credit["account_uid"]} | cards,
+            mark_self=True,
+        )
     return transfers
 
 
