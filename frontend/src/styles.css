@@ -2105,8 +2105,31 @@ select.is-filtering {
   cursor: pointer;
 }
 
-.trend-hit:hover {
-  fill: color-mix(in srgb, var(--ink) 5%, transparent);
+/* The selected month's column through every row and the month names, tinted like the chart above. */
+.trends {
+  position: relative;
+}
+
+.trend-column {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+  background: var(--rule);
+  pointer-events: none;
+}
+
+.trend-column.is-selected {
+  opacity: 0.6;
+}
+
+.trend-column.is-hovered {
+  opacity: 0.3;
+}
+
+.trend-row,
+.trend-months {
+  position: relative;
 }
 
 .chart-tooltip.trend-tooltip {

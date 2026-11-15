@@ -5,8 +5,9 @@ import { monthTitle } from "./SpendingChart";
 import { groupFill } from "./spendingGroups";
 
 // Each spending group's last 12 months, one small row per group beside the month's split bar, top to bottom in the
-// bar's order. Monthly columns in the group's colour (the selected month solid, the rest a tint), a dashed line at
-// the group's median month, and on the right this month against that median.
+// bar's order. Monthly columns in the group's colour, a dashed line at the group's median month, and on the right
+// this month against that median. As in the chart above, every month keeps its colour and the selected month sits
+// in a tinted column (the hovered one in a lighter one), here running through all the rows.
 // Each row has its own scale, so a small group's trend shows as clearly as Fixed's.
 
 const NAME_W = 132; // the group's name, when shown
@@ -51,6 +52,18 @@ export function GroupTrends({
 
   return (
     <div className="trends" style={{ width }} onMouseLeave={() => onActive(null)}>
+      {series.map((m, i) => {
+        const isSelected = m.month === selected;
+        if (!isSelected && tip?.index !== i) return null;
+        return (
+          <div
+            key={m.month}
+            className={`trend-column${isSelected ? " is-selected" : " is-hovered"}`}
+            style={{ left: nameW + i * slot + 2, width: slot - 4 }}
+            aria-hidden="true"
+          />
+        );
+      })}
       {groups.map((group) => {
         const values = series.map((m) => m.groups[group.id] ?? 0);
         const high = Math.max(...values, 1);
@@ -81,7 +94,6 @@ export function GroupTrends({
                 <line className="trend-base" x1={0} x2={chartW} y1={PAD_TOP + chartH + 0.5} y2={PAD_TOP + chartH + 0.5} />
                 {values.map((v, i) => {
                   const top = y(v);
-                  const isSelected = series[i].month === selected;
                   return (
                     <g key={series[i].month}>
                       {v > 0 && (
@@ -90,7 +102,7 @@ export function GroupTrends({
                           y={top}
                           width={colW}
                           height={Math.max(PAD_TOP + chartH - top, 1)}
-                          fill={isSelected ? groupFill(group.id) : `color-mix(in srgb, ${groupFill(group.id)} 38%, var(--paper))`}
+                          fill={groupFill(group.id)}
                         />
                       )}
                       {/* The whole slot is the hover and click target, taller and wider than the column. */}
