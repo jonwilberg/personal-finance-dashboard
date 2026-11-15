@@ -22,6 +22,15 @@ apt-get update
 apt-get -y upgrade
 apt-get install -y ca-certificates curl git sqlite3 rclone unattended-upgrades ufw
 
+echo "==> Swap (2 GB), so building the image fits on a small server"
+if ! swapon --show | grep -q /swapfile; then
+  [[ -f /swapfile ]] || { fallocate -l 2G /swapfile && chmod 0600 /swapfile && mkswap /swapfile >/dev/null; }
+  swapon /swapfile
+  grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >>/etc/fstab
+fi
+echo 'vm.swappiness=10' >/etc/sysctl.d/90-finance-swap.conf
+sysctl -q -p /etc/sysctl.d/90-finance-swap.conf
+
 echo "==> Automatic security updates (with reboots at 04:00 when needed)"
 cat >/etc/apt/apt.conf.d/52finance-unattended <<'EOF'
 Unattended-Upgrade::Automatic-Reboot "true";

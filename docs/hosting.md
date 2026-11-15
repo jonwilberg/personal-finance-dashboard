@@ -110,6 +110,7 @@ bank or account there before connecting it in the app.
    ```
 
    `setup-server.sh` does the following:
+   - adds a 2 GB swap file, so building the image fits on a small server
    - installs Docker, automatic security updates and the backup tools
    - sets up the firewall and key-only SSH
    - sets the time zone
