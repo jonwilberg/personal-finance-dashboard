@@ -55,9 +55,12 @@ Rough order: Cloudflare and the other accounts first, then the server, then movi
 5. **Tunnel.**
    1. Go to *Networks → Tunnels → Create → Cloudflared*. Name it e.g. `finance`.
    2. From the Docker install command, copy only the token (the long string after `--token`). It goes in
-      `deploy/.env`.
-   3. Add a *public hostname*: `finance.example.com` → service `HTTP` at `app:8765`. `app` is the app
-      container's name on the compose network.
+      `deploy/.env`. Don't run the install command itself: the connector runs on the server, in the `tunnel`
+      container. A second connector anywhere else would get some of the requests, and they would fail.
+   3. Under *Routes → Add route → Published application*, set the hostname to `finance.example.com` and the
+      service URL to `http://app:8765`. `app` is the app container's name on the compose network. Use plain
+      `http://`, since that connection never leaves the server, and leave the path empty. The tunnel shows as
+      down until the server is running.
 6. **R2 bucket for backups.**
    1. Go to *R2 → Create bucket*, e.g. `finance-backups`, in the EU jurisdiction.
    2. Under *Manage API tokens*, create a token with *Object Read & Write* on that bucket only.
