@@ -2185,3 +2185,20 @@ select.is-filtering {
 .version-footer .version-current {
   color: var(--positive);
 }
+
+/* A row's group colour in the category table: a slim bar, as on the spending bar above. */
+.score-group {
+  display: inline-block;
+  flex: none;
+  width: 4px;
+  height: 1.15em;
+  border-radius: 1px;
+}
+
+.score-group.is-uncategorized {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--ink-muted) 0 1.5px,
+    var(--paper-sunken) 1.5px 4px
+  );
+}

@@ -1,10 +1,13 @@
 import { Fragment, useMemo, useState } from "react";
-import type { OverviewMonth, ScoreboardRow } from "./api";
+import type { OverviewMonth, ScoreboardRow, SpendingGroup } from "./api";
 import { CategoryTransactions } from "./CategoryTransactions";
 import { formatKr } from "./format";
 import { monthTitle } from "./SpendingChart";
+import { groupFill } from "./spendingGroups";
 
-type SortKey = "name" | "amount" | "usual" | "delta" | "ltm";
+// "bar": the order of the spending bar above, read top to bottom (the default); the others are column sorts.
+type SortKey = "bar" | "name" | "amount" | "usual" | "delta" | "ltm";
+const UNCATEGORIZED = "uncategorized";
 
 const COLUMNS: { key: SortKey | null; label: string; numeric: boolean }[] = [
   { key: "name", label: "Category", numeric: false },
@@ -16,11 +19,38 @@ const COLUMNS: { key: SortKey | null; label: string; numeric: boolean }[] = [
 ];
 
 /**
- * Every spending category for the selected month, sortable, with a sparkline of its monthly history. A row opens
- * to the month's transactions in that category, to move any that belong somewhere else.
+ * The categories in the order the spending bar above shows them, top to bottom: its groups from the top (Other
+ * first, Fixed last), and within a group the blocks as they're stacked. Categories with nothing spent this month
+ * aren't on the bar and come last.
+ */
+function barOrder(rows: ScoreboardRow[], groups: SpendingGroup[]): ScoreboardRow[] {
+  const rank = (row: ScoreboardRow) => {
+    const index = groups.findIndex((g) => g.id === row.group);
+    return index < 0 ? groups.length : index;
+  };
+  // The bar's stacking order, bottom first (see SpendingSplit), then reversed to read from the top.
+  const stacked = rows
+    .filter((r) => r.amount > 0)
+    .sort(
+      (a, b) =>
+        rank(a) - rank(b) ||
+        Number(a.category === UNCATEGORIZED) - Number(b.category === UNCATEGORIZED) ||
+        b.amount - a.amount,
+    )
+    .reverse();
+  const rest = rows.filter((r) => r.amount <= 0).sort((a, b) => a.name.localeCompare(b.name, "nb"));
+  return [...stacked, ...rest];
+}
+
+/**
+ * Every spending category for the selected month, in the spending bar's order (or sorted by a column), each marked
+ * with its group's colour and with a sparkline of its monthly history. A row opens to the month's transactions in
+ * that category, to move any that belong somewhere else.
  */
 export function CategoryScoreboard(props: {
   rows: ScoreboardRow[];
+  /** The spending groups in stacking order, for the bar's order and each row's colour mark. */
+  groups: SpendingGroup[];
   months: OverviewMonth[];
   total: number;
   usual: number | null;
@@ -30,26 +60,32 @@ export function CategoryScoreboard(props: {
   onChanged: () => void;
   onError: (e: unknown) => void;
 }) {
-  const [sort, setSort] = useState<{ key: SortKey; descending: boolean }>({ key: "amount", descending: true });
+  const [sort, setSort] = useState<{ key: SortKey; descending: boolean }>({ key: "bar", descending: false });
   const [open, setOpen] = useState<string | null>(null);
   const flip = (category: string) => setOpen((current) => (current === category ? null : category));
 
   const rows = useMemo(() => {
-    const value = (row: ScoreboardRow) => (sort.key === "name" ? row.name : (row[sort.key] ?? -Infinity));
+    if (sort.key === "bar") return barOrder(props.rows, props.groups);
+    const key = sort.key;
+    const value = (row: ScoreboardRow) => (key === "name" ? row.name : (row[key] ?? -Infinity));
     return [...props.rows].sort((a, b) => {
       const [x, y] = [value(a), value(b)];
       const order = typeof x === "string" ? x.localeCompare(String(y), "nb") : (x as number) - (y as number);
       return sort.descending ? -order : order;
     });
-  }, [props.rows, sort]);
+  }, [props.rows, props.groups, sort]);
 
   // Every spending category is a row (uncategorized included), so together they make the period's total spending.
   const ltmTotal = props.rows.reduce((sum, row) => sum + row.ltm, 0);
 
+  // A heading sorts by its column, then the other way round, then back to the bar's order.
   const toggle = (key: SortKey) =>
-    setSort((current) =>
-      current.key === key ? { key, descending: !current.descending } : { key, descending: key !== "name" },
-    );
+    setSort((current) => {
+      const first = key !== "name"; // numbers start largest first, names A to Z
+      if (current.key !== key) return { key, descending: first };
+      if (current.descending === first) return { key, descending: !first };
+      return { key: "bar", descending: false };
+    });
 
   return (
     <table className="scoreboard">
@@ -102,6 +138,13 @@ export function CategoryScoreboard(props: {
                     <span className="score-chevron" aria-hidden="true">
                       ›
                     </span>
+                    {/* Its group's colour, as on the bar; striped for spending without a category. */}
+                    <span
+                      className={`score-group${row.category === UNCATEGORIZED ? " is-uncategorized" : ""}`}
+                      style={row.category === UNCATEGORIZED ? undefined : { background: groupFill(row.group) }}
+                      title={props.groups.find((g) => g.id === row.group)?.name}
+                      aria-hidden="true"
+                    />
                     <span className="score-name">{row.name}</span>
                   </button>
                 </td>
