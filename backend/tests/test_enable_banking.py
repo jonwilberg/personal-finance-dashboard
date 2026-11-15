@@ -241,3 +241,41 @@ def test_same_looking_transactions_in_one_response_are_kept(key_pair):
     coffee = {"entry_reference": "x", "booking_date": "2026-10-01", "transaction_amount": {"amount": "45", "currency": "NOK"}}
     client = make_client(private_pem, lambda request: httpx.Response(200, json={"transactions": [coffee, coffee]}))
     assert len(list(client.iter_transactions("acc-1"))) == 2
+
+
+def test_reads_of_enable_banking_data_are_retried_when_it_does_not_answer(key_pair, monkeypatch):
+    monkeypatch.setattr("finance.enable_banking.RETRY_PAUSE_SECONDS", 0)
+    private_pem, _ = key_pair
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        if len(calls) == 1:
+            raise httpx.ReadTimeout("slow", request=request)
+        return httpx.Response(200, json={"aspsps": [{"name": "Bank", "country": "NO"}]})
+
+    assert make_client(private_pem, handler).list_aspsps(country="NO") == [{"name": "Bank", "country": "NO"}]
+    assert calls == ["/aspsps", "/aspsps"]
+
+
+def test_no_answer_becomes_an_api_error_and_bank_reads_and_writes_are_not_repeated(key_pair, monkeypatch):
+    monkeypatch.setattr("finance.enable_banking.RETRY_PAUSE_SECONDS", 0)
+    private_pem, _ = key_pair
+    calls = []
+
+    def handler(request):
+        calls.append((request.method, request.url.path))
+        raise httpx.ConnectTimeout("down", request=request)
+
+    client = make_client(private_pem, handler)
+    with pytest.raises(EnableBankingError) as error:
+        client.list_aspsps()
+    assert error.value.status_code == 504 and "try again" in error.value.body
+    assert len(calls) == 3  # the first try and two retries
+
+    calls.clear()
+    with pytest.raises(EnableBankingError):
+        client.get_balances("acc-1")  # reaches the bank, which allows only a few requests a day
+    with pytest.raises(EnableBankingError):
+        client.create_session("code")  # a write that may have happened
+    assert calls == [("GET", "/accounts/acc-1/balances"), ("POST", "/sessions")]

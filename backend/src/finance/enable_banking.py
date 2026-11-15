@@ -27,6 +27,12 @@ CAPPED_PAGE_SIZE = 100
 CAPPED_LOOKBACK_DAYS = 730
 # A safety net for banks that cap: at most this many extra requests per account and fetch.
 CAPPED_MAX_REQUESTS = 40
+# Enable Banking now and then doesn't answer in time. Reads of its own data (the bank list, sessions, the application)
+# are tried this many times more, this long apart. Reads of account data reach the bank, where each request counts
+# against a small daily limit, and writes may have happened, so those aren't repeated.
+RETRIES = 2
+RETRY_PAUSE_SECONDS = 1.0
+NOT_ANSWERING = "didn't answer in time. Please try again in a minute."
 
 
 class EnableBankingError(Exception):
@@ -81,7 +87,16 @@ class EnableBankingClient:
 
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         headers = {"Authorization": f"Bearer {self._auth_token()}"}
-        response = self._http.request(method, path, headers=headers, **kwargs)
+        retries = RETRIES if method in ("GET", "DELETE") and not path.startswith("/accounts/") else 0
+        for attempt in range(retries + 1):
+            try:
+                response = self._http.request(method, path, headers=headers, **kwargs)
+                break
+            except httpx.TransportError as error:  # timeouts and dropped connections
+                if attempt == retries:
+                    # An API error like any other, so callers and the web app handle it (a clear message, not a crash).
+                    raise EnableBankingError(504, NOT_ANSWERING) from error
+                time.sleep(RETRY_PAUSE_SECONDS)
         if response.is_error:
             try:
                 body = response.json()

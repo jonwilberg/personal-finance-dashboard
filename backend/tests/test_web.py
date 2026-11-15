@@ -474,3 +474,20 @@ def test_transactions_can_be_narrowed_to_a_month_owner_and_category(api, bank):
     api.put("/api/transactions/categories", json={"changes": [
         {"id": t["id"], "category": None} for t in api.get("/api/transactions").json()["items"]]})
     assert ids(category="uncategorized") == ids(view="review")
+
+
+def test_enable_banking_not_answering_is_a_clear_error_not_a_crash(tmp_path, monkeypatch):
+    monkeypatch.setattr("finance.enable_banking.RETRY_PAUSE_SECONDS", 0)
+
+    def slow(request):
+        raise httpx.ReadTimeout("slow", request=request)
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    client = EnableBankingClient("app-id", pem, http_client=httpx.Client(base_url=API_URL, transport=httpx.MockTransport(slow)))
+    settings = Settings("app-id", tmp_path / "unused.pem", "https://localhost:8765/callback", tmp_path / "data")
+    api = TestClient(create_app(settings, client=client), raise_server_exceptions=False)
+
+    response = api.post("/api/connections", json={"bank": "Some Bank", "country": "NO"})
+    assert response.status_code == 502
+    assert "didn't answer in time" in response.json()["detail"]
