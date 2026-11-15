@@ -4,9 +4,9 @@ import { formatKr } from "./format";
 import { groupFill } from "./spendingGroups";
 
 // The month as money in and money out, side by side: a "zoom in" on the month's column in the chart above.
-// - Spending is one wide bar stacked like the chart (the groups in their order from the bottom, a slightly wider gap
-//   between groups, each group's categories largest first, uncategorized hatched on top). Each category's name and
-//   amount sit inside its block when they fit; on the right each group has its total, joined to its band by a leader.
+// - Spending is one wide bar stacked like the chart (the groups in their order from the bottom, each group's
+//   categories largest first, uncategorized hatched on top). Each category's name and amount sit inside its block
+//   when they fit; on the right each group has its total, on a leader from a line spanning the group's whole band.
 // - Income stands to its left on the same scale, split by income category in tints of the income ink, labelled the
 //   same way. It is cut short with a break when it is far above the spending.
 // - A bracket between the bars marks what was kept or overspent; the two totals head their bars.
@@ -17,7 +17,6 @@ const TOTALS_H = 34; // a total above its bar
 const HEAD = 76; // room above the taller bar for its total and, above that, the savings connector
 const BAR_H = 480; // the bars' area below the totals
 const GAP = 2; // surface gap between blocks
-const GROUP_GAP = 6; // a slightly wider gap between groups
 const LINE = 22; // a group label's line on wide screens
 const NARROW_LINE = 36; // two lines (name, then figures) on narrow ones
 const LABEL_GAP = 6; // between group labels
@@ -150,7 +149,7 @@ export function SpendingSplit({
   const barX = size.income + size.gap;
   const barRight = barX + size.spent;
   const labelX = barRight + size.leader;
-  const labelW = Math.max(Math.min(width - labelX, 360), 0); // capped, so totals stay near their names
+  const labelW = Math.max(Math.min(width - labelX, 270), 0); // capped, so totals stay near their names
   const base = HEAD + BAR_H; // the bars' common bottom
 
   // One scale for both bars: the taller one fills the area, unless income is far above the spending, when the
@@ -165,7 +164,7 @@ export function SpendingSplit({
     (r) => r.amount,
     base,
     base - spentTop,
-    (i) => (ordered[i].group !== ordered[i - 1].group ? GROUP_GAP : GAP),
+    () => GAP,
   ).map(({ item, top, height }) => ({ key: item.category, name: item.name, amount: item.amount, top, height, row: item }));
 
   const incomeBlocks = stack(earnedRows, (r) => r.amount, base, base - incomeTop, () => GAP).map(
@@ -188,7 +187,7 @@ export function SpendingSplit({
       const top = Math.min(...members.map((b) => b.top));
       const end = Math.max(...members.map((b) => b.top + b.height));
       const amount = members.reduce((sum, b) => sum + b.amount, 0);
-      return { group, amount, mid: (top + end) / 2 };
+      return { group, amount, top, end, mid: (top + end) / 2 };
     });
   const lineH = wide ? LINE : NARROW_LINE;
   const groupTops = spread(
@@ -282,7 +281,7 @@ export function SpendingSplit({
             <path
               key={g.group.id}
               className="split-leader"
-              d={`M${barRight + 2},${g.mid} H${barRight + Math.min(ELBOW, size.leader / 2)} L${labelX - 4},${groupTops[i] + lineH / 2}`}
+              d={`M${barRight + 5},${g.top + 1} V${g.end - 1} M${barRight + 5},${g.mid} H${barRight + Math.min(ELBOW, size.leader / 2)} L${labelX - 4},${groupTops[i] + lineH / 2}`}
               fill="none"
             />
           ))}
