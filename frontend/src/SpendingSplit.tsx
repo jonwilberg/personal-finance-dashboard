@@ -8,7 +8,8 @@ import { groupFill } from "./spendingGroups";
 // - Spending is one wide bar stacked like the chart (the groups in their order from the bottom, each group's
 //   categories largest first, uncategorized hatched on top). Each category's name and amount sit inside its block
 //   when they fit; on the right each group has its total, on a leader from a line spanning the group's whole band.
-// - Income stands to its left on the same scale, split by income category in tints of the income ink, labelled the
+// - Income stands to its left on the same scale, in solid income ink (the colour of income's top edge in the chart
+//   above), so no spending colour can be mistaken for it; its categories are split by the same gaps, labelled the
 //   same way. It is cut short with a break when it is far above the spending.
 // - A bracket between the bars marks what was kept or overspent; the two totals head their bars.
 // - Clicking a spending category jumps to its row in the table below.
@@ -35,7 +36,6 @@ const BREAK_FACTOR = 1.5; // income above this many times the spending is cut sh
 const OVERSHOOT = 6; // a cut income bar reaches this far above the area, to show it carries on
 const BREAK_AT = 18; // the break's distance below the area's top
 const INCOME = "var(--chart-income)";
-const INCOME_TINTS = [20, 11, 7, 5]; // % of the income ink, largest category first
 // Group colours dark enough for light text inside; the rest take ink (each the better of the two).
 const LIGHT_TEXT_GROUPS = new Set(["fixed", "dining", "travel"]);
 const TRENDS_TITLE = "Trend per category";
@@ -187,13 +187,12 @@ export function SpendingSplit({
   ).map(({ item, top, height }) => ({ key: item.category, name: item.name, amount: item.amount, top, height, row: item }));
 
   const incomeBlocks = stack(earnedRows, (r) => r.amount, base, base - incomeTop, () => GAP).map(
-    ({ item, top, height }, i) => ({
+    ({ item, top, height }) => ({
       key: item.category,
       name: item.name,
       amount: item.amount,
       top,
       height,
-      tint: INCOME_TINTS[Math.min(i, INCOME_TINTS.length - 1)],
     }),
   );
 
@@ -303,11 +302,11 @@ export function SpendingSplit({
       {!wide && earnedRows.length > 0 && (
         // Narrow screens: the income bar is too slim for labels, so its categories are a line above.
         <div className="chart-legend split-legend">
-          {earnedRows.map((row, i) => (
+          {earnedRows.map((row) => (
             <span key={row.category} className="legend-item">
               <span
                 className="legend-swatch"
-                style={{ background: `color-mix(in srgb, ${INCOME} ${INCOME_TINTS[Math.min(i, 3)]}%, transparent)` }}
+                style={{ background: INCOME }}
                 aria-hidden="true"
               />
               <span className="split-legend-name">{row.name}</span>
@@ -325,7 +324,7 @@ export function SpendingSplit({
             </pattern>
           </defs>
 
-          {/* Income by category, in tints of the income ink, with its dark top edge and, when cut, a break. */}
+          {/* Income by category, in solid income ink, and when cut, a break. */}
           {incomeBlocks.map((b) => (
             <rect
               key={b.key}
@@ -333,7 +332,7 @@ export function SpendingSplit({
               y={b.top}
               width={size.income}
               height={b.height}
-              fill={`color-mix(in srgb, ${INCOME} ${b.tint}%, transparent)`}
+              fill={INCOME}
               onMouseEnter={() => setHover(`income:${b.key}`)}
               onMouseLeave={() => setHover(null)}
             />
@@ -407,7 +406,7 @@ export function SpendingSplit({
           return (
             <div
               key={b.key}
-              className={`split-inside on-light is-${how}`}
+              className={`split-inside on-dark is-${how}`}
               style={{ left: incomeX, top: b.top, width: size.income, height: b.height }}
               onMouseEnter={() => setHover(`income:${b.key}`)}
               onMouseLeave={() => setHover(null)}
