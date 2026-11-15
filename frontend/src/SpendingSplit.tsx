@@ -150,7 +150,7 @@ export function SpendingSplit({
   const barX = size.income + size.gap;
   const barRight = barX + size.spent;
   const labelX = barRight + size.leader;
-  const labelW = Math.max(width - labelX, 0);
+  const labelW = Math.max(Math.min(width - labelX, 360), 0); // capped, so totals stay near their names
   const base = HEAD + BAR_H; // the bars' common bottom
 
   // One scale for both bars: the taller one fills the area, unless income is far above the spending, when the

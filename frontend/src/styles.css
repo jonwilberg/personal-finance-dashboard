@@ -17,7 +17,7 @@ body {
 .page {
   max-width: var(--content-width);
   margin: 0 auto;
-  padding: var(--space-6) var(--space-4) var(--space-7);
+  padding: var(--space-6) clamp(var(--space-4), 3vw, 48px) var(--space-7);
 }
 
 h1,

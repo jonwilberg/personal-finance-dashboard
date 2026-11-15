@@ -59,7 +59,7 @@
   --radius: 2px;
   --rule-heavy: 2px solid var(--ink);
   --rule-hair: 1px solid var(--rule);
-  --content-width: 1200px;
+  --content-width: 1680px; /* a desktop app: use most of a wide screen */
 }
 
 /* Dark mode ("night edition"). The app always shows light mode; these values are kept for a possible
