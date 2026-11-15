@@ -1876,7 +1876,6 @@ button.split-inside {
 /* The income and spent totals heading their bars. */
 .split-total {
   position: absolute;
-  top: 0;
   display: flex;
   flex-direction: column;
   align-items: center;

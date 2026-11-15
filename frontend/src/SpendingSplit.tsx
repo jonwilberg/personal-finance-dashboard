@@ -13,8 +13,8 @@ import { groupFill } from "./spendingGroups";
 // - Clicking a spending category jumps to its row in the table below.
 
 const UNCATEGORIZED = "uncategorized";
-const TOTALS_H = 36; // the income and spending totals at the top
-const HEAD = 84; // the bars start below the totals and the savings connector
+const TOTALS_H = 34; // a total above its bar
+const HEAD = 76; // room above the taller bar for its total and, above that, the savings connector
 const BAR_H = 480; // the bars' area below the totals
 const GAP = 2; // surface gap between blocks
 const GROUP_GAP = 6; // a slightly wider gap between groups
@@ -205,7 +205,10 @@ export function SpendingSplit({
   const showNet = earned > 0 && Math.round(net) !== 0;
   const fromX = incomeX + size.income / 2;
   const toX = barX + size.spent / 2;
-  const connectorY = Math.max(TOTALS_H + 12, Math.min(incomeTop, spentTop) - 24);
+  // Each total sits just above its bar; the connector runs above both, from one total over to the other.
+  const incomeLabelTop = incomeTop - TOTALS_H - 4;
+  const spentLabelTop = spentTop - TOTALS_H - 4;
+  const connectorY = Math.min(incomeLabelTop, spentLabelTop) - 14;
   const breakAt = HEAD + BREAK_AT;
 
   const fill = (row: ScoreboardRow) => (row.category === UNCATEGORIZED ? `url(#${hatchId})` : groupFill(row.group));
@@ -286,20 +289,23 @@ export function SpendingSplit({
 
           {showNet && (
             <g className="split-connector">
-              <path d={`M${fromX},${incomeTop - 3} V${connectorY} H${toX} V${spentTop - 9}`} fill="none" />
-              <path d={`M${toX - 4},${spentTop - 10} H${toX + 4} L${toX},${spentTop - 3} Z`} className="split-arrow" />
+              <path d={`M${fromX},${incomeLabelTop - 3} V${connectorY} H${toX} V${spentLabelTop - 9}`} fill="none" />
+              <path
+                d={`M${toX - 4},${spentLabelTop - 10} H${toX + 4} L${toX},${spentLabelTop - 3} Z`}
+                className="split-arrow"
+              />
             </g>
           )}
         </svg>
 
-        {/* The two totals, heading their bars. */}
+        {/* The two totals, each just above its bar, under the connector. */}
         {earned > 0 && (
-          <div className="split-total" style={{ left: incomeX, width: size.income }}>
+          <div className="split-total" style={{ left: incomeX, width: size.income, top: incomeLabelTop }}>
             <span className="split-total-label">Income</span>
             <span className="split-total-value">{formatKr(earned)}</span>
           </div>
         )}
-        <div className="split-total" style={{ left: barX, width: size.spent }}>
+        <div className="split-total" style={{ left: barX, width: size.spent, top: spentLabelTop }}>
           <span className="split-total-label">Spending</span>
           <span className="split-total-value">{formatKr(total)}</span>
         </div>
