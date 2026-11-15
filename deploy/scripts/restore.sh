@@ -23,7 +23,9 @@ if [[ "${1:-}" == "--file" ]]; then
 else
   # shellcheck disable=SC1091
   source "$REPO_DIR/deploy/backup.env"
-  export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
+  # NO_HEAD: the rclone in Ubuntu 24.04 checks each upload with a versioned HEAD request R2 doesn't implement
+  # (501); R2 still verifies the upload's checksum as it arrives.
+  export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true RCLONE_CONFIG_R2_NO_HEAD=true
   export RCLONE_CONFIG_R2_ENDPOINT="${R2_ENDPOINT:?}" RCLONE_CONFIG_R2_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID:?}"
   export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY:?}"
   NAME="${1:-$(rclone lsf "r2:$BACKUP_BUCKET/daily" | sort | tail -1)}"
