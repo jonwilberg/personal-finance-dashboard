@@ -1722,16 +1722,93 @@ input.rule-regex {
 }
 
 /* A label row: name, then amount and share in right-aligned columns, so the figures line up like a ledger. */
-.split-row {
+/* A category's name and amount inside its block: side by side, or stacked in a tall, narrow block. */
+.split-inside {
+  position: absolute;
+  display: flex;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--text-caption);
+  line-height: 1.3;
+  white-space: nowrap;
+  text-align: left;
+  pointer-events: auto;
+}
+
+button.split-inside {
+  cursor: pointer;
+}
+
+.split-inside.is-one {
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.split-inside.is-two {
+  flex-direction: column;
+  justify-content: center;
+}
+
+.split-inside-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.split-inside-amount {
+  font-variant-numeric: tabular-nums;
+}
+
+.split-inside.is-hover .split-inside-name {
+  font-weight: 500;
+}
+
+.split-inside.on-dark {
+  color: var(--paper-raised);
+}
+
+.split-inside.on-light {
+  color: var(--ink);
+}
+
+.split-inside.on-hatch {
+  color: var(--ink);
+}
+
+.split-inside.on-hatch > span {
+  padding: 0 3px;
+  border-radius: 2px;
+  background: var(--paper);
+}
+
+/* A group's total on the right: name, amount and share in columns; stacked on two lines on phones. */
+.split-group-label {
+  position: absolute;
   display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px 44px;
   align-items: center;
   column-gap: var(--space-2);
   font-size: var(--text-caption);
   white-space: nowrap;
 }
 
-.split-income-row {
-  position: absolute;
+.split-group-label .split-name,
+.split-group-label .split-amount {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.split-group-label.is-stacked {
+  grid-template-columns: auto auto;
+  justify-content: start;
+}
+
+.split-group-label.is-stacked .split-name {
+  grid-column: 1 / -1;
 }
 
 .split-name {
@@ -1761,81 +1838,37 @@ input.rule-regex {
   font-variant-numeric: tabular-nums;
 }
 
-/* A group's labels: its heading, then its categories indented under it. */
-.split-group {
+/* Savings or loss: a connector from the income bar's top over to the spending bar's, with the difference in a pill. */
+.split-connector path {
+  stroke: var(--ink);
+  stroke-width: 1.25;
+}
+
+.split-connector .split-arrow {
+  fill: var(--ink);
+  stroke: none;
+}
+
+.split-pill {
   position: absolute;
-  display: flex;
-  flex-direction: column;
-}
-
-.split-group-row .split-name,
-.split-group-row .split-amount {
-  color: var(--ink);
-  font-weight: 500;
-}
-
-button.split-category {
-  width: 100%;
-  padding: 0 0 0 calc(12px + 6px); /* under the heading's name, past its swatch */
-  border: none;
-  border-radius: 2px;
-  background: none;
-  font: inherit;
-  font-size: var(--text-caption);
-  text-align: left;
-  cursor: pointer;
-}
-
-/* On the left, income names sit right against their figures, next to the bar. */
-.split-income-row .split-name {
-  justify-content: flex-end;
-}
-
-button.split-category:hover,
-button.split-category.is-hover {
-  background: var(--paper-sunken);
-}
-
-button.split-category.is-hover .split-name {
-  font-weight: 500;
-}
-
-/* What was kept or overspent: a bracket between the bars and its figure over the shorter one. */
-.split-net-bracket {
-  stroke-width: 1.5;
-}
-
-.split-net-bracket.is-up {
-  stroke: var(--positive);
-}
-
-.split-net-bracket.is-down {
-  stroke: var(--signal);
-}
-
-.split-net {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 2px 6px;
+  padding: 3px 10px;
   transform: translate(-50%, -50%);
-  border-radius: 2px;
-  background: var(--paper);
+  border-radius: 999px;
+  color: var(--paper-raised);
   font-size: var(--text-caption);
   line-height: 1.3;
   white-space: nowrap;
 }
 
-.split-net.is-up {
-  color: var(--positive);
+.split-pill.is-up {
+  background: var(--positive);
 }
 
-.split-net.is-down {
-  color: var(--signal);
+.split-pill.is-down {
+  background: var(--signal);
 }
 
-.split-net-value {
+.split-pill-value {
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -1843,7 +1876,6 @@ button.split-category.is-hover .split-name {
 /* The income and spent totals heading their bars. */
 .split-total {
   position: absolute;
-  top: 0;
   display: flex;
   flex-direction: column;
   align-items: center;

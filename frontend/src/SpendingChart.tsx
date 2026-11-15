@@ -84,7 +84,7 @@ export function SpendingChart(props: {
     { key: "spent", label: "Spent", cells: totals.map(plain), total: plain(sum(totals)) },
     {
       key: "kept",
-      label: "Kept",
+      label: "Savings",
       cells: nets.map((v) => signed(v)),
       total: signed(sum(nets), true),
       tone: (v: number) => (v >= 0 ? "is-up" : "is-down"),
@@ -222,7 +222,7 @@ export function SpendingChart(props: {
               <span>{formatKr(hovered.income)}</span>
             </div>
             <div className="tooltip-row tooltip-total">
-              <span>{nets[hover] >= 0 ? "Kept" : "Overspent"}</span>
+              <span>{nets[hover] >= 0 ? "Savings" : "Loss"}</span>
               <span>{formatKr(Math.abs(nets[hover]))}</span>
             </div>
           </div>
@@ -272,7 +272,7 @@ export function SpendingChart(props: {
             ))}
             <th>Spent</th>
             <th>Income</th>
-            <th>Kept (negative: overspent)</th>
+            <th>Savings (negative: loss)</th>
           </tr>
         </thead>
         <tbody>
