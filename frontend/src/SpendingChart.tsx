@@ -147,14 +147,11 @@ export function SpendingChart(props: {
                 onClick={() => props.onSelect(month.month)}
               >
                 {/* The month's column: highlights the selected month (and the hovered one, lightly) and doubles as
-                    a hit target wider and taller than the bars. */}
-                <rect
+                    a hit target wider and taller than the bars. It carries on, square, into the ledger below, whose
+                    cells' tints are inset the same 2px. */}
+                <path
                   className={`chart-column ${isSelected ? "is-selected" : hover === i ? "is-hovered" : ""}`}
-                  x={PAD.left + band * i + 2}
-                  y={4}
-                  width={band - 4}
-                  height={HEIGHT - 4}
-                  rx={4}
+                  d={roundedTop(PAD.left + band * i + 2, 4, band - 4, HEIGHT - 4, 4)}
                 />
                 {incomes[i] > 0 && (
                   <>

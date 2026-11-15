@@ -1031,14 +1031,16 @@ button.month-step:hover:not(:disabled) {
 .ledger-cell {
   text-align: center;
   cursor: pointer;
+  /* The selected and hovered tints sit inset 2px like the column above, which they continue, under the row rules. */
+  background: no-repeat center / calc(100% - 4px) 100% border-box;
 }
 
 .ledger-cell.is-hovered {
-  background: color-mix(in srgb, var(--rule) 30%, transparent);
+  background-image: linear-gradient(color-mix(in srgb, var(--rule) 30%, transparent) 0 0);
 }
 
 .ledger-cell.is-selected {
-  background: color-mix(in srgb, var(--rule) 60%, transparent);
+  background-image: linear-gradient(color-mix(in srgb, var(--rule) 60%, transparent) 0 0);
 }
 
 .ledger-total {
