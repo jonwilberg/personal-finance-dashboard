@@ -78,7 +78,7 @@ deploy() {
   "${compose[@]}" up -d --remove-orphans
 
   if wait_healthy; then
-    echo "==> Deployed $(git -C "$repo_dir" log -1 --format='%h %s')"
+    echo "==> Deployed $(runuser -u "$owner" -- git -C "$repo_dir" log -1 --format='%h %s')"
     docker image prune -f >/dev/null
     return 0
   fi
