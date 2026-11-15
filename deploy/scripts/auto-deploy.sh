@@ -78,7 +78,11 @@ deploy() {
   "${compose[@]}" up -d --remove-orphans
 
   if wait_healthy; then
-    echo "==> Deployed $(runuser -u "$owner" -- git -C "$repo_dir" log -1 --format='%h %s')"
+    # The commit the image was built from (CI labels it), which can be older than the checkout when several merges
+    # land close together.
+    local revision
+    revision="$(docker image inspect finance-app:current --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+    echo "==> Deployed $(runuser -u "$owner" -- git -C "$repo_dir" log -1 --format='%h %s' "$revision" 2>/dev/null || echo "$revision")"
     docker image prune -f >/dev/null
     return 0
   fi
