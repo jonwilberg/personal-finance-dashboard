@@ -1,5 +1,11 @@
 // Typed wrappers around the FastAPI backend (backend/src/finance/web.py).
 
+/** The running build: the commit it was made from (null for a local build) and when the app started. */
+export interface VersionInfo {
+  revision: string | null;
+  started_at: string;
+}
+
 export interface AppInfo {
   name: string;
   environment: "SANDBOX" | "PRODUCTION";
@@ -164,6 +170,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   app: () => request<AppInfo>("/api/app"),
+  version: () => request<VersionInfo>("/api/version"),
   banks: (country: string) => request<Bank[]>(`/api/banks?country=${encodeURIComponent(country)}`),
   connections: () => request<Connection[]>("/api/connections"),
   connect: (bank: string, country: string, days: number) =>
