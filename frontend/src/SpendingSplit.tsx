@@ -23,8 +23,8 @@ const LABEL_GAP = 6; // between group labels
 const ELBOW = 12; // a leader's first, straight stretch out of the bar
 const WIDE = 720; // narrower than this: slimmer bars and two-line group labels
 const SIZES = {
-  wide: { income: 200, spent: 260, gap: 28, leader: 40 },
-  narrow: { income: 60, spent: 150, gap: 14, leader: 16 },
+  wide: { income: 200, spent: 200, gap: 28, leader: 40 },
+  narrow: { income: 100, spent: 100, gap: 14, leader: 16 },
 };
 const INSIDE_PAD = 8; // text inset inside a block
 const ONE_LINE_H = 17; // a block this tall takes a one-line label
