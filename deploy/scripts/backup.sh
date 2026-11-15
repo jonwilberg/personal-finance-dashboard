@@ -24,8 +24,9 @@ trap finish EXIT
 
 : "${BACKUP_BUCKET:?Set BACKUP_BUCKET in deploy/backup.env}"
 # NO_HEAD: the rclone in Ubuntu 24.04 checks each upload with a versioned HEAD request R2 doesn't implement
-# (501); R2 still verifies the upload's checksum as it arrives.
-export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true RCLONE_CONFIG_R2_NO_HEAD=true
+# (501); R2 still verifies the upload's checksum as it arrives. RCLONE_CONFIG=/dev/null: all settings come from
+# these variables, so there is deliberately no config file (and no notice about a missing one in the logs).
+export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true RCLONE_CONFIG_R2_NO_HEAD=true RCLONE_CONFIG=/dev/null
 export RCLONE_CONFIG_R2_ENDPOINT="${R2_ENDPOINT:?}" RCLONE_CONFIG_R2_ACCESS_KEY_ID="${R2_ACCESS_KEY_ID:?}"
 export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="${R2_SECRET_ACCESS_KEY:?}"
 
