@@ -38,6 +38,7 @@ const INCOME = "var(--chart-income)";
 const INCOME_TINTS = [20, 11, 7, 5]; // % of the income ink, largest category first
 // Group colours dark enough for light text inside; the rest take ink (each the better of the two).
 const LIGHT_TEXT_GROUPS = new Set(["fixed", "dining", "travel"]);
+const TRENDS_TITLE = "Trend per category";
 const TRENDS_GAP = 56; // between the group totals and the trends
 const TRENDS_MIN = 380; // narrower than this beside the bar: the trends go below it
 const TRENDS_ROW_BELOW = 60; // a trend row's height when below the bar
@@ -107,6 +108,7 @@ function stack<T>(items: T[], amount: (item: T) => number, base: number, height:
 }
 
 export function SpendingSplit({
+  title,
   rows,
   groups,
   income,
@@ -115,6 +117,8 @@ export function SpendingSplit({
   selected,
   onSelect,
 }: {
+  /** The section's title; the trends' title lines up with it when they're beside the bar. */
+  title: string;
   rows: ScoreboardRow[];
   groups: SpendingGroup[];
   /** The month's income per income category, largest first. */
@@ -245,6 +249,7 @@ export function SpendingSplit({
         onActive={setTrendGroup}
         width={beside ? besideW : width}
         rowHeight={beside ? BAR_H / trendGroups.length : TRENDS_ROW_BELOW}
+        showNames={!beside}
       />
     ) : null;
 
@@ -287,6 +292,14 @@ export function SpendingSplit({
 
   return (
     <div className={`split${wide ? "" : " is-narrow"}`} ref={frameRef}>
+      <div className="split-head">
+        <p className="label">{title}</p>
+        {beside && trends && (
+          <p className="label split-head-trends" style={{ left: trendsX }}>
+            {TRENDS_TITLE}
+          </p>
+        )}
+      </div>
       {!wide && earnedRows.length > 0 && (
         // Narrow screens: the income bar is too slim for labels, so its categories are a line above.
         <div className="chart-legend split-legend">
@@ -472,15 +485,14 @@ export function SpendingSplit({
         ))}
 
         {beside && trends && (
-          <div className="trends-beside" style={{ left: trendsX, top: HEAD - 28 }}>
-            <p className="label trends-label">Last {series.length} months</p>
+          <div className="trends-beside" style={{ left: trendsX, top: HEAD }}>
             {trends}
           </div>
         )}
       </div>
       {!beside && trends && (
         <div className="trends-below">
-          <p className="label trends-label">Last {series.length} months</p>
+          <p className="label trends-label">{TRENDS_TITLE}</p>
           {trends}
         </div>
       )}

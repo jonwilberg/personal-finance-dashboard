@@ -1708,7 +1708,22 @@ input.rule-regex {
    overspent. */
 
 .split {
-  margin: var(--space-3) 0 var(--space-5);
+  margin: 0 0 var(--space-5);
+}
+
+/* The section's title, and the trends' title on the same line above them. */
+.split-head {
+  position: relative;
+  margin-bottom: var(--space-3);
+}
+
+.split-head .label {
+  margin: 0;
+}
+
+.split-head .split-head-trends {
+  position: absolute;
+  top: 0;
 }
 
 .split-frame {

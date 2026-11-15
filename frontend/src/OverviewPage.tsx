@@ -147,8 +147,8 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
 
       {overview.scoreboard && overview.scoreboard.length > 0 && (
         <section className="section">
-          <p className="label">Spending by category{scope && ` · ${scope}`}</p>
           <SpendingSplit
+            title={`Spending by category${scope ? ` · ${scope}` : ""}`}
             rows={overview.scoreboard}
             groups={overview.groups ?? []}
             income={overview.income_breakdown ?? []}

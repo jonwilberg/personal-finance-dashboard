@@ -9,7 +9,7 @@ import { groupFill } from "./spendingGroups";
 // the group's median month, and on the right this month against that median.
 // Each row has its own scale, so a small group's trend shows as clearly as Fixed's.
 
-const NAME_W = 132; // the group's name
+const NAME_W = 132; // the group's name, when shown
 const FIGURES_W = 116; // the difference and median on the right
 const COL_GAP = 4; // between a row's columns
 const MAX_COL = 40; // the widest a column gets
@@ -26,6 +26,7 @@ export function GroupTrends({
   onActive,
   width,
   rowHeight,
+  showNames,
 }: {
   series: OverviewMonth[];
   /** The groups to show, top down. */
@@ -38,9 +39,12 @@ export function GroupTrends({
   onActive: (group: string | null) => void;
   width: number;
   rowHeight: number;
+  /** Name each row; off beside the bar, whose labels already name the groups in the same order and colours. */
+  showNames: boolean;
 }) {
   const [tip, setTip] = useState<{ group: string; index: number } | null>(null);
-  const chartW = Math.max(width - NAME_W - FIGURES_W, 120);
+  const nameW = showNames ? NAME_W : 0;
+  const chartW = Math.max(width - nameW - FIGURES_W, 120);
   const slot = chartW / Math.max(series.length, 1);
   const colW = Math.min(Math.max(slot - COL_GAP, 3), MAX_COL);
   const chartH = rowHeight - PAD_TOP - PAD_BOTTOM;
@@ -65,10 +69,12 @@ export function GroupTrends({
             style={{ height: rowHeight }}
             onMouseEnter={() => onActive(group.id)}
           >
-            <span className="split-name trend-name">
-              <span className="legend-swatch" style={{ background: groupFill(group.id) }} aria-hidden="true" />
-              {group.name}
-            </span>
+            {showNames && (
+              <span className="split-name trend-name">
+                <span className="legend-swatch" style={{ background: groupFill(group.id) }} aria-hidden="true" />
+                {group.name}
+              </span>
+            )}
             <div className="trend-chart" style={{ width: chartW, height: rowHeight }}>
               <svg width={chartW} height={rowHeight} role="img">
                 <title>{`${group.name} per month. ${description}`}</title>
@@ -127,7 +133,7 @@ export function GroupTrends({
         );
       })}
       {/* The months under the last row, shared by every row above. */}
-      <div className="trend-months" aria-hidden="true" style={{ marginLeft: NAME_W, width: chartW }}>
+      <div className="trend-months" aria-hidden="true" style={{ marginLeft: nameW, width: chartW }}>
         {series.map((m, i) => (
           <span
             key={m.month}
