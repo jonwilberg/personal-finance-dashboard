@@ -181,6 +181,23 @@ sudo deploy/scripts/restore.sh       # puts the newest backup back, as a test
 
 The restore keeps the current database aside as `finance.db.before-restore-<time>`, so the test loses nothing.
 
+## Knowing it's up
+
+- **In the app:** the footer of every page shows the version running, when it was deployed, and whether it's the
+  latest `main` ("up to date"), or that a newer version is on its way (CI builds it and the server picks it up within
+  minutes). It asks GitHub's public API for the latest `main` from your browser.
+- **By email, when something's wrong:** [healthchecks.io](https://healthchecks.io) (free) emails you when a check
+  reports a failure or stops reporting. Create three checks, and put their ping URLs in `deploy/backup.env`:
+
+  | Check | Period | Grace | Setting | Emails you when |
+  |---|---|---|---|---|
+  | Deploys and app | 1 minute | 5 minutes | `HEALTHCHECK_DEPLOY_URL` | a deploy fails or rolls back, the app is unhealthy, the tunnel stops, or the server or its timer is down |
+  | Backup | 1 day | 2 hours | `HEALTHCHECK_BACKUP_URL` | last night's backup failed or didn't run |
+  | Refresh | 1 day | 2 hours | `HEALTHCHECK_REFRESH_URL` | the morning refresh failed (often an expired bank consent) or didn't run |
+
+  The scripts add the run's exit status to the URL (`…/0` for success), which healthchecks.io understands. The server
+  only calls out; nothing reaches in.
+
 ## Day to day
 
 | What | How (on the server, in `/opt/finance`) |

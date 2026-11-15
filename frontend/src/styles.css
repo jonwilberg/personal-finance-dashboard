@@ -2169,3 +2169,18 @@ select.is-filtering {
   color: var(--ink);
   font-weight: 600;
 }
+
+/* Which version is running, at the bottom of every page. */
+.version-footer {
+  margin-top: var(--space-7);
+  padding-top: var(--space-3);
+  border-top: var(--rule-hair);
+}
+
+.version-footer a {
+  color: inherit;
+}
+
+.version-footer .version-current {
+  color: var(--positive);
+}

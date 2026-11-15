@@ -6,6 +6,7 @@ Access and checks the Access token on every request (see access.py and docs/host
 
 from __future__ import annotations
 
+import os
 import re
 import time
 from collections import Counter
@@ -139,6 +140,14 @@ def create_app(
     @app.get(HEALTH_PATH, include_in_schema=False)
     def health() -> dict[str, bool]:
         return {"ok": True}
+
+    started_at = datetime.now(UTC).isoformat()
+
+    @app.get("/api/version")
+    def version() -> dict[str, str | None]:
+        """The commit this build was made from (set by CI in the image; None for a local build), and when the app
+        started, which is when it was last deployed."""
+        return {"revision": os.environ.get("APP_REVISION") or None, "started_at": started_at}
 
     @app.get("/api/me")
     def me(request: Request) -> dict[str, str | None]:

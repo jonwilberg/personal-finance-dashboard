@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { VersionFooter } from "./VersionFooter";
 import { createPortal } from "react-dom";
 import { ACCOUNT_TYPES, accountName, accountNumber } from "./accounts";
 import { type Account, type AppInfo, type Connection, type Owner, api } from "./api";
@@ -115,6 +116,8 @@ export function App() {
       {route === "#/transactions" && <TransactionsPage onError={showError} />}
       {route === "#/categories" && <CategoriesPage onError={showError} />}
       {route === "#/accounts" && <AccountsPage titleActions={titleActions} onError={showError} />}
+
+      <VersionFooter />
     </div>
   );
 }

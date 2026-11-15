@@ -9,8 +9,10 @@
 #   4. Snapshots the database, pulls the image by digest, tags it finance-app:current and restarts the app.
 #   5. If the app isn't healthy within two minutes: puts the snapshot and the previous image back.
 #
-# Pings HEALTHCHECK_DEPLOY_URL from deploy/backup.env after every run when set (a heartbeat: the timer also stopping
-# gets noticed). Everything runs inside main(), so bash has read the whole script before step 1 may change it.
+# When there's nothing new, it checks that the app is healthy and the tunnel running instead, so every run says
+# whether things are fine. Pings HEALTHCHECK_DEPLOY_URL from deploy/backup.env after every run when set: a failed
+# deploy, an unhealthy app, a stopped tunnel, or no ping at all (timer or server down) can then send an email.
+# Everything runs inside main(), so bash has read the whole script before step 1 may change it.
 set -euo pipefail
 
 main() {
@@ -51,7 +53,8 @@ deploy() {
   [[ "$digest" == sha256:* ]] || { echo "Couldn't read the digest of $image:main: $digest" >&2; return 1; }
   current="$(docker image inspect finance-app:current --format '{{join .RepoDigests " "}}' 2>/dev/null || true)"
   if [[ " $current " == *"@$digest "* ]]; then
-    return 0 # already running it
+    check_running # already running it: just check it's up
+    return
   fi
 
   echo "==> New image $digest"
@@ -98,6 +101,22 @@ deploy() {
     wait_healthy || echo "The previous version isn't healthy either." >&2
   fi
   return 1
+}
+
+# Fails (and says why) unless the app is healthy and the tunnel running. An app still starting (after a reboot) counts
+# as fine; it has a few minutes before the healthcheck's grace period runs out anyway.
+check_running() {
+  local app tunnel
+  app="$(docker inspect --format '{{.State.Health.Status}}' "$("${compose[@]}" ps -q app)" 2>/dev/null || echo "not running")"
+  tunnel="$(docker inspect --format '{{.State.Status}}' "$("${compose[@]}" ps -q tunnel)" 2>/dev/null || echo "not running")"
+  if [[ "$app" != "healthy" && "$app" != "starting" ]]; then
+    echo "The app isn't healthy: $app" >&2
+    return 1
+  fi
+  if [[ "$tunnel" != "running" ]]; then
+    echo "The tunnel isn't running: $tunnel" >&2
+    return 1
+  fi
 }
 
 # The database as it was just before this deploy, in case the new version has to be rolled back.

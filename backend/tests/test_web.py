@@ -491,3 +491,10 @@ def test_enable_banking_not_answering_is_a_clear_error_not_a_crash(tmp_path, mon
     response = api.post("/api/connections", json={"bank": "Some Bank", "country": "NO"})
     assert response.status_code == 502
     assert "didn't answer in time" in response.json()["detail"]
+
+
+def test_version_reports_the_build_and_start_time(api, monkeypatch):
+    local = api.get("/api/version").json()
+    assert local["revision"] is None and local["started_at"]
+    monkeypatch.setenv("APP_REVISION", "0123abc")
+    assert api.get("/api/version").json()["revision"] == "0123abc"

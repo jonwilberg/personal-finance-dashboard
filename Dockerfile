@@ -39,4 +39,8 @@ EXPOSE 8765
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/healthz', timeout=4)"]
 
+# The commit this image was built from (CI passes it), shown in the app. Last, so a new commit only rebuilds this.
+ARG APP_REVISION=""
+ENV APP_REVISION=$APP_REVISION
+
 CMD ["finance", "serve", "--host", "0.0.0.0", "--port", "8765", "--plain"]
