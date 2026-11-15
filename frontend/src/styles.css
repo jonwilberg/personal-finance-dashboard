@@ -17,7 +17,7 @@ body {
 .page {
   max-width: var(--content-width);
   margin: 0 auto;
-  padding: var(--space-6) var(--space-4) var(--space-7);
+  padding: var(--space-6) clamp(var(--space-4), 3vw, 48px) var(--space-7);
 }
 
 h1,
@@ -1789,7 +1789,7 @@ button.split-inside {
 .split-group-label {
   position: absolute;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px 44px;
+  grid-template-columns: minmax(0, 1fr) 88px 40px;
   align-items: center;
   column-gap: var(--space-2);
   font-size: var(--text-caption);
