@@ -20,7 +20,7 @@ echo "==> System updates and base tools"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get -y upgrade
-apt-get install -y ca-certificates curl git sqlite3 age rclone unattended-upgrades ufw
+apt-get install -y ca-certificates curl git sqlite3 rclone unattended-upgrades ufw
 
 echo "==> Automatic security updates (with reboots at 04:00 when needed)"
 cat >/etc/apt/apt.conf.d/52finance-unattended <<'EOF'

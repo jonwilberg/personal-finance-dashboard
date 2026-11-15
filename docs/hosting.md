@@ -10,7 +10,7 @@ browser ──https──▶ Cloudflare (Access: Google login, two allowed email
                 ├─ tunnel   cloudflared
                 └─ app      FastAPI + built frontend, plain HTTP on :8765
                              └─ deploy/data/finance.db
-              nightly: encrypted backup ──▶ Cloudflare R2
+              nightly: backup ──▶ Cloudflare R2 (private bucket)
               daily:   refresh-all (new transactions)
 ```
 
@@ -23,9 +23,10 @@ browser ──https──▶ Cloudflare (Access: Google login, two allowed email
 - **Secrets stay on the server**, in ignored files next to `deploy/compose.yaml`: `app.env`, `.env`, `backup.env`,
   `secrets/enablebanking.pem`. Nothing secret is in the image or the repo. The allowed emails live in `app.env`,
   never in code.
-- **Backups.** Every night the database is snapshotted, checked, compressed and encrypted *on the server*, then
-  uploaded to Cloudflare R2. That's a different company from Hetzner. The daily copies are kept 35 days and the 1st of
-  each month for about 13 months. Only your private age key, kept off the server, can read them.
+- **Backups.** Every night the database is snapshotted, checked and compressed, then uploaded to a private Cloudflare
+  R2 bucket. That's a different company from Hetzner. The daily copies are kept 35 days and the 1st of each month for
+  about 13 months. The backups aren't encrypted, so keep the bucket private (no public access or custom domain on it)
+  and protect the Cloudflare account with two-step verification. That account guards the live app too.
 
 ## One-time setup
 
@@ -67,24 +68,13 @@ Rough order: Cloudflare and the other accounts first, then the server, then movi
    3. Note the access key ID, the secret and the endpoint (`https://<account-id>.r2.cloudflarestorage.com`, or the
       `eu.` variant for an EU bucket).
 
-### 2. Backup key (on your PC)
-
-Install [age](https://github.com/FiloSottile/age) and make a key pair:
-
-```bash
-age-keygen -o finance-backup.key
-```
-
-It prints the public key (`age1…`), which goes in `BACKUP_AGE_RECIPIENT` on the server. Keep `finance-backup.key`
-in your password manager and **not** on the server. Without it, the backups can't be read, by anyone, including you.
-
-### 3. Enable Banking
+### 2. Enable Banking
 
 In the [control panel](https://enablebanking.com/cp/applications), add `https://finance.example.com/callback` to
 the application's redirect URLs. Keep the localhost one for running the app locally. Bank connections belong to the
 application, not to its address, so the existing ones keep working on the server.
 
-### 4. Hetzner server
+### 3. Hetzner server
 
 1. In [Hetzner Cloud](https://console.hetzner.cloud/), create a project.
 2. Add your **SSH public key**. Password logins get switched off.
@@ -126,7 +116,7 @@ application, not to its address, so the existing ones keep working on the server
      - `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD`
      - `FINANCE_ALLOWED_EMAILS`, the two Google addresses, comma-separated
    - `deploy/.env`: the tunnel token
-   - `deploy/backup.env`: the age public key, the R2 bucket, endpoint and token, and optionally the
+   - `deploy/backup.env`: the R2 bucket, endpoint and token, and optionally the
      [healthchecks.io](https://healthchecks.io) ping URLs
 7. Copy the Enable Banking key from your PC and lock it down:
 
@@ -136,7 +126,7 @@ application, not to its address, so the existing ones keep working on the server
    rm /tmp/enablebanking.pem
    ```
 
-### 5. Move the data in
+### 4. Move the data in
 
 On your PC, stop the local app (Ctrl+C in its terminal). Take a consistent copy of the live database and send it
 over:
@@ -158,15 +148,14 @@ deploy/scripts/deploy.sh
 Delete `finance-move.db` on your PC afterwards. Then open `https://finance.example.com`, sign in with Google, and
 check that the Overview looks as it did locally.
 
-### 6. Check the backups once
+### 5. Check the backups once
 
 ```bash
-sudo deploy/scripts/backup.sh        # should print "Backed up finance-<date>.db.gz.age"
+sudo deploy/scripts/backup.sh        # should print "Backed up finance-<date>.db.gz"
+sudo deploy/scripts/restore.sh       # puts the newest backup back, as a test
 ```
 
-To try a restore, copy your `finance-backup.key` to the server for the duration only and run
-`sudo deploy/scripts/restore.sh ~/finance-backup.key`. It keeps the current database aside as
-`finance.db.before-restore-<time>`. Delete the key from the server afterwards.
+The restore keeps the current database aside as `finance.db.before-restore-<time>`, so the test loses nothing.
 
 ## Day to day
 
@@ -177,7 +166,7 @@ To try a restore, copy your `finance-backup.key` to the server for the duration 
 | Did this morning's refresh work? | `journalctl -t finance-refresh --since today` |
 | Did last night's backup work? | `journalctl -t finance-backup --since yesterday` |
 | Refresh now | `deploy/scripts/refresh.sh` |
-| Restore a backup | `sudo deploy/scripts/restore.sh <key file> [finance-YYYY-MM-DD.db.gz.age]` |
+| Restore a backup | `sudo deploy/scripts/restore.sh [finance-YYYY-MM-DD.db.gz]` (default: the newest) |
 | Restart | `docker compose -f deploy/compose.yaml restart` |
 
 - **Bank consents** last up to about 180 days. When one expires, the morning refresh reports
