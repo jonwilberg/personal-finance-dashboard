@@ -1,0 +1,8 @@
+# Installed as /etc/cron.d/finance by deploy/scripts/setup-server.sh (times are Europe/Oslo).
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# New transactions every morning, before you look. Banks allow only a few fetches a day per account.
+15 6 * * * root @REPO_DIR@/deploy/scripts/refresh.sh 2>&1 | logger -t finance-refresh
+# Encrypted backup to Cloudflare R2 every night.
+30 3 * * * root @REPO_DIR@/deploy/scripts/backup.sh 2>&1 | logger -t finance-backup

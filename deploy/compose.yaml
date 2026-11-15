@@ -1,0 +1,62 @@
+# The hosted app on the server: the app container and the Cloudflare tunnel that is its only way in.
+# Nothing is published on the server's own network ports. See docs/hosting.md.
+#
+#   docker compose -f deploy/compose.yaml up -d --build
+#
+# Lives next to (all ignored by git):
+#   deploy/.env                    CLOUDFLARE_TUNNEL_TOKEN for the tunnel
+#   deploy/app.env                 the app's settings (copy app.env.example)
+#   deploy/secrets/enablebanking.pem
+#   deploy/data/                   the database (owned by uid 10001)
+
+name: finance
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: finance-app:latest
+    restart: unless-stopped
+    env_file: app.env
+    environment:
+      FINANCE_DATA_DIR: /data
+      ENABLE_BANKING_KEY_PATH: /run/secrets/enablebanking.pem
+    volumes:
+      - ./data:/data
+      - ./secrets/enablebanking.pem:/run/secrets/enablebanking.pem:ro
+    # Reachable by the tunnel on the compose network only.
+    expose:
+      - "8765"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.7
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in deploy/.env}
+    depends_on:
+      app:
+        condition: service_healthy
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -27,6 +27,7 @@ from finance.connections import (
 from finance.enable_banking import EnableBankingClient, EnableBankingError
 from finance import manual
 from finance.manual import ManualAccountError, is_manual_session, load_manual_account
+from finance.refresh import DEFAULT_DAYS, refresh_all
 from finance.storage import Storage
 from finance.transactions import description, inspect, signed_amount, transaction_date
 
@@ -42,8 +43,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     commands = parser.add_subparsers(dest="command", required=True)
 
-    serve = commands.add_parser("serve", help="Run the local web app")
-    serve.add_argument("--port", type=int, help="Defaults to the port of the redirect URL")
+    serve = commands.add_parser("serve", help="Run the web app")
+    serve.add_argument("--port", type=int, help="Defaults to the port of the redirect URL (8765 with --plain)")
+    serve.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Address to listen on (default: this machine only). Anything else needs Cloudflare Access set up.",
+    )
+    serve.add_argument(
+        "--plain",
+        action="store_true",
+        help="Serve plain HTTP behind Cloudflare, which serves the https address (hosted; see docs/hosting.md)",
+    )
+
+    refresh = commands.add_parser(
+        "refresh-all", help="Fetch balances and recent transactions for every connected bank account"
+    )
+    refresh.add_argument(
+        "--days", type=int, default=DEFAULT_DAYS, help="How many days back to fetch (older history is kept)"
+    )
 
     commands.add_parser("app", help="Show the registered Enable Banking application")
 
@@ -99,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "serve":
             from finance.web import serve_app
 
-            serve_app(settings, cert_dir=settings.data_dir / "certs", port=args.port)
+            serve_app(settings, cert_dir=settings.data_dir / "certs", port=args.port, host=args.host, plain=args.plain)
             return 0
         if args.command == "inspect":
             cmd_inspect(store, args)
@@ -108,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
             cmd_categorize(store)
             return 0
         with EnableBankingClient.from_key_file(settings.application_id, settings.private_key_path) as client:
+            if args.command == "refresh-all":
+                return cmd_refresh_all(client, store, args)
             handler = {
                 "app": cmd_app,
                 "banks": cmd_banks,
@@ -121,6 +141,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Error: {error}", file=sys.stderr)
         return 1
     return 0
+
+
+def cmd_refresh_all(client: EnableBankingClient, store: Storage, args: argparse.Namespace) -> int:
+    """Refresh every connected account; exits 1 if any account couldn't be refreshed, so a scheduled run shows up."""
+    results = refresh_all(client, store, days=args.days)
+    for r in results:
+        outcome = f"{r.fetched} transactions" if r.fetched is not None else f"not refreshed: {r.problem}"
+        print(f"{r.bank} / {r.name}: {outcome}")
+    if not results:
+        print("No bank connections to refresh.")
+    return 1 if any(r.problem for r in results) else 0
 
 
 def cmd_app(client: EnableBankingClient, settings: Settings, store: Storage, args: argparse.Namespace) -> None:

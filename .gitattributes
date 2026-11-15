@@ -1,0 +1,4 @@
+# Scripts and files that run on the Linux server keep Unix line endings.
+*.sh text eol=lf
+deploy/cron/* text eol=lf
+Dockerfile text eol=lf

@@ -18,3 +18,9 @@ frontend/dist/
 
 # Local bank data (sessions and downloaded transactions)
 backend/data/
+
+# Server-only files next to deploy/compose.yaml (settings, keys, the database)
+deploy/app.env
+deploy/backup.env
+deploy/secrets/
+deploy/data/

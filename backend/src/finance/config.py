@@ -6,6 +6,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from finance.access import AccessSettings
+
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
@@ -23,6 +25,9 @@ class Settings:
     # Where the web app sends the browser after a bank login: "/" when the backend serves the built
     # frontend, or the Vite dev server (e.g. http://localhost:5173/) during frontend development.
     frontend_url: str = "/"
+    # When hosted behind Cloudflare Access: every request must carry a valid Access token for an allowed email.
+    # None locally.
+    access: AccessSettings | None = None
 
 
 def load_settings(env_name: str | None = None) -> Settings:
@@ -58,4 +63,19 @@ def load_settings(env_name: str | None = None) -> Settings:
         redirect_url=os.getenv("ENABLE_BANKING_REDIRECT_URL", "").strip() or None,
         data_dir=data_dir,
         frontend_url=os.getenv("FINANCE_FRONTEND_URL", "").strip() or "/",
+        access=_access_settings(env_file),
     )
+
+
+def _access_settings(env_file: Path) -> AccessSettings | None:
+    """Cloudflare Access settings: all three variables, or none of them (running locally)."""
+    team_domain = os.getenv("CF_ACCESS_TEAM_DOMAIN", "").strip().removeprefix("https://").rstrip("/")
+    audience = os.getenv("CF_ACCESS_AUD", "").strip()
+    emails = frozenset(e.strip().lower() for e in os.getenv("FINANCE_ALLOWED_EMAILS", "").split(",") if e.strip())
+    values = {"CF_ACCESS_TEAM_DOMAIN": team_domain, "CF_ACCESS_AUD": audience, "FINANCE_ALLOWED_EMAILS": emails}
+    if not any(values.values()):
+        return None
+    missing = [name for name, value in values.items() if not value]
+    if missing:
+        raise ConfigError(f"Cloudflare Access is half set up: missing {', '.join(missing)} ({env_file} or environment).")
+    return AccessSettings(team_domain=team_domain, audience=audience, allowed_emails=emails)
