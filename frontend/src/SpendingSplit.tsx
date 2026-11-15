@@ -211,6 +211,39 @@ export function SpendingSplit({
   const breakAt = HEAD + BREAK_AT;
 
   const fill = (row: ScoreboardRow) => (row.category === UNCATEGORIZED ? `url(#${hatchId})` : groupFill(row.group));
+  // The hovered block's figures for the hover box, placed just right of the block's middle.
+  const hovered = ((): { name: string; x: number; y: number; lines: [string, string, string?][] } | null => {
+    if (!hover) return null;
+    if (hover.startsWith("income:")) {
+      const b = incomeBlocks.find((x) => `income:${x.key}` === hover);
+      if (!b) return null;
+      return {
+        name: b.name,
+        x: incomeX + size.income - 12,
+        y: b.top + b.height / 2,
+        lines: [
+          ["This month", formatKr(b.amount)],
+          ["Share of income", shareText(b.amount / earned)],
+        ],
+      };
+    }
+    const b = blocks.find((x) => x.key === hover);
+    if (!b) return null;
+    const lines: [string, string, string?][] = [
+      ["This month", formatKr(b.amount)],
+      ["Share of spending", shareText(b.amount / total)],
+    ];
+    if (b.row.usual !== null) lines.push(["Median month", formatKr(b.row.usual)]);
+    if (b.row.delta !== null && Math.round(b.row.delta) !== 0) {
+      lines.push([
+        "Difference",
+        `${b.row.delta > 0 ? "+" : "−"}${formatKr(Math.abs(b.row.delta))}`,
+        b.row.delta > 0 ? "is-up" : "is-down",
+      ]);
+    }
+    return { name: b.name, x: barX + size.spent - 12, y: b.top + b.height / 2, lines };
+  })();
+
   const textTone = (row: ScoreboardRow) =>
     row.category === UNCATEGORIZED ? "on-hatch" : LIGHT_TEXT_GROUPS.has(row.group) ? "on-dark" : "on-light";
 
@@ -250,6 +283,8 @@ export function SpendingSplit({
               width={size.income}
               height={b.height}
               fill={`color-mix(in srgb, ${INCOME} ${b.tint}%, transparent)`}
+              onMouseEnter={() => setHover(`income:${b.key}`)}
+              onMouseLeave={() => setHover(null)}
             />
           ))}
           {earned > 0 && (
@@ -319,7 +354,8 @@ export function SpendingSplit({
               key={b.key}
               className={`split-inside on-light is-${how}`}
               style={{ left: incomeX, top: b.top, width: size.income, height: b.height }}
-              title={`${b.name}: ${amount}`}
+              onMouseEnter={() => setHover(`income:${b.key}`)}
+              onMouseLeave={() => setHover(null)}
             >
               <span className="split-inside-name">{b.name}</span>
               <span className="split-inside-amount">{amount}</span>
@@ -338,7 +374,7 @@ export function SpendingSplit({
               type="button"
               className={`split-inside ${textTone(b.row)} is-${how}${hover === b.key ? " is-hover" : ""}`}
               style={{ left: barX, top: b.top, width: size.spent, height: b.height }}
-              title={`${b.name}: ${amount}. Show in the table.`}
+              aria-label={`${b.name}: ${amount}. Show in the table.`}
               onMouseEnter={() => setHover(b.key)}
               onMouseLeave={() => setHover(null)}
               onFocus={() => setHover(b.key)}
@@ -357,6 +393,23 @@ export function SpendingSplit({
             style={{ left: (fromX + toX) / 2, top: connectorY }}
           >
             {net >= 0 ? "Savings" : "Loss"} <span className="split-pill-value">{formatKr(Math.abs(net))}</span>
+          </div>
+        )}
+
+        {/* The hovered category's figures, beside its block. */}
+        {hovered && (
+          <div
+            className="chart-tooltip split-tooltip"
+            style={{ left: hovered.x, top: hovered.y }}
+            role="status"
+          >
+            <strong>{hovered.name}</strong>
+            {hovered.lines.map(([label, value, tone]) => (
+              <div key={label} className="tooltip-row">
+                <span>{label}</span>
+                <span className={tone}>{value}</span>
+              </div>
+            ))}
           </div>
         )}
 
