@@ -11,7 +11,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # --- Backend ---
-FROM python:3.13.13-slim-bookworm
+FROM python:3.15.0-slim-bookworm
 COPY --from=ghcr.io/astral-sh/uv:0.13.7 /uv /bin/uv
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
