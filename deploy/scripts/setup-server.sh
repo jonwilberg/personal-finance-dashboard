@@ -65,7 +65,9 @@ PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin prohibit-password
 EOF
-systemctl reload ssh
+sshd -t
+# Ubuntu 24.04 starts sshd per connection (ssh.socket), which reads the new settings anyway; reload it if it runs.
+systemctl try-reload-or-restart ssh.service
 
 echo "==> App folders"
 install -d -m 0700 -o "$APP_UID" -g "$APP_UID" "$DEPLOY_DIR/data"
