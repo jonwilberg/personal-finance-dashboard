@@ -198,6 +198,19 @@ def test_default_categories_are_seeded(tmp_path):
     assert "bills" not in categories
 
 
+def test_new_default_categories_reach_older_databases_once(tmp_path):
+    storage = Storage(tmp_path)
+    with storage._connect() as db:
+        db.execute("DELETE FROM categories WHERE id = 'electricity'")
+        db.execute("DELETE FROM meta WHERE key = 'category_added:electricity'")
+
+    electricity = Storage(tmp_path).category("electricity")
+    assert electricity is not None and electricity.fixed and electricity.group == "fixed"
+
+    storage.delete_category("electricity")
+    assert Storage(tmp_path).category("electricity") is None
+
+
 def test_add_rename_and_change_categories(tmp_path):
     storage = Storage(tmp_path)
     added = storage.add_category("  Memberships ", "expense", fixed=True)

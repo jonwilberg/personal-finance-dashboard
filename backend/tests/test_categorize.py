@@ -233,7 +233,7 @@ def test_split_categories_have_their_own_keywords():
     }
     result = run(raw)
     assert {k: v[0] for k, v in result.items()} == {
-        "a": "insurance", "b": "phone_internet", "c": "housing", "d": "clothing", "e": "home", "f": "eating_out",
+        "a": "insurance", "b": "phone_internet", "c": "electricity", "d": "clothing", "e": "home", "f": "eating_out",
         "g": "health",
     }
 
