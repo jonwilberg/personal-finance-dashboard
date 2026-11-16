@@ -3,12 +3,11 @@ import type { OverviewMonth, SpendingGroup } from "./api";
 import { formatKr } from "./format";
 import { groupFill } from "./spendingGroups";
 
-// Each month is one column: income stands behind as a pale column with a dark top edge, and spending is stacked in
-// front of it by group (fixed costs at the bottom, Other on top). Where the spending stops short of the income's top,
-// that is what was kept; where it rises above it, the month was overspent. A ledger under the chart gives each
-// month's income, spending and difference, lined up with its column, and the totals in a last column.
+// Each month is a pair of bars: income in solid ink on the left, and spending beside it, stacked by group (fixed
+// costs at the bottom, Other on top). Comparing the two heights shows whether the month was kept or overspent. A
+// ledger under the chart gives each month's income, spending and difference, lined up with its column, and the
+// totals in a last column.
 const INCOME = "var(--chart-income)";
-const INCOME_GHOST = "color-mix(in srgb, var(--chart-income) 9%, transparent)";
 
 const HEIGHT = 240;
 const PAD = { top: 16, bottom: 28, left: 52 }; // top leaves room for broken columns
@@ -16,7 +15,7 @@ const TOTAL_W = 68; // the ledger's totals column, on screens wide enough for it
 const TOTAL_MIN_WIDTH = 560;
 const GAP = 2; // surface gap between stacked segments
 const RADIUS = 4; // rounded data-end on the top of each bar
-const EDGE = 2; // the income column's top edge
+const PAIR_GAP = 2; // space between a month's income bar and its spending bar
 
 // Income far above a typical month (a bonus, a tax refund) would squash every other bar, so it's left out of the
 // scale and its column is cut short with a break. "Far above": more than BREAK_FACTOR times the median month's income,
@@ -60,11 +59,11 @@ export function SpendingChart(props: {
   const plotW = WIDTH - PAD.left - padRight;
   const plotH = HEIGHT - PAD.top - PAD.bottom;
   const band = plotW / Math.max(series.length, 1);
-  const colW = Math.min(60, band * 0.84); // the income column
-  const barW = colW * 0.62; // the spending stack in front of it
+  const pairW = Math.min(64, band * 0.8); // a month's two bars together
+  const barW = (pairW - PAIR_GAP) / 2; // each bar: income, then spending
   const y = (value: number) => PAD.top + plotH - (value / max) * plotH;
-  const colX = (i: number) => PAD.left + band * i + (band - colW) / 2;
-  const barX = (i: number) => colX(i) + (colW - barW) / 2;
+  const incomeX = (i: number) => PAD.left + band * i + (band - pairW) / 2;
+  const barX = (i: number) => incomeX(i) + barW + PAIR_GAP;
   const incomeTop = (i: number) => (cut[i] ? PAD.top - OVERSHOOT : y(incomes[i]));
 
   const hovered = hover !== null ? series[hover] : null;
@@ -95,16 +94,16 @@ export function SpendingChart(props: {
   return (
     <div className="chart">
       <div className="chart-legend" aria-hidden="true">
+        <span className="legend-item">
+          <span className="legend-swatch legend-income" />
+          Income
+        </span>
         {segmentsOf.map((s) => (
           <span key={s.key} className="legend-item">
             <span className="legend-swatch" style={{ background: s.fill }} />
             {s.label}
           </span>
         ))}
-        <span className="legend-item">
-          <span className="legend-swatch legend-income" />
-          Income
-        </span>
       </div>
 
       <div className="chart-frame" ref={frameRef}>
@@ -154,17 +153,14 @@ export function SpendingChart(props: {
                   d={roundedTop(PAD.left + band * i + 2, 4, band - 4, HEIGHT - 4, 4)}
                 />
                 {incomes[i] > 0 && (
-                  <>
-                    <path
-                      d={
-                        cut[i]
-                          ? brokenBar(colX(i), top, colW, y(0), PAD.top + BREAK_AT)
-                          : roundedTop(colX(i), top, colW, Math.max(y(0) - top, 0.5), RADIUS)
-                      }
-                      fill={INCOME_GHOST}
-                    />
-                    <path d={roundedEdge(colX(i), top, colW, RADIUS)} fill="none" stroke={INCOME} strokeWidth={EDGE} />
-                  </>
+                  <path
+                    d={
+                      cut[i]
+                        ? brokenBar(incomeX(i), top, barW, y(0), PAD.top + BREAK_AT)
+                        : roundedTop(incomeX(i), top, barW, Math.max(y(0) - top, 0.5), RADIUS)
+                    }
+                    fill={INCOME}
+                  />
                 )}
                 {segments.map((s, j) => {
                   const segTop = y(s.to);
@@ -177,7 +173,7 @@ export function SpendingChart(props: {
                   );
                 })}
                 <text
-                  x={colX(i) + colW / 2}
+                  x={PAD.left + band * i + band / 2}
                   y={HEIGHT - 8}
                   textAnchor="middle"
                   className={`chart-axis ${isSelected ? "chart-axis-strong" : ""}`}
@@ -362,17 +358,6 @@ function roundedTop(x: number, y: number, w: number, h: number, r: number) {
     `Q${x + w},${y} ${x + w},${y + radius}`,
     `V${y + h}`,
     "Z",
-  ].join(" ");
-}
-
-/** Just the rounded top edge of a column, for drawing as a line. */
-function roundedEdge(x: number, y: number, w: number, r: number) {
-  const radius = Math.min(r, w / 2);
-  return [
-    `M${x},${y + radius}`,
-    `Q${x},${y} ${x + radius},${y}`,
-    `H${x + w - radius}`,
-    `Q${x + w},${y} ${x + w},${y + radius}`,
   ].join(" ");
 }
 

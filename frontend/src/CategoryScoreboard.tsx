@@ -77,6 +77,7 @@ export function CategoryScoreboard(props: {
 
   // Every spending category is a row (uncategorized included), so together they make the period's total spending.
   const ltmTotal = props.rows.reduce((sum, row) => sum + row.ltm, 0);
+  const historyTotal = props.months.map((_, i) => props.rows.reduce((sum, row) => sum + (row.history[i] ?? 0), 0));
 
   // A heading sorts by its column, then the other way round, then back to the bar's order.
   const toggle = (key: SortKey) =>
@@ -109,6 +110,7 @@ export function CategoryScoreboard(props: {
               ) : (
                 column.label
               )}
+              {column.key === "amount" && <span className="score-share" aria-hidden="true" />}
             </th>
           ))}
         </tr>
@@ -150,9 +152,9 @@ export function CategoryScoreboard(props: {
                 </td>
                 <td className="num">
                   <span className="score-amount">{formatKr(row.amount)}</span>
-                  {row.share !== null && row.amount > 0 && (
-                    <span className="meta small score-share">{Math.round(row.share * 100)} %</span>
-                  )}
+                  <span className="meta small score-share">
+                    {row.share !== null && row.amount > 0 && `${Math.round(row.share * 100)} %`}
+                  </span>
                 </td>
                 <td className="num meta">{row.usual !== null ? formatKr(row.usual) : "–"}</td>
                 <td className="num">
@@ -185,13 +187,16 @@ export function CategoryScoreboard(props: {
           <td>Total spending</td>
           <td className="num">
             <span className="score-amount">{formatKr(props.total)}</span>
+            <span className="score-share" aria-hidden="true" />
           </td>
           <td className="num meta">{props.usual !== null ? formatKr(props.usual) : "–"}</td>
           <td className="num">
             <Difference delta={props.usual !== null ? props.total - props.usual : null} />
           </td>
           <td className="num">{formatKr(ltmTotal)}</td>
-          <td />
+          <td>
+            <Sparkline values={historyTotal} months={props.months} name="Total spending" />
+          </td>
         </tr>
       </tfoot>
     </table>
@@ -200,11 +205,11 @@ export function CategoryScoreboard(props: {
 
 function Difference({ delta }: { delta: number | null }) {
   if (delta === null) return <span className="meta">–</span>;
-  if (Math.round(delta) === 0) return <span className="meta">±0</span>;
-  // Arrow and sign carry the direction, so it never depends on colour alone.
+  if (Math.round(delta) === 0) return <span className="meta">0</span>;
+  // The sign carries the direction, so it never depends on colour alone.
   return (
     <span className={`change-delta ${delta > 0 ? "is-up" : "is-down"}`}>
-      {delta > 0 ? "▲ +" : "▼ −"}
+      {delta > 0 ? "+" : "−"}
       {formatKr(Math.abs(delta))}
     </span>
   );
@@ -212,22 +217,35 @@ function Difference({ delta }: { delta: number | null }) {
 
 const SPARK_W = 112;
 const SPARK_H = 26;
+const SPARK_GAP = 2; // between the little bars
 
+/** A tiny bar per month, grey, with the last month (the selected one) in ink. */
 function Sparkline({ values, months, name }: { values: number[]; months: OverviewMonth[]; name: string }) {
   if (values.length < 2) return null;
   const low = Math.min(0, ...values);
   const high = Math.max(...values, 1);
-  const x = (i: number) => 3 + (i / (values.length - 1)) * (SPARK_W - 6);
-  const y = (v: number) => 3 + (1 - (v - low) / (high - low)) * (SPARK_H - 6);
-  const points = values.map((v, i) => `${x(i)},${y(v)}`).join(" ");
+  const barW = (SPARK_W - SPARK_GAP * (values.length - 1)) / values.length;
+  const x = (i: number) => i * (barW + SPARK_GAP);
+  const y = (v: number) => 1 + (1 - (v - low) / (high - low)) * (SPARK_H - 2);
   const last = values.length - 1;
   const description = values.map((v, i) => `${monthTitle(months[i]?.month ?? "")}: ${formatKr(v)}`).join(", ");
   return (
     <svg className="sparkline" viewBox={`0 0 ${SPARK_W} ${SPARK_H}`} width={SPARK_W} height={SPARK_H} role="img">
       <title>{`${name} per month. ${description}`}</title>
-      <line x1="3" x2={SPARK_W - 3} y1={y(0)} y2={y(0)} stroke="var(--rule)" />
-      <polyline points={points} fill="none" stroke="var(--ink-muted)" strokeWidth="2" strokeLinejoin="round" />
-      <circle cx={x(last)} cy={y(values[last])} r="3.5" fill="var(--ink)" stroke="var(--paper)" strokeWidth="2" />
+      <line x1="0" x2={SPARK_W} y1={y(0)} y2={y(0)} stroke="var(--rule)" />
+      {values.map((v, i) => {
+        const top = Math.min(y(v), y(0));
+        return (
+          <rect
+            key={i}
+            x={x(i)}
+            y={top}
+            width={barW}
+            height={Math.max(Math.abs(y(v) - y(0)), 0.5)}
+            fill={i === last ? "var(--ink)" : "var(--ink-muted)"}
+          />
+        );
+      })}
     </svg>
   );
 }

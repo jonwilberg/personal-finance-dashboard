@@ -28,7 +28,7 @@
 
   /* Spending groups (see spendingGroups.ts), validated together: lightness band, chroma, colour-blind separation and
      contrast on --paper. Other is a neutral grey, so the named groups carry the colour. Income is a dark ink, drawn
-     as a pale column with a dark top edge behind the spending. */
+     as a solid bar beside the spending. */
   --group-fixed: #2a63b0;
   --group-groceries: #b8862a;
   --group-health: #e2699a;
@@ -89,7 +89,7 @@
   --cat-8: #d08e66;
   --cat-other: #6b6458;
 
-  /* Not yet validated for the dark surface. Income is a light ink here, so its pale column still reads. */
+  /* Not yet validated for the dark surface. Income is a light ink here, so its solid bar still reads. */
   --group-fixed: #4f86cc;
   --group-groceries: #b8862a;
   --group-health: #d0739a;
