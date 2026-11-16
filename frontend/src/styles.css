@@ -927,7 +927,7 @@ button.month-step:hover:not(:disabled) {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4);
-  font-size: var(--text-caption);
+  font-size: var(--text-small);
   color: var(--ink-secondary);
 }
 
@@ -943,12 +943,9 @@ button.month-step:hover:not(:disabled) {
   border-radius: 2px;
 }
 
-/* Income stands behind the spending as a pale column with a dark top edge. */
+/* Income is a solid ink bar beside the spending. */
 .legend-income {
-  box-sizing: border-box;
-  background: color-mix(in srgb, var(--chart-income) 9%, transparent);
-  border-top: 3px solid var(--chart-income);
-  border-radius: 2px 2px 0 0;
+  background: var(--chart-income);
 }
 
 .legend-hatch {
@@ -968,7 +965,7 @@ button.month-step:hover:not(:disabled) {
 }
 
 .chart-axis {
-  font-size: 11px;
+  font-size: var(--text-caption);
   fill: var(--ink-muted);
   font-family: var(--font-ui);
   font-variant-numeric: tabular-nums;
@@ -1002,7 +999,7 @@ button.month-step:hover:not(:disabled) {
    and hovered months are tinted like their columns above; kept is green, overspent red (the sign says which too). */
 .chart-ledger {
   display: grid;
-  font-size: var(--text-caption);
+  font-size: var(--text-body);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1074,6 +1071,13 @@ button.month-step:hover:not(:disabled) {
   color: var(--signal);
 }
 
+/* Twelve months share the width, so narrower screens set the ledger smaller to keep its figures apart. */
+@media (max-width: 720px) {
+  .chart-ledger {
+    font-size: var(--text-small);
+  }
+}
+
 @media (max-width: 480px) {
   .chart-ledger {
     font-size: 10px;
@@ -1089,7 +1093,7 @@ button.month-step:hover:not(:disabled) {
   background: var(--paper-raised);
   border: 1px solid var(--ink);
   border-radius: var(--radius);
-  font-size: var(--text-caption);
+  font-size: var(--text-small);
   pointer-events: none;
   z-index: 5;
 }
@@ -1162,7 +1166,9 @@ button.month-step:hover:not(:disabled) {
   white-space: nowrap;
 }
 
+/* The four number columns share the width evenly; the category name takes what's left. */
 .scoreboard th.num {
+  width: 15%;
   text-align: right;
 }
 
@@ -1301,9 +1307,11 @@ button.score-toggle {
   }
 }
 
+/* The share of this month's spending, after the amount. Its slot has a fixed width and is kept empty in the header,
+   the total and rows without a share, so every amount ends at the same place. */
 .score-share {
   display: inline-block;
-  min-width: 3.2em;
+  width: 2.75rem;
   margin-left: var(--space-2);
   text-align: right;
 }
@@ -1820,10 +1828,10 @@ button.split-inside {
 .split-group-label {
   position: absolute;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 88px 40px;
+  grid-template-columns: minmax(0, 1fr) 96px 44px;
   align-items: center;
   column-gap: var(--space-2);
-  font-size: var(--text-caption);
+  font-size: var(--text-body);
   white-space: nowrap;
 }
 
@@ -1886,7 +1894,7 @@ button.split-inside {
   transform: translate(-50%, -50%);
   border-radius: 999px;
   color: var(--paper-raised);
-  font-size: var(--text-caption);
+  font-size: var(--text-body);
   line-height: 1.3;
   white-space: nowrap;
 }
@@ -1910,7 +1918,7 @@ button.split-inside {
   display: flex;
   flex-direction: column;
   align-items: center;
-  font-size: var(--text-caption);
+  font-size: var(--text-body);
   line-height: 1.35;
   white-space: nowrap;
 }
@@ -2075,7 +2083,7 @@ select.is-filtering {
 
 .trend-name {
   flex: 0 0 132px;
-  font-size: var(--text-caption);
+  font-size: var(--text-small);
   font-weight: 500;
   color: var(--ink);
   white-space: nowrap;
@@ -2142,12 +2150,12 @@ select.is-filtering {
 }
 
 .trend-figures {
-  flex: 0 0 116px;
+  flex: 0 0 148px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 2px;
-  font-size: var(--text-caption);
+  font-size: var(--text-body);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -2162,7 +2170,7 @@ select.is-filtering {
   position: absolute;
   top: 0;
   text-align: center;
-  font-size: var(--text-label);
+  font-size: var(--text-caption);
   color: var(--ink-muted);
 }
 

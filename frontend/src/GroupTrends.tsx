@@ -11,7 +11,7 @@ import { groupFill } from "./spendingGroups";
 // Each row has its own scale, so a small group's trend shows as clearly as Fixed's.
 
 const NAME_W = 132; // the group's name, when shown
-const FIGURES_W = 116; // the difference and median on the right
+const FIGURES_W = 148; // the difference and median on the right (matches .trend-figures)
 const COL_GAP = 4; // between a row's columns
 const MAX_COL = 40; // the widest a column gets
 const PAD_TOP = 6; // above a row's tallest column
@@ -162,11 +162,11 @@ export function GroupTrends({
 
 function Difference({ delta }: { delta: number | null }) {
   if (delta === null) return <span className="meta">–</span>;
-  if (Math.round(delta) === 0) return <span className="meta">±0</span>;
-  // Arrow and sign carry the direction, so it never depends on colour alone.
+  if (Math.round(delta) === 0) return <span className="meta">0</span>;
+  // The sign carries the direction, so it never depends on colour alone.
   return (
     <span className={`change-delta ${delta > 0 ? "is-up" : "is-down"}`}>
-      {delta > 0 ? "▲ +" : "▼ −"}
+      {delta > 0 ? "+" : "−"}
       {formatKr(Math.abs(delta))}
     </span>
   );

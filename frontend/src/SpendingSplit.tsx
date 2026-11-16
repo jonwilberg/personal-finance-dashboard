@@ -8,16 +8,15 @@ import { groupFill } from "./spendingGroups";
 // - Spending is one wide bar stacked like the chart (the groups in their order from the bottom, each group's
 //   categories largest first, uncategorized hatched on top). Each category's name and amount sit inside its block
 //   when they fit; on the right each group has its total, on a leader from a line spanning the group's whole band.
-// - Income stands to its left on the same scale, in solid income ink (the colour of income's top edge in the chart
-//   above), so no spending colour can be mistaken for it; its categories are split by the same gaps, labelled the
+// - Income stands to its left on the same scale, in solid income ink (as income's bars in the chart above), so no spending colour can be mistaken for it; its categories are split by the same gaps, labelled the
 //   same way. It is cut short with a break when it is far above the spending.
 // - A bracket between the bars marks what was kept or overspent; the two totals head their bars.
 // - Clicking a spending category jumps to its row in the table below.
 // - To the right, each group's last 12 months (GroupTrends); hovering a group there or on the bar highlights it in both.
 
 const UNCATEGORIZED = "uncategorized";
-const TOTALS_H = 34; // a total above its bar
-const HEAD = 76; // room above the taller bar for its total and, above that, the savings connector
+const TOTALS_H = 42; // a total above its bar: two lines of body text
+const HEAD = 86; // room above the taller bar for its total and, above that, the savings connector
 const BAR_H = 480; // the bars' area below the totals
 const GAP = 2; // surface gap between blocks
 const LINE = 22; // a group label's line on wide screens
@@ -168,7 +167,7 @@ export function SpendingSplit({
   const barX = size.income + size.gap;
   const barRight = barX + size.spent;
   const labelX = barRight + size.leader;
-  const labelW = Math.max(Math.min(width - labelX, 270), 0); // capped, so totals stay near their names
+  const labelW = Math.max(Math.min(width - labelX, 300), 0); // capped, so totals stay near their names
   const base = HEAD + BAR_H; // the bars' common bottom
 
   // One scale for both bars: the taller one fills the area, unless income is far above the spending, when the
