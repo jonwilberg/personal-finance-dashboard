@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Backend for the personal finance dashboard: Enable Banking integration, categorization and statistics."
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi>=0.162.5",
+    "fastapi>=0.165.0",
     "httpx>=0.28.1",
     "pyjwt[crypto]>=2.15.1",
     "python-dotenv>=1.2.4",
@@ -15,7 +15,7 @@ dependencies = [
 finance = "finance.cli:main"
 
 [build-system]
-requires = ["uv_build>=0.13.8,<0.14.0"]
+requires = ["uv_build>=0.13.9,<0.14.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
