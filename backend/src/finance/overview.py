@@ -21,6 +21,7 @@ from statistics import median
 from typing import Any
 
 from finance.categories import SPENDING_GROUPS, Category, spending_group
+from finance.recurring import build_recurring
 
 HISTORY_MONTHS = 12
 # Fewer previous months than this and there's no meaningful "usual" to compare with.
@@ -38,6 +39,7 @@ def build_overview(
     categories: list[Category],
     month: str | None = None,
     today: date | None = None,
+    not_recurring: set[str] | frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     today = today or date.today()
     by_id = {c.id: c for c in categories}
@@ -103,6 +105,8 @@ def build_overview(
             for key, amount in sorted(this["income_by_category"].items(), key=lambda kv: kv[1], reverse=True)
             if amount > 0 and key in by_id
         ],
+        # Payments to the same payee about once a month (see recurring.py), leaving out payees marked as not.
+        "recurring": build_recurring(transactions, by_id, month, set(not_recurring), today),
     }
 
 

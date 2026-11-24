@@ -122,6 +122,14 @@ CREATE TABLE IF NOT EXISTS categories (
     position INTEGER NOT NULL,
     spending_group TEXT          -- spending categories: their group on the charts (categories.SPENDING_GROUPS)
 );
+
+-- Payees you marked as not recurring, left out of the overview's recurring payments. payee is the name transactions
+-- are grouped by (their "merchant").
+CREATE TABLE IF NOT EXISTS recurring_choices (
+    payee TEXT PRIMARY KEY,
+    recurring INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 
@@ -549,6 +557,19 @@ class Storage:
                 db.execute(
                     "INSERT OR REPLACE INTO category_overrides VALUES (?, ?, ?)", (transaction_id, category, _now())
                 )
+
+    def not_recurring(self) -> set[str]:
+        """The payees you marked as not recurring."""
+        with self._connect() as db:
+            return {row["payee"] for row in db.execute("SELECT payee FROM recurring_choices WHERE recurring = 0")}
+
+    def set_recurring(self, payee: str, recurring: bool) -> None:
+        """Mark a payee as not recurring, or (True) let the overview decide again."""
+        with self._connect() as db:
+            if recurring:
+                db.execute("DELETE FROM recurring_choices WHERE payee = ?", (payee,))
+            else:
+                db.execute("INSERT OR REPLACE INTO recurring_choices VALUES (?, 0, ?)", (payee, _now()))
 
     def add_rule(self, pattern: str, category: str, regex: bool = False) -> str:
         """Save a rule and return its pattern as stored: text patterns in upper case, regexes as written."""

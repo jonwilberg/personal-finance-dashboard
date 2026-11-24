@@ -53,6 +53,11 @@ class ConnectRequest(BaseModel):
     days: int = Field(default=180, ge=1, le=365)
 
 
+class RecurringChoice(BaseModel):
+    payee: str = Field(min_length=1, max_length=200)
+    recurring: bool
+
+
 class CategoryChoice(BaseModel):
     # None removes your manual choice, so the automatic category applies again.
     category: str | None
@@ -461,7 +466,13 @@ def create_app(
         transactions = all_transactions()
         if owner:
             transactions = owned_by(transactions, owner)
-        return build_overview(transactions, store.categories(), month)
+        return build_overview(transactions, store.categories(), month, not_recurring=store.not_recurring())
+
+    @app.put("/api/recurring")
+    def set_recurring(choice: RecurringChoice) -> dict[str, bool]:
+        """Mark a payee as not recurring (left out of the overview's recurring payments), or undo that."""
+        store.set_recurring(choice.payee, choice.recurring)
+        return {"ok": True}
 
     def owned_by(transactions: list[dict[str, Any]], owners: list[str]) -> list[dict[str, Any]]:
         """The transactions on accounts belonging to these owners (people, or "shared")."""

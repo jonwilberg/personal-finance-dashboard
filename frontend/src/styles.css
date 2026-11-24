@@ -2210,3 +2210,97 @@ select.is-filtering {
     var(--paper-sunken) 1.5px 4px
   );
 }
+
+/* Recurring payments: the category table's look, with a status column last instead of the sparkline. */
+.recurring-headline {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-subhead);
+}
+
+.scoreboard.recurring th.num {
+  width: 13%;
+}
+
+.scoreboard.recurring td:nth-child(6),
+.scoreboard.recurring th:nth-child(6) {
+  padding-left: var(--space-4);
+  width: 130px;
+}
+
+.scoreboard.recurring td:last-child,
+.scoreboard.recurring th:last-child {
+  width: 10rem;
+  padding-left: var(--space-3);
+  white-space: nowrap;
+}
+
+.scoreboard.recurring td:nth-child(2),
+.scoreboard.recurring td:nth-child(3) {
+  white-space: nowrap;
+}
+
+/* "2 payments", under the amount. */
+.recurring-count {
+  display: block;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.recurring-payment {
+  grid-template-columns: 7em minmax(0, 1fr) auto;
+}
+
+.recurring-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+}
+
+.recurring-actions button.text {
+  padding-left: 0;
+}
+
+.recurring-hidden {
+  margin-top: var(--space-3);
+}
+
+.recurring-hidden-toggle {
+  padding: 0;
+  text-decoration: underline;
+}
+
+.recurring-hidden-list {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recurring-hidden-list li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  border-top: var(--rule-hair);
+}
+
+@media (max-width: 720px) {
+  /* Phones keep the payee, this month and the status. */
+  .scoreboard.recurring th:nth-child(2),
+  .scoreboard.recurring td:nth-child(2),
+  .scoreboard.recurring th:nth-child(3),
+  .scoreboard.recurring td:nth-child(3),
+  .scoreboard.recurring th:nth-child(5),
+  .scoreboard.recurring td:nth-child(5),
+  .scoreboard.recurring th:nth-child(6),
+  .scoreboard.recurring td:nth-child(6) {
+    display: none;
+  }
+
+  /* The category table hides its last column on phones; here that's the status, which stays. */
+  .scoreboard.recurring th:last-child,
+  .scoreboard.recurring td:last-child {
+    display: table-cell;
+  }
+}

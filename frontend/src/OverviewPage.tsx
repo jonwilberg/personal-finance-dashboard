@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { type Overview, type Owner, api, overviewApi } from "./api";
 import { CategoryScoreboard } from "./CategoryScoreboard";
 import { OwnerFilter, ownerScope } from "./OwnerPicker";
+import { RecurringPayments } from "./RecurringPayments";
 import { SpendingChart, monthTitle } from "./SpendingChart";
 import { SpendingSplit } from "./SpendingSplit";
 
@@ -186,6 +187,19 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
             usual={f.usual_spent}
             month={overview.month}
             owners={filter}
+            onChanged={recount}
+            onError={onError}
+          />
+        </section>
+      )}
+
+      {overview.recurring && (overview.recurring.items.length > 0 || overview.recurring.hidden.length > 0) && (
+        <section className="section">
+          <RecurringPayments
+            recurring={overview.recurring}
+            month={overview.month}
+            isPartial={overview.is_partial}
+            scope={scope}
             onChanged={recount}
             onError={onError}
           />

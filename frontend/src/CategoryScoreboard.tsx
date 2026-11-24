@@ -220,7 +220,7 @@ const SPARK_H = 26;
 const SPARK_GAP = 2; // between the little bars
 
 /** A tiny bar per month, grey, with the last month (the selected one) in ink. */
-function Sparkline({ values, months, name }: { values: number[]; months: OverviewMonth[]; name: string }) {
+export function Sparkline({ values, months, name }: { values: number[]; months: Pick<OverviewMonth, "month">[]; name: string }) {
   if (values.length < 2) return null;
   const low = Math.min(0, ...values);
   const high = Math.max(...values, 1);
