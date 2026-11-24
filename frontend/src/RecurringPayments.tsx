@@ -5,7 +5,7 @@ import { formatDate, formatKr } from "./format";
 import { monthTitle } from "./SpendingChart";
 import { groupFill } from "./spendingGroups";
 
-const COLUMNS = ["Payee", "Category", "This month", "Median month", "Total LTM", "Last 12 months", ""];
+const COLUMNS = ["Payee", "Category", "This month", "Median month", "Total LTM", "Last 12 months"];
 const NUMERIC = new Set([2, 3, 4]);
 
 /**
@@ -120,9 +120,6 @@ export function RecurringPayments(props: {
                     <td>
                       <Sparkline values={item.history} months={months} name={item.payee} />
                     </td>
-                    <td className="recurring-status">
-                      <Status item={item} />
-                    </td>
                   </tr>
                   {isOpen && (
                     <tr className="score-detail" id={detailId}>
@@ -151,7 +148,6 @@ export function RecurringPayments(props: {
               </td>
               <td className="num meta">{formatKr(recurring.items.reduce((sum, i) => sum + (i.usual ?? 0), 0))}</td>
               <td className="num">{formatKr(recurring.items.reduce((sum, i) => sum + ltm(i), 0))}</td>
-              <td />
               <td />
             </tr>
           </tfoot>
@@ -183,32 +179,6 @@ export function RecurringPayments(props: {
       )}
     </>
   );
-}
-
-/** What's worth knowing about this payee this month, in words; nothing when it was paid as usual. */
-function Status({ item }: { item: RecurringItem }) {
-  switch (item.status) {
-    case "new":
-      return <span className="badge badge-test">New</span>;
-    case "changed": {
-      const change = item.usual ? (item.amount - item.usual) / item.usual : 0;
-      // The sign carries the direction, so it never depends on colour alone.
-      return (
-        <span className={`change-delta ${change > 0 ? "is-up" : "is-down"}`}>
-          {change > 0 ? "+" : "−"}
-          {Math.round(Math.abs(change) * 100)} %
-        </span>
-      );
-    }
-    case "due":
-      return <span className="meta small">Due around the {ordinal(item.day)}</span>;
-    case "missed":
-      return <span className="meta small">Not paid this month</span>;
-    case "stopped":
-      return <span className="meta small">Stopped</span>;
-    default:
-      return null;
-  }
 }
 
 function Detail(props: { item: RecurringItem; month: string; busy: boolean; onNotRecurring: () => void }) {
@@ -246,11 +216,4 @@ function Detail(props: { item: RecurringItem; month: string; busy: boolean; onNo
 
 function joinAnd(parts: string[]): string {
   return parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : (parts[0] ?? "");
-}
-
-/** 1st, 2nd, 3rd, 4th … 21st, 22nd. */
-function ordinal(day: number): string {
-  const tens = day % 100;
-  const suffix = tens >= 11 && tens <= 13 ? "th" : ["th", "st", "nd", "rd"][day % 10] ?? "th";
-  return `${day}${suffix}`;
 }

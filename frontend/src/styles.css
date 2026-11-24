@@ -2211,24 +2211,7 @@ select.is-filtering {
   );
 }
 
-/* Recurring payments: the category table's look, with a status column last instead of the sparkline. */
-.scoreboard.recurring th.num {
-  width: 13%;
-}
-
-.scoreboard.recurring td:nth-child(6),
-.scoreboard.recurring th:nth-child(6) {
-  padding-left: var(--space-4);
-  width: 130px;
-}
-
-.scoreboard.recurring td:last-child,
-.scoreboard.recurring th:last-child {
-  width: 10rem;
-  padding-left: var(--space-3);
-  white-space: nowrap;
-}
-
+/* Recurring payments: the category table's look and column widths, so the sparklines line up with the ones above. */
 .scoreboard.recurring td:nth-child(2) {
   white-space: nowrap;
 }
@@ -2258,8 +2241,7 @@ select.is-filtering {
 
 /* Where a payee was, right after marking it as non-recurring. */
 .scoreboard .recurring-undo > td {
-  padding-top: var(--space-2);
-  padding-bottom: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   background: var(--highlight);
 }
 
@@ -2296,23 +2278,23 @@ select.is-filtering {
 }
 
 @media (max-width: 720px) {
-  /* Phones keep the payee, this month and the status. */
+  /* Phones keep the payee and this month. */
   .scoreboard.recurring th:nth-child(2),
   .scoreboard.recurring td:nth-child(2),
   .scoreboard.recurring th:nth-child(4),
-  .scoreboard.recurring td:nth-child(4),
-  .scoreboard.recurring th:nth-child(5),
-  .scoreboard.recurring td:nth-child(5),
-  .scoreboard.recurring th:nth-child(6),
-  .scoreboard.recurring td:nth-child(6) {
+  .scoreboard.recurring td:nth-child(4) {
     display: none;
   }
 
-  /* The category table's phone rule hides its 3rd and last columns; here those are this month and the status. */
+  /* The category table's phone rule hides its 3rd column; here that's this month. */
   .scoreboard.recurring th:nth-child(3),
-  .scoreboard.recurring td:nth-child(3),
-  .scoreboard.recurring th:last-child,
-  .scoreboard.recurring td:last-child {
+  .scoreboard.recurring td:nth-child(3) {
+    display: table-cell;
+  }
+
+  /* An opened row (and the Undo line) is one cell, so it's also a row's last cell, which phones otherwise hide. */
+  .scoreboard .score-detail > td,
+  .scoreboard .recurring-undo > td {
     display: table-cell;
   }
 }
