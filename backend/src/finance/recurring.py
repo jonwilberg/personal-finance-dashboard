@@ -31,7 +31,7 @@ SAME_AMOUNT = Decimal("0.02")  # payments this close to a series' amount are "th
 REGULAR_SHARE = 0.6  # payees whose amount varies: this share of the gaps between payments must be about a month
 MAX_PER_MONTH = 1.3  # ...with about one payment a month
 NEW_MONTHS = 3  # a payee first paid within this many months (the selected one included) is new
-CHANGED_SHARE = Decimal("0.10")  # this month's amount differs this much from its usual month: changed
+CHANGED_SHARE = Decimal("0.10")  # this month's amount differs this much from its median month: changed
 STOPPED_AFTER_MONTHS = 2  # no payment in this many months: stopped
 SHOW_STOPPED_MONTHS = 3  # a stopped payee is listed for this many months after its last payment
 

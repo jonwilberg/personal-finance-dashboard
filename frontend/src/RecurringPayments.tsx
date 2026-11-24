@@ -5,12 +5,12 @@ import { formatDate, formatKr } from "./format";
 import { monthTitle } from "./SpendingChart";
 import { groupFill } from "./spendingGroups";
 
-const COLUMNS = ["Payee", "Category", "This month", "Usual month", "Total LTM", "Last 12 months", ""];
+const COLUMNS = ["Payee", "Category", "This month", "Median month", "Total LTM", "Last 12 months", ""];
 const NUMERIC = new Set([2, 3, 4]);
 
 /**
  * Payments that come about once a month (rent, subscriptions, insurance, power), for the selected month: what each
- * came to, against its usual month, with a strip of its last 12 months. Each row opens to the month's payments, and a
+ * came to, against its median month, with a strip of its last 12 months. Each row opens to the month's payments, and a
  * payee that isn't really recurring (a card bill, say) can be left out; those are listed at the end to bring back.
  */
 export function RecurringPayments(props: {
@@ -94,7 +94,7 @@ export function RecurringPayments(props: {
                       )}
                     </td>
                     <td className="num meta">
-                      {item.usual !== null ? `${item.varies ? "~" : ""}${formatKr(item.usual)}` : "–"}
+                      {item.usual !== null ? formatKr(item.usual) : "–"}
                     </td>
                     <td className="num">{formatKr(ltm(item))}</td>
                     <td>
