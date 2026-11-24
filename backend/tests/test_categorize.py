@@ -286,3 +286,13 @@ def test_regex_rules_match_the_shown_text_ignoring_case_after_text_rules():
     result = run(raw, settings)
     assert result["a"] == ("other_income", "rule")
     assert result["b"] == ("groceries", "rule")  # a matching text rule comes first
+
+
+def test_a_rule_made_from_the_payee_matches_even_when_the_text_has_words_in_between():
+    # The payee leaves out "overføring" and "til", so "EKSTRA OLA NORDMANN" isn't in the text as one piece. The
+    # transactions page suggests the payee as the rule, so the rule must still catch them.
+    raw = {"checking": [{**tx("a", "500", "DBIT"), "remittance_information": ["Ekstra overføring til Ola Nordmann"]}]}
+    [t] = categorized_transactions(SESSIONS, raw, CategorizationSettings(rules=[Rule("EKSTRA OLA NORDMANN", "transfer")]))
+    assert t["merchant"] == "EKSTRA OLA NORDMANN"
+    assert "EKSTRA OLA NORDMANN" not in t["text"]
+    assert (t["category"], t["category_source"], t["rule"]) == ("transfer", "rule", "EKSTRA OLA NORDMANN")
