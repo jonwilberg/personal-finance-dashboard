@@ -215,10 +215,9 @@ function Detail(props: { item: RecurringItem; month: string; busy: boolean; onNo
         <p className="drill-note meta small">Nothing paid to {item.payee} in {monthTitle(props.month)}.</p>
       )}
       <p className="recurring-actions">
-        <button className="text" disabled={props.busy} onClick={props.onNotRecurring}>
-          {props.busy ? "Saving…" : "Not a recurring payment"}
+        <button className="recurring-mark" disabled={props.busy} onClick={props.onNotRecurring}>
+          {props.busy ? "Saving…" : "Mark as non-recurring"}
         </button>
-        <span className="meta small">Leaves it out of this list. Its spending still counts above.</span>
       </p>
     </div>
   );

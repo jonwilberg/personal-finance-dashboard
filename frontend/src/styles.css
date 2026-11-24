@@ -2245,15 +2245,19 @@ select.is-filtering {
 }
 
 .recurring-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-2);
   margin: var(--space-2) 0 0;
 }
 
-.recurring-actions button.text {
-  padding-left: 0;
+/* A link: it changes only this list, so it doesn't need a button's weight. */
+button.recurring-mark {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--compare);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
 }
 
 .recurring-hidden {
