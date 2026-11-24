@@ -11,7 +11,8 @@ const UNCATEGORIZED = "uncategorized";
 
 const COLUMNS: { key: SortKey | null; label: string; numeric: boolean }[] = [
   { key: "name", label: "Category", numeric: false },
-  { key: "transactions", label: "Transactions", numeric: true },
+  // Left-aligned, so the count starts where the recurring payments' category does in the table below.
+  { key: "transactions", label: "Transactions", numeric: false },
   { key: "amount", label: "This month", numeric: true },
   { key: "usual", label: "Median month", numeric: true },
   { key: "delta", label: "Difference", numeric: true },
@@ -153,7 +154,7 @@ export function CategoryScoreboard(props: {
                     </span>
                   </button>
                 </td>
-                <td className="num meta">{row.transactions > 0 ? row.transactions : "–"}</td>
+                <td className="meta">{row.transactions > 0 ? row.transactions : "–"}</td>
                 <td className="num">
                   <span className="score-amount">{formatKr(row.amount)}</span>
                   <span className="meta small score-share">
@@ -189,7 +190,7 @@ export function CategoryScoreboard(props: {
       <tfoot>
         <tr>
           <td>Total spending</td>
-          <td className="num meta">{props.rows.reduce((sum, row) => sum + row.transactions, 0)}</td>
+          <td className="meta">{props.rows.reduce((sum, row) => sum + row.transactions, 0)}</td>
           <td className="num">
             <span className="score-amount">{formatKr(props.total)}</span>
             <span className="score-share" aria-hidden="true" />

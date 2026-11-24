@@ -73,6 +73,8 @@ export function RecurringPayments(props: {
               {COLUMNS.map((label, i) => (
                 <th key={i} className={NUMERIC.has(i) ? "num" : undefined}>
                   {label}
+                  {/* The category table's amounts leave room for their share; so do these, so both end alike. */}
+                  {i === 2 && <span className="score-share" aria-hidden="true" />}
                 </th>
               ))}
             </tr>
@@ -115,6 +117,7 @@ export function RecurringPayments(props: {
                     </td>
                     <td className="num">
                       <span className="score-amount">{item.amount > 0 ? formatKr(item.amount) : "–"}</span>
+                      <span className="score-share" aria-hidden="true" />
                       {item.payments.length > 1 && (
                         <span className="meta small recurring-count">{item.payments.length} payments</span>
                       )}
@@ -154,6 +157,7 @@ export function RecurringPayments(props: {
               <td />
               <td className="num">
                 <span className="score-amount">{formatKr(recurring.total)}</span>
+                <span className="score-share" aria-hidden="true" />
               </td>
               <td className="num meta">{formatKr(usualTotal)}</td>
               <td className="num">
