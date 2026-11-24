@@ -118,9 +118,6 @@ export function RecurringPayments(props: {
                     <td className="num">
                       <span className="score-amount">{item.amount > 0 ? formatKr(item.amount) : "–"}</span>
                       <span className="score-share" aria-hidden="true" />
-                      {item.payments.length > 1 && (
-                        <span className="meta small recurring-count">{item.payments.length} payments</span>
-                      )}
                     </td>
                     <td className="num meta">
                       {item.usual !== null ? formatKr(item.usual) : "–"}

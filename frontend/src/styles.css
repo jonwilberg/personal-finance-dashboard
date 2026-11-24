@@ -2216,13 +2216,6 @@ select.is-filtering {
 
 /* Recurring payments: the category table's look and columns. */
 
-/* "2 payments", under the amount (and ending where it does, before the share slot). */
-.recurring-count {
-  display: block;
-  margin: 0 calc(2.75rem + var(--space-2)) 0 0;
-  white-space: nowrap;
-}
-
 .recurring-payment {
   grid-template-columns: 7em minmax(0, 1fr) auto;
 }
@@ -2342,9 +2335,5 @@ select.is-filtering {
   /* The empty share slot that lines recurring amounts up with the categories' would take a line of its own. */
   .scoreboard.recurring .score-share {
     display: none;
-  }
-
-  .recurring-count {
-    margin-right: 0;
   }
 }
