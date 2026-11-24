@@ -258,7 +258,14 @@ function ReviewGroup(props: {
     if (!category || pattern.trim().length < 2) return;
     setSaving(true);
     try {
-      await api.addRule(pattern.trim(), category);
+      const saved = await api.addRule(pattern.trim(), category);
+      // The group leaves the list once its transactions have a category. A rule that catches none of them is
+      // saved but changes nothing here, so say so instead of waiting for the group to go.
+      if (saved.matched === 0) {
+        setSaving(false);
+        props.onError(new Error(`The rule "${saved.pattern}" was saved but matches no transactions. Try a shorter text.`));
+        return;
+      }
       props.onSaved();
     } catch (error) {
       props.onError(error);

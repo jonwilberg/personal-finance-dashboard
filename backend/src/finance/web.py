@@ -414,7 +414,7 @@ def create_app(
         """What a rule would catch before you save it: how many transactions match, how many of those have no
         category yet, and a few of them. Your own choices and longer rules may still win for some."""
         rule = checked_rule(request)
-        matching = [t for t in all_transactions() if rule.matches(t["text"], t["description"])]
+        matching = [t for t in all_transactions() if rule.matches(t["text"], t["description"], t["merchant"])]
         return {
             "matches": len(matching),
             "uncategorized": sum(1 for t in matching if t["category"] is None),

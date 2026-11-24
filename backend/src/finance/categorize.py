@@ -83,8 +83,10 @@ def keyword_category(text: str, allowed: list[str]) -> str | None:
 
 @dataclass
 class Rule:
-    """A text rule matches when the cleaned text contains the pattern. A regex rule searches the text as shown in
-    the app (and the cleaned text), ignoring case, so it can match a format such as a payment reference."""
+    """A text rule matches when the cleaned text or the payee (the name the app groups by) contains the pattern. The
+    payee leaves out words like "Til:" and "Overføring", so a rule made from it may not appear in the text as one
+    piece. A regex rule searches the text as shown in the app (and the cleaned text), ignoring case, so it can match
+    a format such as a payment reference."""
 
     pattern: str
     category: str
@@ -95,10 +97,11 @@ class Rule:
         if self.regex:
             self._compiled = re.compile(self.pattern, re.IGNORECASE)
 
-    def matches(self, text: str, description: str = "") -> bool:
+    def matches(self, text: str, description: str = "", payee: str = "") -> bool:
         if self._compiled is not None:
             return bool(self._compiled.search(description) or self._compiled.search(text))
-        return self.pattern.upper() in text
+        pattern = self.pattern.upper()
+        return pattern in text or pattern in payee
 
 
 def rule_order(rules: list[Rule]) -> list[Rule]:
@@ -262,7 +265,7 @@ def categorize(transactions: list[dict[str, Any]], settings: CategorizationSetti
         category, source = _decide(t, settings.overrides, rules, transfers, kinds)
         t["category"], t["category_source"], t["kind"] = category, source, kinds.get(category)
         # Which of your rules decided it: the first match in the same order _decide used.
-        t["rule"] = next(r.pattern for r in rules if r.matches(t["text"], t["description"])) if source == "rule" else None
+        t["rule"] = next(r.pattern for r in rules if r.matches(t["text"], t["description"], t["merchant"])) if source == "rule" else None
 
 
 def _decide(t, overrides, rules, transfers, kinds) -> tuple[str | None, str | None]:
@@ -271,7 +274,7 @@ def _decide(t, overrides, rules, transfers, kinds) -> tuple[str | None, str | No
     if t["id"] in transfers and "transfer" in kinds:
         return "transfer", "transfer"
     for rule in rules:
-        if rule.matches(t["text"], t["description"]):
+        if rule.matches(t["text"], t["description"], t["merchant"]):
             return rule.category, "rule"
     if t["direction"] == "CRDT":
         for category, pattern in _INCOME_PATTERNS:
