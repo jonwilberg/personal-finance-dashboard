@@ -1,12 +1,13 @@
 import { Fragment, useEffect, useState } from "react";
 import { type RecurringItem, type RecurringPayments as Recurring, api } from "./api";
-import { Sparkline } from "./CategoryScoreboard";
+import { Difference, Sparkline } from "./CategoryScoreboard";
 import { formatDate, formatKr } from "./format";
 import { monthTitle } from "./SpendingChart";
 import { groupFill } from "./spendingGroups";
 
-const COLUMNS = ["Payee", "Category", "This month", "Median month", "Total LTM", "Last 12 months"];
-const NUMERIC = new Set([2, 3, 4]);
+// The category table's columns, with the category where it has its transaction count, so the two line up.
+const COLUMNS = ["Payee", "Category", "This month", "Median month", "Difference", "Total LTM", "Last 12 months"];
+const NUMERIC = new Set([2, 3, 4, 5]);
 
 /**
  * Payments that come about once a month (rent, subscriptions, insurance, power), for the selected month: what each
@@ -29,6 +30,7 @@ export function RecurringPayments(props: {
   useEffect(() => setMarked(null), [month]); // its row means nothing in another month
   const months = recurring.months.map((m) => ({ month: m }));
   const ltm = (item: RecurringItem) => item.history.reduce((sum, v) => sum + v, 0);
+  const usualTotal = recurring.items.reduce((sum, i) => sum + (i.usual ?? 0), 0);
 
   const choose = async (payee: string, isRecurring: boolean) => {
     setBusy(payee);
@@ -103,10 +105,14 @@ export function RecurringPayments(props: {
                           style={{ background: item.group ? groupFill(item.group) : "var(--ink-muted)" }}
                           aria-hidden="true"
                         />
-                        <span className="score-name">{item.payee}</span>
+                        <span className="score-name" title={item.payee}>
+                          {item.payee}
+                        </span>
                       </button>
                     </td>
-                    <td className="meta">{item.category_name}</td>
+                    <td className="meta score-category">
+                      {item.category_name}
+                    </td>
                     <td className="num">
                       <span className="score-amount">{item.amount > 0 ? formatKr(item.amount) : "–"}</span>
                       {item.payments.length > 1 && (
@@ -115,6 +121,9 @@ export function RecurringPayments(props: {
                     </td>
                     <td className="num meta">
                       {item.usual !== null ? formatKr(item.usual) : "–"}
+                    </td>
+                    <td className="num">
+                      <Difference delta={item.usual !== null ? item.amount - item.usual : null} />
                     </td>
                     <td className="num">{formatKr(ltm(item))}</td>
                     <td>
@@ -146,7 +155,10 @@ export function RecurringPayments(props: {
               <td className="num">
                 <span className="score-amount">{formatKr(recurring.total)}</span>
               </td>
-              <td className="num meta">{formatKr(recurring.items.reduce((sum, i) => sum + (i.usual ?? 0), 0))}</td>
+              <td className="num meta">{formatKr(usualTotal)}</td>
+              <td className="num">
+                <Difference delta={recurring.total - usualTotal} />
+              </td>
               <td className="num">{formatKr(recurring.items.reduce((sum, i) => sum + ltm(i), 0))}</td>
               <td />
             </tr>

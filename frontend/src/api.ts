@@ -295,6 +295,8 @@ export interface ScoreboardRow {
   /** Its spending group's id. */
   group: string;
   amount: number;
+  /** This month's transactions in the category, refunds included. */
+  transactions: number;
   share: number | null;
   usual: number | null;
   delta: number | null;

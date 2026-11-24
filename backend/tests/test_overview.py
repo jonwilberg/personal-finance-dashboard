@@ -121,6 +121,8 @@ def test_scoreboard_lists_spending_categories_with_history():
     assert round(groceries["share"], 3) == round(2800 / 13100, 3)
     assert (uncategorized["name"], uncategorized["delta"]) == ("Not categorized", 300)
     assert (eating_out["amount"], eating_out["usual"]) == (0, 1000)
+    # The month's transactions in each: the grocer's refund is one, like the purchase.
+    assert [r["transactions"] for r in board] == [1, 2, 1, 0]
     # Savings, loans and income aren't spending, and unused categories are left out.
     assert not {"savings", "loans", "salary", "transport"} & {r["category"] for r in board}
 

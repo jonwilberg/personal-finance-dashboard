@@ -124,10 +124,12 @@ def _monthly_totals(transactions: list[dict[str, Any]], by_id: dict[str, Categor
                 bucket["uncategorized"] -= amount
                 bucket["by_category"][UNCATEGORIZED] -= amount
                 bucket["by_group"][spending_group(None)] -= amount
+                bucket["count_by_category"][UNCATEGORIZED] += 1
         elif category.kind == "expense":
             bucket["fixed" if category.fixed else "adjustable"] -= amount
             bucket["by_category"][category.id] -= amount
             bucket["by_group"][spending_group(category)] -= amount
+            bucket["count_by_category"][category.id] += 1
         elif category.kind == "income":
             bucket["income"] += amount
             bucket["income_by_category"][category.id] += amount
@@ -147,6 +149,8 @@ def _empty() -> dict[str, Any]:
         "saved": Decimal(),
         "loans": Decimal(),
         "by_category": defaultdict(Decimal),
+        # How many transactions each spending category has (refunds included), as its total counts them.
+        "count_by_category": defaultdict(int),
         "by_group": defaultdict(Decimal),
         "income_by_category": defaultdict(Decimal),
     }
@@ -189,6 +193,7 @@ def _scoreboard(
                 "fixed": fixed,
                 "group": group,
                 "amount": _money(amount),
+                "transactions": this["count_by_category"].get(key, 0),
                 "share": float(amount / spent) if spent > 0 else None,
                 "usual": _money(median_month) if median_month is not None else None,
                 "delta": _money(amount - median_month) if median_month is not None else None,

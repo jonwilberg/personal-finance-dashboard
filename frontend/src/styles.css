@@ -1321,11 +1321,14 @@ button.score-toggle {
 }
 
 @media (max-width: 720px) {
-  /* Median month, total LTM and the sparkline: phones keep this month and its difference. */
-  .scoreboard th:nth-child(3),
-  .scoreboard td:nth-child(3),
-  .scoreboard th:nth-child(5),
-  .scoreboard td:nth-child(5),
+  /* Transactions or category, median month, total LTM and the sparkline: phones keep this month and its
+     difference. */
+  .scoreboard th:nth-child(2),
+  .scoreboard td:nth-child(2),
+  .scoreboard th:nth-child(4),
+  .scoreboard td:nth-child(4),
+  .scoreboard th:nth-child(6),
+  .scoreboard td:nth-child(6),
   .scoreboard th:last-child,
   .scoreboard td:last-child {
     display: none;
@@ -2211,10 +2214,7 @@ select.is-filtering {
   );
 }
 
-/* Recurring payments: the category table's look and column widths, so the sparklines line up with the ones above. */
-.scoreboard.recurring td:nth-child(2) {
-  white-space: nowrap;
-}
+/* Recurring payments: the category table's look and columns. */
 
 /* "2 payments", under the amount. */
 .recurring-count {
@@ -2278,23 +2278,64 @@ select.is-filtering {
 }
 
 @media (max-width: 720px) {
-  /* Phones keep the payee and this month. */
-  .scoreboard.recurring th:nth-child(2),
-  .scoreboard.recurring td:nth-child(2),
-  .scoreboard.recurring th:nth-child(4),
-  .scoreboard.recurring td:nth-child(4) {
-    display: none;
-  }
-
-  /* The category table's phone rule hides its 3rd column; here that's this month. */
-  .scoreboard.recurring th:nth-child(3),
-  .scoreboard.recurring td:nth-child(3) {
-    display: table-cell;
-  }
-
   /* An opened row (and the Undo line) is one cell, so it's also a row's last cell, which phones otherwise hide. */
   .scoreboard .score-detail > td,
   .scoreboard .recurring-undo > td {
     display: table-cell;
+  }
+}
+
+/* Both overview tables (categories and recurring payments) share their column widths, so their columns line up:
+   the name takes what's left, then the transaction count or category, four amounts and the sparkline. */
+.scoreboard {
+  table-layout: fixed;
+}
+
+.scoreboard th:nth-child(2) {
+  width: 15%;
+}
+
+/* This month also holds its share of the month ("21 %"). */
+.scoreboard th:nth-child(3) {
+  width: 13%;
+}
+
+.scoreboard th:nth-child(4),
+.scoreboard th:nth-child(5),
+.scoreboard th:nth-child(6) {
+  width: 10%;
+}
+
+/* Long names end in "…" (the full name is in their tooltip) instead of widening their column. */
+.scoreboard td:first-child button.score-toggle {
+  max-width: 100%;
+}
+
+.scoreboard .score-name {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A long category name wraps rather than being cut off: it's the column's only text. */
+.scoreboard .score-category {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  /* Phones show the name, this month (with its share) and the difference, and names wrap instead of being cut. */
+  .scoreboard th:nth-child(3) {
+    width: 30%;
+  }
+
+  .scoreboard th:nth-child(5) {
+    width: 24%;
+  }
+
+  .scoreboard .score-name {
+    white-space: normal;
+    overflow-wrap: break-word;
   }
 }
