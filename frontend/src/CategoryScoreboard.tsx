@@ -6,11 +6,13 @@ import { monthTitle } from "./SpendingChart";
 import { groupFill } from "./spendingGroups";
 
 // "bar": the order of the spending bar above, read top to bottom (the default); the others are column sorts.
-type SortKey = "bar" | "name" | "amount" | "usual" | "delta" | "ltm";
+type SortKey = "bar" | "name" | "transactions" | "amount" | "usual" | "delta" | "ltm";
 const UNCATEGORIZED = "uncategorized";
 
 const COLUMNS: { key: SortKey | null; label: string; numeric: boolean }[] = [
   { key: "name", label: "Category", numeric: false },
+  // Left-aligned, so the count starts where the recurring payments' category does in the table below.
+  { key: "transactions", label: "Transactions", numeric: false },
   { key: "amount", label: "This month", numeric: true },
   { key: "usual", label: "Median month", numeric: true },
   { key: "delta", label: "Difference", numeric: true },
@@ -147,9 +149,12 @@ export function CategoryScoreboard(props: {
                       title={props.groups.find((g) => g.id === row.group)?.name}
                       aria-hidden="true"
                     />
-                    <span className="score-name">{row.name}</span>
+                    <span className="score-name" title={row.name}>
+                      {row.name}
+                    </span>
                   </button>
                 </td>
+                <td className="meta">{row.transactions > 0 ? row.transactions : "–"}</td>
                 <td className="num">
                   <span className="score-amount">{formatKr(row.amount)}</span>
                   <span className="meta small score-share">
@@ -185,6 +190,7 @@ export function CategoryScoreboard(props: {
       <tfoot>
         <tr>
           <td>Total spending</td>
+          <td className="meta">{props.rows.reduce((sum, row) => sum + row.transactions, 0)}</td>
           <td className="num">
             <span className="score-amount">{formatKr(props.total)}</span>
             <span className="score-share" aria-hidden="true" />
@@ -203,7 +209,7 @@ export function CategoryScoreboard(props: {
   );
 }
 
-function Difference({ delta }: { delta: number | null }) {
+export function Difference({ delta }: { delta: number | null }) {
   if (delta === null) return <span className="meta">–</span>;
   if (Math.round(delta) === 0) return <span className="meta">0</span>;
   // The sign carries the direction, so it never depends on colour alone.
@@ -220,7 +226,7 @@ const SPARK_H = 26;
 const SPARK_GAP = 2; // between the little bars
 
 /** A tiny bar per month, grey, with the last month (the selected one) in ink. */
-function Sparkline({ values, months, name }: { values: number[]; months: OverviewMonth[]; name: string }) {
+export function Sparkline({ values, months, name }: { values: number[]; months: Pick<OverviewMonth, "month">[]; name: string }) {
   if (values.length < 2) return null;
   const low = Math.min(0, ...values);
   const high = Math.max(...values, 1);

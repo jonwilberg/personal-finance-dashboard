@@ -1321,11 +1321,14 @@ button.score-toggle {
 }
 
 @media (max-width: 720px) {
-  /* Median month, total LTM and the sparkline: phones keep this month and its difference. */
-  .scoreboard th:nth-child(3),
-  .scoreboard td:nth-child(3),
-  .scoreboard th:nth-child(5),
-  .scoreboard td:nth-child(5),
+  /* Transactions or category, median month, total LTM and the sparkline: phones keep this month and its
+     difference. */
+  .scoreboard th:nth-child(2),
+  .scoreboard td:nth-child(2),
+  .scoreboard th:nth-child(4),
+  .scoreboard td:nth-child(4),
+  .scoreboard th:nth-child(6),
+  .scoreboard td:nth-child(6),
   .scoreboard th:last-child,
   .scoreboard td:last-child {
     display: none;
@@ -2209,4 +2212,128 @@ select.is-filtering {
     var(--ink-muted) 0 1.5px,
     var(--paper-sunken) 1.5px 4px
   );
+}
+
+/* Recurring payments: the category table's look and columns. */
+
+.recurring-payment {
+  grid-template-columns: 7em minmax(0, 1fr) auto;
+}
+
+/* The row's action at its right end, under the amounts, as Delete is on the rules list. */
+.recurring-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: var(--space-1) 0 0;
+  padding-right: var(--space-3);
+}
+
+.recurring-actions button.text {
+  padding-right: 0;
+}
+
+/* Where a payee was, right after marking it as non-recurring. */
+.scoreboard .recurring-undo > td {
+  padding: var(--space-2) var(--space-3);
+  background: var(--highlight);
+}
+
+.recurring-undo strong {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.recurring-undo button.text {
+  margin-left: var(--space-2);
+}
+
+.recurring-hidden {
+  margin-top: var(--space-3);
+}
+
+.recurring-hidden-toggle {
+  padding: 0;
+  text-decoration: underline;
+}
+
+.recurring-hidden-list {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recurring-hidden-list li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  border-top: var(--rule-hair);
+}
+
+@media (max-width: 720px) {
+  /* An opened row (and the Undo line) is one cell, so it's also a row's last cell, which phones otherwise hide. */
+  .scoreboard .score-detail > td,
+  .scoreboard .recurring-undo > td {
+    display: table-cell;
+  }
+}
+
+/* Both overview tables (categories and recurring payments) share their column widths, so their columns line up:
+   the name takes what's left, then the transaction count or category, four amounts and the sparkline. */
+.scoreboard {
+  table-layout: fixed;
+}
+
+.scoreboard th:nth-child(2) {
+  width: 15%;
+}
+
+/* This month also holds its share of the month ("21 %"). */
+.scoreboard th:nth-child(3) {
+  width: 13%;
+}
+
+.scoreboard th:nth-child(4),
+.scoreboard th:nth-child(5),
+.scoreboard th:nth-child(6) {
+  width: 10%;
+}
+
+/* Long names end in "…" (the full name is in their tooltip) instead of widening their column. */
+.scoreboard td:first-child button.score-toggle {
+  max-width: 100%;
+}
+
+.scoreboard .score-name {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A long category name wraps rather than being cut off: it's the column's only text. */
+.scoreboard .score-category {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  /* Phones show the name, this month (with its share) and the difference, and names wrap instead of being cut. */
+  .scoreboard th:nth-child(3) {
+    width: 30%;
+  }
+
+  .scoreboard th:nth-child(5) {
+    width: 24%;
+  }
+
+  .scoreboard .score-name {
+    white-space: normal;
+    overflow-wrap: break-word;
+  }
+
+  /* The empty share slot that lines recurring amounts up with the categories' would take a line of its own. */
+  .scoreboard.recurring .score-share {
+    display: none;
+  }
 }

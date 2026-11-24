@@ -511,3 +511,25 @@ def test_categorized_transactions_follow_changes_made_by_another_process(api, ba
     Storage(tmp_path / "data").set_override(rema["id"], "eating_out")
     again = next(t for t in api.get("/api/transactions").json()["items"] if t["id"] == rema["id"])
     assert again["category"] == "eating_out"
+
+
+def test_a_payee_can_be_marked_not_recurring_and_back(household, tmp_path):
+    from finance.storage import Storage
+
+    store = Storage(tmp_path / "data")  # the household fixture's data folder
+    store.save_transactions("joint", [
+        {"transaction_amount": {"amount": "99", "currency": "NOK"}, "credit_debit_indicator": "DBIT", "status": "BOOK",
+         "booking_date": f"2026-{m:02d}-05", "creditor": {"name": "Streaming AS"}}
+        for m in range(1, 11)
+    ])
+
+    def recurring_payees():
+        block = household.get("/api/overview", params={"month": "2026-10"}).json()["recurring"]
+        return [i["payee"] for i in block["items"]], [h["payee"] for h in block["hidden"]]
+
+    assert recurring_payees() == (["STREAMING AS"], [])
+    assert household.put("/api/recurring", json={"payee": "STREAMING AS", "recurring": False}).json() == {"ok": True}
+    assert recurring_payees() == ([], ["STREAMING AS"])
+    household.put("/api/recurring", json={"payee": "STREAMING AS", "recurring": True})
+    assert recurring_payees() == (["STREAMING AS"], [])
+    assert household.put("/api/recurring", json={"payee": "", "recurring": False}).status_code == 422

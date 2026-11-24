@@ -186,6 +186,9 @@ export const api = {
   renamePerson: (id: number, name: string) =>
     request<Person>(`/api/people/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
   removePerson: (id: number) => request<{ ok: boolean }>(`/api/people/${id}`, { method: "DELETE" }),
+  /** Leave a payee out of the overview's recurring payments (false), or let the overview decide again (true). */
+  setRecurring: (payee: string, recurring: boolean) =>
+    request<{ ok: boolean }>("/api/recurring", { method: "PUT", body: JSON.stringify({ payee, recurring }) }),
   setOwner: (uid: string, owner: string) =>
     request<{ owner: string }>(`/api/accounts/${encodeURIComponent(uid)}/owner`, {
       method: "PUT",
@@ -292,6 +295,8 @@ export interface ScoreboardRow {
   /** Its spending group's id. */
   group: string;
   amount: number;
+  /** This month's transactions in the category, refunds included. */
+  transactions: number;
   share: number | null;
   usual: number | null;
   delta: number | null;
@@ -317,6 +322,44 @@ export interface Overview {
   group_usual?: Record<string, number> | null;
   changes?: OverviewChange[];
   scoreboard?: ScoreboardRow[];
+  /** Payments that come about once a month; missing when there are no transactions. */
+  recurring?: RecurringPayments;
+}
+
+export interface RecurringItem {
+  /** The name transactions are grouped by (as on the transactions page). */
+  payee: string;
+  category: string | null;
+  category_name: string;
+  kind: CategoryKind;
+  /** Its spending group's id; null for loans and savings. */
+  group: string | null;
+  /** Paid this month (0 if nothing yet). */
+  amount: number;
+  /** The median of the earlier months it was paid in; null for a first payment. */
+  usual: number | null;
+  /** paid: as usual; changed: more than 10 % from usual; due: not yet, the month is still going. */
+  status: "paid" | "new" | "changed" | "due" | "missed" | "stopped";
+  /** The amount changes most months (power), so a change says little. */
+  varies: boolean;
+  /** Day of the month it was last paid. */
+  day: number;
+  /** Paid per month, the window's months in order (see RecurringPayments.months). */
+  history: number[];
+  /** Each subscription at this payee, largest first: two insurance policies are two. */
+  series: { amount: number; payments: number }[];
+  /** This month's payments. */
+  payments: { id: string; date: string; amount: number; description: string }[];
+}
+
+export interface RecurringPayments {
+  /** The 12 months up to and including the selected one (YYYY-MM), oldest first. */
+  months: string[];
+  /** Largest this month first. */
+  items: RecurringItem[];
+  total: number;
+  /** Payees marked as not recurring, with what they came to this month. */
+  hidden: { payee: string; amount: number }[];
 }
 
 export const overviewApi = {

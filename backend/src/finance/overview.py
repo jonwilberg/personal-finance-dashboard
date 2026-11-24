@@ -21,6 +21,7 @@ from statistics import median
 from typing import Any
 
 from finance.categories import SPENDING_GROUPS, Category, spending_group
+from finance.recurring import build_recurring
 
 HISTORY_MONTHS = 12
 # Fewer previous months than this and there's no meaningful "usual" to compare with.
@@ -38,6 +39,7 @@ def build_overview(
     categories: list[Category],
     month: str | None = None,
     today: date | None = None,
+    not_recurring: set[str] | frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     today = today or date.today()
     by_id = {c.id: c for c in categories}
@@ -103,6 +105,8 @@ def build_overview(
             for key, amount in sorted(this["income_by_category"].items(), key=lambda kv: kv[1], reverse=True)
             if amount > 0 and key in by_id
         ],
+        # Payments to the same payee about once a month (see recurring.py), leaving out payees marked as not.
+        "recurring": build_recurring(transactions, by_id, month, set(not_recurring), today),
     }
 
 
@@ -120,10 +124,12 @@ def _monthly_totals(transactions: list[dict[str, Any]], by_id: dict[str, Categor
                 bucket["uncategorized"] -= amount
                 bucket["by_category"][UNCATEGORIZED] -= amount
                 bucket["by_group"][spending_group(None)] -= amount
+                bucket["count_by_category"][UNCATEGORIZED] += 1
         elif category.kind == "expense":
             bucket["fixed" if category.fixed else "adjustable"] -= amount
             bucket["by_category"][category.id] -= amount
             bucket["by_group"][spending_group(category)] -= amount
+            bucket["count_by_category"][category.id] += 1
         elif category.kind == "income":
             bucket["income"] += amount
             bucket["income_by_category"][category.id] += amount
@@ -143,6 +149,8 @@ def _empty() -> dict[str, Any]:
         "saved": Decimal(),
         "loans": Decimal(),
         "by_category": defaultdict(Decimal),
+        # How many transactions each spending category has (refunds included), as its total counts them.
+        "count_by_category": defaultdict(int),
         "by_group": defaultdict(Decimal),
         "income_by_category": defaultdict(Decimal),
     }
@@ -185,6 +193,7 @@ def _scoreboard(
                 "fixed": fixed,
                 "group": group,
                 "amount": _money(amount),
+                "transactions": this["count_by_category"].get(key, 0),
                 "share": float(amount / spent) if spent > 0 else None,
                 "usual": _money(median_month) if median_month is not None else None,
                 "delta": _money(amount - median_month) if median_month is not None else None,
