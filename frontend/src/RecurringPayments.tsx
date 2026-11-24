@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { type RecurringItem, type RecurringPayments as Recurring, api } from "./api";
 import { Sparkline } from "./CategoryScoreboard";
 import { formatDate, formatKr } from "./format";
@@ -24,6 +24,9 @@ export function RecurringPayments(props: {
   const [open, setOpen] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  // The payee just marked as non-recurring and the row it had, for an Undo line in its place.
+  const [marked, setMarked] = useState<{ payee: string; index: number } | null>(null);
+  useEffect(() => setMarked(null), [month]); // its row means nothing in another month
   const months = recurring.months.map((m) => ({ month: m }));
   const ltm = (item: RecurringItem) => item.history.reduce((sum, v) => sum + v, 0);
 
@@ -32,6 +35,8 @@ export function RecurringPayments(props: {
     try {
       await api.setRecurring(payee, isRecurring);
       setOpen(null);
+      const index = recurring.items.findIndex((i) => i.payee === payee);
+      setMarked(isRecurring || index < 0 ? null : { payee, index });
       props.onChanged();
     } catch (error) {
       props.onError(error);
@@ -40,12 +45,26 @@ export function RecurringPayments(props: {
     }
   };
 
+  // Shown once the list has been fetched again without the payee.
+  const undoRow = marked && !recurring.items.some((i) => i.payee === marked.payee) && (
+    <tr className="recurring-undo" key="undo">
+      <td colSpan={COLUMNS.length}>
+        <span className="meta">
+          <strong>{marked.payee}</strong> marked as non-recurring
+        </span>
+        <button className="text" disabled={busy === marked.payee} onClick={() => choose(marked.payee, true)}>
+          {busy === marked.payee ? "Undoing…" : "Undo"}
+        </button>
+      </td>
+    </tr>
+  );
+
   return (
     <>
       <p className="label">
         Recurring payments{props.scope && ` · ${props.scope}`}
       </p>
-      {recurring.items.length > 0 && (
+      {(recurring.items.length > 0 || undoRow) && (
         <table className="scoreboard recurring">
           <thead>
             <tr>
@@ -57,12 +76,13 @@ export function RecurringPayments(props: {
             </tr>
           </thead>
           <tbody>
-            {recurring.items.map((item) => {
+            {recurring.items.map((item, index) => {
               const isOpen = open === item.payee;
               const flip = () => setOpen(isOpen ? null : item.payee);
               const detailId = `recurring-detail-${item.payee.replace(/\W+/g, "-")}`;
               return (
                 <Fragment key={item.payee}>
+                  {undoRow && index === marked?.index && undoRow}
                   <tr className={`score-row${isOpen ? " is-open" : ""}`} onClick={flip}>
                     <td>
                       <button
@@ -119,6 +139,7 @@ export function RecurringPayments(props: {
                 </Fragment>
               );
             })}
+            {undoRow && marked && marked.index >= recurring.items.length && undoRow}
           </tbody>
           <tfoot>
             {/* A cell per column, so phones hide the same columns here as in the rows. */}
@@ -215,7 +236,7 @@ function Detail(props: { item: RecurringItem; month: string; busy: boolean; onNo
         <p className="drill-note meta small">Nothing paid to {item.payee} in {monthTitle(props.month)}.</p>
       )}
       <p className="recurring-actions">
-        <button className="recurring-mark" disabled={props.busy} onClick={props.onNotRecurring}>
+        <button className="text" disabled={props.busy} onClick={props.onNotRecurring}>
           {props.busy ? "Saving…" : "Mark as non-recurring"}
         </button>
       </p>

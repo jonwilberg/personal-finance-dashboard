@@ -2244,20 +2244,32 @@ select.is-filtering {
   grid-template-columns: 7em minmax(0, 1fr) auto;
 }
 
+/* The row's action at its right end, under the amounts, as Delete is on the rules list. */
 .recurring-actions {
-  margin: var(--space-2) 0 0;
+  display: flex;
+  justify-content: flex-end;
+  margin: var(--space-1) 0 0;
+  padding-right: var(--space-3);
 }
 
-/* A link: it changes only this list, so it doesn't need a button's weight. */
-button.recurring-mark {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--compare);
-  font: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  text-decoration-thickness: 1px;
+.recurring-actions button.text {
+  padding-right: 0;
+}
+
+/* Where a payee was, right after marking it as non-recurring. */
+.scoreboard .recurring-undo > td {
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-2);
+  background: var(--highlight);
+}
+
+.recurring-undo strong {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.recurring-undo button.text {
+  margin-left: var(--space-2);
 }
 
 .recurring-hidden {
