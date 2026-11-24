@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 import time
 from collections import Counter
 from dataclasses import asdict
@@ -268,8 +269,21 @@ def create_app(
             raise HTTPException(409, str(error)) from error
         return _account_state(store, account_uid)
 
+    # Categorizing every transaction takes a few hundred milliseconds, and nearly every page needs the result, often
+    # many times over the same data (switching owners in and out on the overview). Kept until the data changes.
+    categorized: dict[str, Any] = {"version": None, "transactions": []}
+    categorizing = threading.Lock()
+
     def all_transactions() -> list[dict[str, Any]]:
-        return categorized_transactions(store.sessions(), store.raw_transactions_by_account(), store.categorization())
+        """All transactions, categorized. Shared between requests: read them, never change them."""
+        with categorizing:
+            version = store.version()  # read first: a change while categorizing is caught on the next call
+            if categorized["version"] != version:
+                categorized["transactions"] = categorized_transactions(
+                    store.sessions(), store.raw_transactions_by_account(), store.categorization()
+                )
+                categorized["version"] = version
+            return categorized["transactions"]
 
     def require_category(category: str) -> None:
         if store.category(category) is None:
