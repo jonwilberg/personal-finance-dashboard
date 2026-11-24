@@ -137,6 +137,7 @@ class Storage:
     def __init__(self, data_dir: Path):
         self.data_dir = data_dir
         self.path = data_dir / DATABASE_FILE
+        self._writes = 0  # changes committed through this object; see version()
         data_dir.mkdir(parents=True, exist_ok=True)
         with self._connect() as db:
             db.executescript(SCHEMA)
@@ -160,8 +161,21 @@ class Storage:
         try:
             with db:
                 yield db
+            if db.total_changes:
+                self._writes += 1
         finally:
             db.close()
+
+    def version(self) -> tuple[int, ...]:
+        """A value that changes whenever the stored data does, so results worked out from it can be kept until
+        then. It also sees writes from other processes (the daily `finance refresh-all` runs beside the web app):
+        SQLite bumps the change counter in the file header (offset 24) on every commit in its default journal
+        mode, and the file's modification time and size cover the rest."""
+        with self.path.open("rb") as file:
+            file.seek(24)
+            counter = int.from_bytes(file.read(4), "big")
+        stat = self.path.stat()
+        return (self._writes, counter, stat.st_mtime_ns, stat.st_size)
 
     # Connections
 

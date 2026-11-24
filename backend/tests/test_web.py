@@ -498,3 +498,16 @@ def test_version_reports_the_build_and_start_time(api, monkeypatch):
     assert local["revision"] is None and local["started_at"]
     monkeypatch.setenv("APP_REVISION", "0123abc")
     assert api.get("/api/version").json()["revision"] == "0123abc"
+
+
+def test_categorized_transactions_follow_changes_made_by_another_process(api, bank, tmp_path):
+    connect(api, bank)
+    api.post("/api/accounts/acc-1/refresh", params={"longest": True})
+    rema = next(t for t in api.get("/api/transactions").json()["items"] if t["description"] == "Rema 1000")
+    assert rema["category"] == "groceries"
+
+    # The web app keeps categorized transactions until the data changes, including writes it didn't make itself,
+    # such as the daily `finance refresh-all` (its own process, so its own Storage).
+    Storage(tmp_path / "data").set_override(rema["id"], "eating_out")
+    again = next(t for t in api.get("/api/transactions").json()["items"] if t["id"] == rema["id"])
+    assert again["category"] == "eating_out"

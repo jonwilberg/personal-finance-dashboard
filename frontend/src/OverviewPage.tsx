@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type Overview, type Owner, api, overviewApi } from "./api";
 import { CategoryScoreboard } from "./CategoryScoreboard";
 import { OwnerFilter, ownerScope } from "./OwnerPicker";
@@ -48,9 +48,30 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
   // Everyone selected means no filter, so accounts of anyone added later are counted too.
   const filter = owners && selected.length < owners.length ? selected : undefined;
   const filterKey = filter?.join(",");
+  // Overviews already fetched, by month and owners, so switching owners in and out again shows them at once.
+  // Emptied when a category changes here, since the figures are then counted again.
+  const fetched = useRef(new Map<string, Overview>());
+  useEffect(() => fetched.current.clear(), [version]);
   useEffect(() => {
     if (owners === null) return; // wait for the remembered choice
-    overviewApi.get(month, filterKey?.split(",")).then(setOverview).catch(onError);
+    const key = `${month ?? ""}|${filterKey ?? ""}`;
+    const known = fetched.current.get(key);
+    if (known) {
+      setOverview(known);
+      return;
+    }
+    // Clicking quickly can overtake a slower answer: only the latest choice gets shown.
+    let current = true;
+    overviewApi
+      .get(month, filterKey?.split(","))
+      .then((result) => {
+        fetched.current.set(key, result);
+        if (current) setOverview(result);
+      })
+      .catch((error) => current && onError(error));
+    return () => {
+      current = false;
+    };
   }, [month, owners, filterKey, version, onError]);
 
   const choose = (next: string[]) => {
