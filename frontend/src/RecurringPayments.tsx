@@ -5,7 +5,8 @@ import { formatDate, formatKr } from "./format";
 import { monthTitle } from "./SpendingChart";
 import { groupFill } from "./spendingGroups";
 
-const COLUMNS = ["Payee", "Category", "Paid on", "This month", "Usual month", "Last 12 months", ""];
+const COLUMNS = ["Payee", "Category", "This month", "Usual month", "Total LTM", "Last 12 months", ""];
+const NUMERIC = new Set([2, 3, 4]);
 
 /**
  * Payments that come about once a month (rent, subscriptions, insurance, power), for the selected month: what each
@@ -25,6 +26,7 @@ export function RecurringPayments(props: {
   const [showHidden, setShowHidden] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const months = recurring.months.map((m) => ({ month: m }));
+  const ltm = (item: RecurringItem) => item.history.reduce((sum, v) => sum + v, 0);
 
   const choose = async (payee: string, isRecurring: boolean) => {
     setBusy(payee);
@@ -50,7 +52,7 @@ export function RecurringPayments(props: {
           <thead>
             <tr>
               {COLUMNS.map((label, i) => (
-                <th key={i} className={i >= 3 && i <= 4 ? "num" : undefined}>
+                <th key={i} className={NUMERIC.has(i) ? "num" : undefined}>
                   {label}
                 </th>
               ))}
@@ -87,7 +89,6 @@ export function RecurringPayments(props: {
                       </button>
                     </td>
                     <td className="meta">{item.category_name}</td>
-                    <td className="meta">{ordinal(item.day)}</td>
                     <td className="num">
                       <span className="score-amount">{item.amount > 0 ? formatKr(item.amount) : "–"}</span>
                       {item.payments.length > 1 && (
@@ -97,6 +98,7 @@ export function RecurringPayments(props: {
                     <td className="num meta">
                       {item.usual !== null ? `${item.varies ? "~" : ""}${formatKr(item.usual)}` : "–"}
                     </td>
+                    <td className="num">{formatKr(ltm(item))}</td>
                     <td>
                       <Sparkline values={item.history} months={months} name={item.payee} />
                     </td>
@@ -125,11 +127,11 @@ export function RecurringPayments(props: {
             <tr>
               <td>Total</td>
               <td />
-              <td />
               <td className="num">
                 <span className="score-amount">{formatKr(recurring.total)}</span>
               </td>
               <td className="num meta">{formatKr(recurring.items.reduce((sum, i) => sum + (i.usual ?? 0), 0))}</td>
+              <td className="num">{formatKr(recurring.items.reduce((sum, i) => sum + ltm(i), 0))}</td>
               <td />
               <td />
             </tr>

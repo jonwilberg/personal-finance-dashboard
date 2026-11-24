@@ -2234,8 +2234,7 @@ select.is-filtering {
   white-space: nowrap;
 }
 
-.scoreboard.recurring td:nth-child(2),
-.scoreboard.recurring td:nth-child(3) {
+.scoreboard.recurring td:nth-child(2) {
   white-space: nowrap;
 }
 
@@ -2289,8 +2288,8 @@ select.is-filtering {
   /* Phones keep the payee, this month and the status. */
   .scoreboard.recurring th:nth-child(2),
   .scoreboard.recurring td:nth-child(2),
-  .scoreboard.recurring th:nth-child(3),
-  .scoreboard.recurring td:nth-child(3),
+  .scoreboard.recurring th:nth-child(4),
+  .scoreboard.recurring td:nth-child(4),
   .scoreboard.recurring th:nth-child(5),
   .scoreboard.recurring td:nth-child(5),
   .scoreboard.recurring th:nth-child(6),
@@ -2298,7 +2297,9 @@ select.is-filtering {
     display: none;
   }
 
-  /* The category table hides its last column on phones; here that's the status, which stays. */
+  /* The category table's phone rule hides its 3rd and last columns; here those are this month and the status. */
+  .scoreboard.recurring th:nth-child(3),
+  .scoreboard.recurring td:nth-child(3),
   .scoreboard.recurring th:last-child,
   .scoreboard.recurring td:last-child {
     display: table-cell;
