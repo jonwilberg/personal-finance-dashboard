@@ -55,7 +55,7 @@ so the first time your browser warns: choose **Advanced → Proceed to localhost
    accounts. Money moved between any two of your accounts is a transfer, never spending or income, whoever they
    belong to.
 6. **Recurring payments** on Overview lists what's paid about once a month (rent, subscriptions, insurance, power)
-   with each one's median month, and flags new payees, changed amounts and stopped ones. Open a row and choose
+   with this month's amount, its median month and the last 12 months. Open a row and choose
    **Mark as non-recurring** for one that only looks regular, such as a card bill. How payments are matched is in
    [`recurring.py`](backend/src/finance/recurring.py).
 
