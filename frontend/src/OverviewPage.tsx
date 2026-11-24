@@ -198,7 +198,6 @@ export function OverviewPage({ onError }: { onError: (e: unknown) => void }) {
           <RecurringPayments
             recurring={overview.recurring}
             month={overview.month}
-            isPartial={overview.is_partial}
             scope={scope}
             onChanged={recount}
             onError={onError}

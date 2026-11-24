@@ -16,7 +16,6 @@ const NUMERIC = new Set([2, 3, 4]);
 export function RecurringPayments(props: {
   recurring: Recurring;
   month: string;
-  isPartial: boolean;
   scope: string | null;
   onChanged: () => void;
   onError: (e: unknown) => void;
@@ -46,7 +45,6 @@ export function RecurringPayments(props: {
       <p className="label">
         Recurring payments{props.scope && ` · ${props.scope}`}
       </p>
-      <h3 className="recurring-headline">{headline(recurring.items, recurring.total, month, props.isPartial)}</h3>
       {recurring.items.length > 0 && (
         <table className="scoreboard recurring">
           <thead>
@@ -224,25 +222,6 @@ function Detail(props: { item: RecurringItem; month: string; busy: boolean; onNo
       </p>
     </div>
   );
-}
-
-function headline(items: RecurringItem[], total: number, month: string, isPartial: boolean): string {
-  const paid = items.filter((i) => i.amount > 0).length;
-  if (items.length === 0) return "No payments came about once a month";
-  const count = (status: RecurringItem["status"]) => items.filter((i) => i.status === status).length;
-  const news = [
-    plural(count("new"), "new payment", "new payments"),
-    plural(count("changed"), "changed amount", "changed amounts"),
-    plural(count("stopped"), "stopped", "stopped"),
-  ].filter(Boolean);
-  const name = monthTitle(month).split(" ")[0];
-  const sum = isPartial ? `${formatKr(total)} so far in ${name}` : `${formatKr(total)} in ${name}`;
-  const main = `${plural(paid, "recurring payment", "recurring payments") || "No recurring payments"} came to ${sum}`;
-  return news.length ? `${main}, with ${joinAnd(news)}` : main;
-}
-
-function plural(n: number, one: string, many: string): string {
-  return n === 0 ? "" : `${n} ${n === 1 ? one : many}`;
 }
 
 function joinAnd(parts: string[]): string {

@@ -2212,11 +2212,6 @@ select.is-filtering {
 }
 
 /* Recurring payments: the category table's look, with a status column last instead of the sparkline. */
-.recurring-headline {
-  margin: var(--space-1) 0 0;
-  font-size: var(--text-subhead);
-}
-
 .scoreboard.recurring th.num {
   width: 13%;
 }
