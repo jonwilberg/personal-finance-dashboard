@@ -1,13 +1,14 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useRef, useState } from "react";
 import type { OverviewMonth, SpendingGroup } from "./api";
 import { formatKr } from "./format";
 import { groupFill } from "./spendingGroups";
 
-// Each month is a pair of bars: income in solid ink on the left, and spending beside it, stacked by group (fixed
-// costs at the bottom, Other on top). Comparing the two heights shows whether the month was kept or overspent. A
-// ledger under the chart gives each month's income, spending and difference, lined up with its column, and the
-// totals in a last column.
+// Each month is a pair of bars: income on the left (salary at the bottom, other income in a lighter shade on top), and
+// spending beside it, stacked by group (fixed costs at the bottom, Other on top). Comparing the two heights shows
+// whether the month was kept or overspent. A ledger under the chart gives each month's income, spending and
+// difference, lined up with its column, and the totals in a last column.
 const INCOME = "var(--chart-income)";
+const OTHER_INCOME = "var(--chart-income-other)";
 
 const HEIGHT = 240;
 const PAD = { top: 16, bottom: 28, left: 52 }; // top leaves room for broken columns
@@ -35,6 +36,7 @@ export function SpendingChart(props: {
 }) {
   const { series, selected } = props;
   const [hover, setHover] = useState<number | null>(null);
+  const clipId = useId(); // each month's income bar shape, which its salary part is clipped to
   const segmentsOf = props.groups.map((g) => ({ key: g.id, label: g.name, fill: groupFill(g.id) }));
   // Draw at the frame's real width so text and marks keep their pixel sizes.
   const frameRef = useRef<HTMLDivElement>(null);
@@ -96,8 +98,14 @@ export function SpendingChart(props: {
       <div className="chart-legend" aria-hidden="true">
         <span className="legend-item">
           <span className="legend-swatch legend-income" />
-          Income
+          Salary
         </span>
+        {series.some((m) => m.income > m.salary) && (
+          <span className="legend-item">
+            <span className="legend-swatch legend-income-other" />
+            Other income
+          </span>
+        )}
         {segmentsOf.map((s) => (
           <span key={s.key} className="legend-item">
             <span className="legend-swatch" style={{ background: s.fill }} />
@@ -152,16 +160,35 @@ export function SpendingChart(props: {
                   className={`chart-column ${isSelected ? "is-selected" : hover === i ? "is-hovered" : ""}`}
                   d={roundedTop(PAD.left + band * i + 2, 4, band - 4, HEIGHT - 4, 4)}
                 />
-                {incomes[i] > 0 && (
-                  <path
-                    d={
-                      cut[i]
-                        ? brokenBar(incomeX(i), top, barW, y(0), PAD.top + BREAK_AT)
-                        : roundedTop(incomeX(i), top, barW, Math.max(y(0) - top, 0.5), RADIUS)
-                    }
-                    fill={INCOME}
-                  />
-                )}
+                {incomes[i] > 0 && (() => {
+                  // The whole bar in the other-income shade, then its salary part over it from the bottom, clipped
+                  // to the bar's shape so a broken or rounded top stays as it is.
+                  const shape = cut[i]
+                    ? brokenBar(incomeX(i), top, barW, y(0), PAD.top + BREAK_AT)
+                    : roundedTop(incomeX(i), top, barW, Math.max(y(0) - top, 0.5), RADIUS);
+                  const salary = Math.min(Math.max(month.salary, 0), incomes[i]);
+                  const other = incomes[i] - salary;
+                  const salaryTop = y(salary) + (other > 0 ? GAP : 0);
+                  const id = `${clipId}-${i}`;
+                  return (
+                    <>
+                      <clipPath id={id}>
+                        <path d={shape} />
+                      </clipPath>
+                      <path d={shape} fill={other > 0 ? OTHER_INCOME : INCOME} />
+                      {salary > 0 && other > 0 && (
+                        <rect
+                          x={incomeX(i)}
+                          y={salaryTop}
+                          width={barW}
+                          height={Math.max(y(0) - salaryTop, 0)}
+                          fill={INCOME}
+                          clipPath={`url(#${id})`}
+                        />
+                      )}
+                    </>
+                  );
+                })()}
                 {segments.map((s, j) => {
                   const segTop = y(s.to);
                   const bottom = y(s.from) - (j > 0 ? GAP : 0);
@@ -211,6 +238,16 @@ export function SpendingChart(props: {
               <span>{formatKr(totals[hover])}</span>
             </div>
             <div className="tooltip-row">
+              <span>Salary</span>
+              <span>{formatKr(hovered.salary)}</span>
+            </div>
+            {hovered.income !== hovered.salary && (
+              <div className="tooltip-row">
+                <span>Other income</span>
+                <span>{formatKr(hovered.income - hovered.salary)}</span>
+              </div>
+            )}
+            <div className="tooltip-row tooltip-total">
               <span>Income</span>
               <span>{formatKr(hovered.income)}</span>
             </div>

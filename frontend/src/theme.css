@@ -26,16 +26,18 @@
   --cat-8: #a8653d;
   --cat-other: #b9b0a0;
 
-  /* Spending groups (see spendingGroups.ts), validated together: lightness band, chroma, colour-blind separation and
-     contrast on --paper. Other is a neutral grey, so the named groups carry the colour. Income is a dark ink, drawn
-     as a solid bar beside the spending. */
-  --group-fixed: #2a63b0;
-  --group-groceries: #b8862a;
-  --group-health: #e2699a;
-  --group-dining: #b8452f;
-  --group-travel: #1a8a70;
-  --group-other: #b9b0a0;
-  --chart-income: #3a362f;
+  /* Spending groups (see spendingGroups.ts): a run from deep navy to orange, stacked dark at the bottom (fixed
+     costs) to light at the top. Labels inside the blocks are cream on the three dark ones and ink on the three light
+     ones (see LIGHT_TEXT_GROUPS in SpendingSplit.tsx). Income is a warm grey, a quiet yardstick beside the coloured
+     spending, with ink labels. */
+  --group-fixed: #003f5c;
+  --group-groceries: #464c89;
+  --group-health: #954e9b;
+  --group-dining: #dd4d88;
+  --group-travel: #ff6b59;
+  --group-other: #ffa600;
+  --chart-income: #8c8475;
+  --chart-income-other: #c2b9a9;
 
   --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
   --font-ui: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -97,4 +99,5 @@
   --group-travel: #2fa386;
   --group-other: #6b6458;
   --chart-income: #e8dfcf;
+  --chart-income-other: #9c9384;
 }
