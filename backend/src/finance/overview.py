@@ -32,6 +32,7 @@ TOP_CHANGES = 5
 # A category is named in the headline only if it explains at least this share of the difference from usual.
 DRIVER_SHARE = 0.3
 UNCATEGORIZED = "uncategorized"
+SALARY = "salary"  # the income category the chart shows apart from other income
 
 
 def build_overview(
@@ -89,6 +90,8 @@ def build_overview(
                 "adjustable": _money(totals.get(m, _empty())["adjustable"]),
                 "uncategorized": _money(totals.get(m, _empty())["uncategorized"]),
                 "income": _money(totals.get(m, _empty())["income"]),
+                # The part of income that's salary; the rest is other income. The chart draws the two apart.
+                "salary": _money(totals.get(m, _empty())["income_by_category"].get(SALARY, Decimal())),
                 # Spending by chart group, in stacking order (see categories.SPENDING_GROUPS).
                 "groups": {g: _money(totals.get(m, _empty())["by_group"].get(g, Decimal())) for g, _ in SPENDING_GROUPS},
             }

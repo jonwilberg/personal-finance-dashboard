@@ -948,6 +948,10 @@ button.month-step:hover:not(:disabled) {
   background: var(--chart-income);
 }
 
+.legend-income-other {
+  background: var(--chart-income-other);
+}
+
 .legend-hatch {
   background: repeating-linear-gradient(45deg, var(--ink-muted) 0 2px, var(--paper-sunken) 2px 5px);
 }

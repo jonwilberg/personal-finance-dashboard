@@ -51,6 +51,29 @@ category, never its rank, so groceries stays the same colour on every chart.
 
 `ink · red · blue · ochre · olive · plum · slate · rust`, then `Other`.
 
+### Spending groups and income
+
+The overview's charts colour spending by its six groups and draw income beside it. The groups run from deep navy to
+orange, stacked dark at the bottom of a bar (fixed costs) to light at the top (Other), so the bar reads as one ramp:
+
+| Group | Token | Colour | Labels inside |
+|---|---|---|---|
+| Fixed | `--group-fixed` | `#003F5C` | cream |
+| Groceries | `--group-groceries` | `#464C89` | cream |
+| Health | `--group-health` | `#954E9B` | cream |
+| Dining and leisure | `--group-dining` | `#DD4D88` | ink |
+| Travel | `--group-travel` | `#FF6B59` | ink |
+| Other | `--group-other` | `#FFA600` | ink |
+
+Income is a warm grey, a quiet yardstick for the coloured spending beside it: salary in `--chart-income` (`#8C8475`),
+other income in its lighter shade `--chart-income-other` (`#C2B9A9`) on top. Both take ink labels. Spending without a
+category is hatched grey.
+
+These colours aren't chosen with colour-blind readers in mind. Saturated colours like the
+orange stand out from the paper by their colour even where their lightness contrast is low, so a contrast ratio alone
+undersells them. Label text inside blocks is the exception: there lightness contrast decides whether text is readable,
+so each block takes cream or ink text, whichever reads better.
+
 ## Typography
 
 | Role | Font | Size / line height | Notes |

@@ -262,6 +262,8 @@ export interface OverviewMonth {
   adjustable: number;
   uncategorized: number;
   income: number;
+  /** The part of `income` that's salary; the rest is other income. */
+  salary: number;
   /** Spending per group (see SpendingGroup), in stacking order. */
   groups: Record<string, number>;
 }

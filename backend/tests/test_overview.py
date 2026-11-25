@@ -155,3 +155,6 @@ def test_income_is_broken_down_by_category_for_the_month():
         {"category": "other_income", "name": "Other income", "amount": 1300},
     ]
     assert sum(r["amount"] for r in result["income_breakdown"]) == result["figures"]["income"]
+    # The chart's months carry the salary part of their income; the rest is drawn as other income.
+    october = result["series"][-1]
+    assert (october["income"], october["salary"]) == (41300, 40000)

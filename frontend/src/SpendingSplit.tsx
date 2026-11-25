@@ -35,8 +35,11 @@ const BREAK_FACTOR = 1.5; // income above this many times the spending is cut sh
 const OVERSHOOT = 6; // a cut income bar reaches this far above the area, to show it carries on
 const BREAK_AT = 18; // the break's distance below the area's top
 const INCOME = "var(--chart-income)";
-// Group colours dark enough for light text inside; the rest take ink (each the better of the two).
-const LIGHT_TEXT_GROUPS = new Set(["fixed", "dining", "travel"]);
+const OTHER_INCOME = "var(--chart-income-other)";
+// Salary in the income colour, other income categories in its lighter shade, as on the monthly chart.
+const incomeFill = (category: string) => (category === "salary" ? INCOME : OTHER_INCOME);
+// Group colours dark enough for light text inside; the rest take ink (each the better of the two, see theme.css).
+const LIGHT_TEXT_GROUPS = new Set(["fixed", "groceries", "health"]);
 const TRENDS_TITLE = "Trend per category";
 const TRENDS_GAP = 56; // between the group totals and the trends
 const TRENDS_MIN = 380; // narrower than this beside the bar: the trends go below it
@@ -305,7 +308,7 @@ export function SpendingSplit({
             <span key={row.category} className="legend-item">
               <span
                 className="legend-swatch"
-                style={{ background: INCOME }}
+                style={{ background: incomeFill(row.category) }}
                 aria-hidden="true"
               />
               <span className="split-legend-name">{row.name}</span>
@@ -331,13 +334,20 @@ export function SpendingSplit({
               y={b.top}
               width={size.income}
               height={b.height}
-              fill={INCOME}
+              fill={incomeFill(b.key)}
               onMouseEnter={() => setHover(`income:${b.key}`)}
               onMouseLeave={() => setHover(null)}
             />
           ))}
           {earned > 0 && (
-            <line x1={incomeX} x2={incomeX + size.income} y1={incomeTop} y2={incomeTop} stroke={INCOME} strokeWidth={2} />
+            <line
+              x1={incomeX}
+              x2={incomeX + size.income}
+              y1={incomeTop}
+              y2={incomeTop}
+              stroke={incomeBlocks.length ? incomeFill(incomeBlocks.reduce((a, b) => (b.top < a.top ? b : a)).key) : INCOME}
+              strokeWidth={2}
+            />
           )}
           {cut && (
             <path
@@ -405,7 +415,7 @@ export function SpendingSplit({
           return (
             <div
               key={b.key}
-              className={`split-inside on-dark is-${how}`}
+              className={`split-inside on-light is-${how}`}
               style={{ left: incomeX, top: b.top, width: size.income, height: b.height }}
               onMouseEnter={() => setHover(`income:${b.key}`)}
               onMouseLeave={() => setHover(null)}
